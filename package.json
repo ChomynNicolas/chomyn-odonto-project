@@ -1,6 +1,6 @@
 {
-  "name": "free-nextjs-admin-dashboard",
-  "version": "2.0.2",
+  "name": "sistema-chomyn-odontologia",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
