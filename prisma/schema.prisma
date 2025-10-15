@@ -1,0 +1,202 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolNombre {
+  ADMIN
+  ODONT
+  RECEP
+}
+
+enum Genero {
+  MASCULINO
+  FEMENINO
+  OTRO
+  NO_ESPECIFICADO
+}
+
+enum TipoDocumento {
+  CI
+  DNI
+  PASAPORTE
+  RUC
+  OTRO
+}
+
+enum TipoContacto {
+  PHONE
+  EMAIL
+}
+
+model Rol {
+  idRol     Int       @id @default(autoincrement()) @map("idRol")
+  nombreRol RolNombre @map("nombreRol")
+  usuarios  Usuario[]
+
+  @@unique([nombreRol]) // evita duplicados de rol
+  @@map("Rol")
+}
+
+/**
+ * Tabla Usuarios
+ */
+model Usuario {
+  idUsuario      Int     @id @default(autoincrement()) @map("idUsuario")
+  usuario        String  @unique @map("usuario") // username
+  email          String? @unique @map("email") // opcional
+  passwordHash   String // hash bcrypt             @map("contrasena_hash")  <- si quieres mapear
+  nombreApellido String  @map("nombre_apellido")
+  rolId          Int     @map("Rol_idRol")
+  rol            Rol     @relation(fields: [rolId], references: [idRol])
+
+  // Sugeridos para auth
+  estaActivo    Boolean   @default(true) @map("esta_activo")
+  ultimoLoginAt DateTime? @map("ultimo_login_at")
+
+  // Trazabilidad básica
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  profesional Profesional?
+
+  @@index([rolId])
+  @@map("Usuario")
+}
+
+// ===== Profesionales =====
+
+model Profesional {
+  idProfesional Int     @id @default(autoincrement()) @map("idProfesional")
+  userId        Int     @map("Usuario_idUsuario")
+  usuario       Usuario @relation(fields: [userId], references: [idUsuario], onDelete: Cascade)
+
+  personaId Int     @map("Persona_idPersona")
+  persona   Persona @relation(fields: [personaId], references: [idPersona], onDelete: Restrict)
+
+  numeroLicencia String? @map("numeroLicencia")
+  disponibilidad Json?   @map("disponibilidad") // plantilla semanal + excepciones (futuro)
+  estaActivo     Boolean @default(true) @map("estaActivo")
+
+  // Especialidades (M:N explícita)
+  especialidades ProfesionalEspecialidad[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId]) // 1:1 Usuario <-> Profesional
+  @@unique([personaId]) // 1:1 Persona  <-> Profesional (evita duplicar ficha civil)
+  @@unique([numeroLicencia]) // si la clínica exige unicidad
+  @@index([estaActivo])
+  @@map("Profesional")
+}
+
+// ===== Identidad civil =====
+
+model Persona {
+  idPersona       Int       @id @default(autoincrement()) @map("idPersona")
+  // Identidad civil estable
+  nombres         String    @map("nombres")
+  apellidos       String    @map("apellidos")
+  fechaNacimiento DateTime? @map("fecha_nacimiento")
+  genero          Genero?   @map("genero")
+
+  // Dirección (puedes normalizar a futuro)
+  direccion String? @map("direccion")
+
+  // Estado y trazas
+  estaActivo Boolean  @default(true) @map("esta_activo")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  documento     Documento? // 1:1
+  contactos     PersonaContacto[]
+  profesionales Profesional[]
+
+  @@index([nombres, apellidos])
+  @@map("Persona")
+}
+
+model Documento {
+  idDocumento Int     @id @default(autoincrement()) @map("idDocumento")
+  personaId   Int     @unique @map("Persona_idPersona")
+  persona     Persona @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+
+  tipo             TipoDocumento @map("tipo")
+  numero           String        @map("numero")
+  paisEmision      String?       @map("pais_emision")
+  fechaEmision     DateTime?     @map("fecha_emision")
+  fechaVencimiento DateTime?     @map("fecha_vencimiento")
+  ruc              String?       @map("ruc") // si la persona física tiene RUC
+
+  // Evita duplicados del mismo doc en toda la BD
+  @@unique([tipo, numero, paisEmision])
+  @@map("Documento")
+}
+
+model PersonaContacto {
+  idContacto Int     @id @default(autoincrement()) @map("idContacto")
+  personaId  Int     @map("Persona_idPersona")
+  persona    Persona @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+
+  tipo      TipoContacto @map("tipo") // PHONE | EMAIL
+  valorRaw  String       @map("valor_raw") // tal cual ingresó
+  valorNorm String       @map("valor_norm") // normalizado: E.164 / lowercase+trim
+  label     String?      @map("label") // Trabajo, Personal, etc.
+
+  // Capacidad canal (solo PHONE)
+  whatsappCapaz Boolean? @map("whatsapp_capaz")
+  smsCapaz      Boolean? @map("sms_capaz")
+
+  // Preferencias
+  esPrincipal             Boolean @default(false) @map("es_principal") // máx. 1 por (persona,tipo)
+  esPreferidoRecordatorio Boolean @default(false) @map("es_pref_recordatorio") // máx. 1 por persona
+  esPreferidoCobranza     Boolean @default(false) @map("es_pref_cobranza") // máx. 1 por persona
+
+  // Estado y trazas
+  activo    Boolean  @default(true) @map("activo")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Dedupe intra-persona
+  @@unique([personaId, tipo, valorNorm])
+  // Búsquedas comunes
+  @@index([personaId, tipo, esPrincipal])
+  @@index([personaId, esPreferidoRecordatorio])
+  @@index([personaId, esPreferidoCobranza])
+  @@map("PersonaContacto")
+}
+
+model Especialidad {
+  idEspecialidad Int                       @id @default(autoincrement()) @map("idEspecialidad")
+  nombre         String                    @map("nombre")
+  descripcion    String?                   @map("descripcion")
+  isActive       Boolean                   @default(true) @map("is_active")
+  profesionales  ProfesionalEspecialidad[]
+
+  @@unique([nombre])
+  @@map("Especialidad")
+}
+
+model ProfesionalEspecialidad {
+  profesionalId  Int
+  especialidadId Int
+
+  profesional  Profesional  @relation(fields: [profesionalId], references: [idProfesional], onDelete: Cascade)
+  especialidad Especialidad @relation(fields: [especialidadId], references: [idEspecialidad], onDelete: Restrict)
+
+  @@id([profesionalId, especialidadId])
+  @@map("ProfesionalEspecialidad")
+}

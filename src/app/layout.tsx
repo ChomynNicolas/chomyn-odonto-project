@@ -1,25 +1,20 @@
-import { Outfit } from 'next/font/google';
-import './globals.css';
+// src/app/layout.tsx
+import { Outfit } from "next/font/google"
+import "./globals.css"
+import { Providers } from "./providers"
+import { auth } from "@/auth"
 
-import { SidebarProvider } from '@/context/SidebarContext';
-import { ThemeProvider } from '@/context/ThemeContext';
+const outfit = Outfit({ subsets: ["latin"] })
 
-const outfit = Outfit({
-  subsets: ["latin"],
-});
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth() // ✅ ahora sí es una función
   return (
-    <html lang="en">
+    <html lang="es">
       <body className={`${outfit.className} dark:bg-gray-900`}>
-        <ThemeProvider>
-          <SidebarProvider>{children}</SidebarProvider>
-        </ThemeProvider>
+        <Providers initialSession={session}>
+          {children}
+        </Providers>
       </body>
     </html>
-  );
+  )
 }

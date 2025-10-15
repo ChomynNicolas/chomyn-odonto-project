@@ -39,7 +39,7 @@ type NavItem = {
   roles?: UserRole[]; // visible solo para estos roles (si se define)
 };
 
-const currentRole: UserRole = "ADMIN"; // TODO: reemplazar por rol real de la sesión
+
 
 /** ================================
  * MENÚ PRINCIPAL (operación diaria)
@@ -166,7 +166,7 @@ const adminItems: NavItem[] = [
   },
 ];
 
-const AppSidebar: React.FC = () => {
+const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
 
@@ -181,10 +181,9 @@ const AppSidebar: React.FC = () => {
 
   /** Filtra por RBAC (cuando roles está definido) */
   const filterByRole = useCallback(
-    (items: NavItem[]) =>
-      items.filter((it) => !it.roles || it.roles.includes(currentRole)),
-    []
-  );
+    (items: NavItem[]) => items.filter((it) => !it.roles || it.roles.includes(role)),
+    [role]
+  )
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "admin";

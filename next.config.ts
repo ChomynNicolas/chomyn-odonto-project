@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'img.freepik.com',
+        pathname: '**', // allow any path
+      },
+    ],
+    // or simpler:
+    // domains: ['img.freepik.com'],
+  },
   /* config options here */
   webpack(config) {
     config.module.rules.push({
