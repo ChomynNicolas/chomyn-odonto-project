@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,6 +5,132 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Rol {
+  idRol     Int       @id @default(autoincrement()) @map("idRol")
+  nombreRol RolNombre @unique @map("nombreRol")
+  usuarios  Usuario[]
+
+  @@map("Rol")
+}
+
+/// *
+///  * Tabla Usuarios
+model Usuario {
+  idUsuario      Int          @id @default(autoincrement()) @map("idUsuario")
+  usuario        String       @unique @map("usuario")
+  email          String?      @unique @map("email")
+  passwordHash   String
+  nombreApellido String       @map("nombre_apellido")
+  rolId          Int          @map("Rol_idRol")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  estaActivo     Boolean      @default(true) @map("esta_activo")
+  ultimoLoginAt  DateTime?    @map("ultimo_login_at")
+  profesional    Profesional?
+  rol            Rol          @relation(fields: [rolId], references: [idRol])
+  Cita           Cita[]
+
+  @@index([rolId])
+  @@map("Usuario")
+}
+
+model Profesional {
+  idProfesional  Int                       @id @default(autoincrement()) @map("idProfesional")
+  numeroLicencia String?                   @unique @map("numeroLicencia")
+  estaActivo     Boolean                   @default(true) @map("estaActivo")
+  userId         Int                       @unique @map("Usuario_idUsuario")
+  personaId      Int                       @unique @map("Persona_idPersona")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  disponibilidad Json?                     @map("disponibilidad")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  persona        Persona                   @relation(fields: [personaId], references: [idPersona])
+  usuario        Usuario                   @relation(fields: [userId], references: [idUsuario], onDelete: Cascade)
+  especialidades ProfesionalEspecialidad[]
+  Cita           Cita[]
+
+  @@index([estaActivo])
+  @@map("Profesional")
+}
+
+model Persona {
+  idPersona           Int                   @id @default(autoincrement()) @map("idPersona")
+  nombres             String                @map("nombres")
+  apellidos           String                @map("apellidos")
+  fechaNacimiento     DateTime?             @map("fecha_nacimiento")
+  genero              Genero?               @map("genero")
+  direccion           String?               @map("direccion")
+  estaActivo          Boolean               @default(true) @map("esta_activo")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  documento           Documento?
+  contactos           PersonaContacto[]
+  profesionales       Profesional?
+  Paciente            Paciente?
+  PacienteResponsable PacienteResponsable[]
+
+  @@index([nombres, apellidos])
+  @@map("Persona")
+}
+
+model Documento {
+  idDocumento      Int           @id @default(autoincrement()) @map("idDocumento")
+  personaId        Int           @unique @map("Persona_idPersona")
+  tipo             TipoDocumento @map("tipo")
+  numero           String        @map("numero")
+  paisEmision      String?       @map("pais_emision")
+  fechaEmision     DateTime?     @map("fecha_emision")
+  fechaVencimiento DateTime?     @map("fecha_vencimiento")
+  ruc              String?       @map("ruc")
+  persona          Persona       @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+
+  @@unique([tipo, numero, paisEmision])
+  @@map("Documento")
+}
+
+model PersonaContacto {
+  idContacto              Int          @id @default(autoincrement()) @map("idContacto")
+  personaId               Int          @map("Persona_idPersona")
+  tipo                    TipoContacto @map("tipo")
+  valorRaw                String       @map("valor_raw")
+  valorNorm               String       @map("valor_norm")
+  label                   String?      @map("label")
+  whatsappCapaz           Boolean?     @map("whatsapp_capaz")
+  smsCapaz                Boolean?     @map("sms_capaz")
+  esPrincipal             Boolean      @default(false) @map("es_principal")
+  esPreferidoRecordatorio Boolean      @default(false) @map("es_pref_recordatorio")
+  esPreferidoCobranza     Boolean      @default(false) @map("es_pref_cobranza")
+  activo                  Boolean      @default(true) @map("activo")
+  createdAt               DateTime     @default(now()) @map("created_at")
+  updatedAt               DateTime     @updatedAt @map("updated_at")
+  persona                 Persona      @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+
+  @@unique([personaId, tipo, valorNorm])
+  @@index([personaId, tipo, esPrincipal])
+  @@index([personaId, esPreferidoRecordatorio])
+  @@index([personaId, esPreferidoCobranza])
+  @@map("PersonaContacto")
+}
+
+model Especialidad {
+  idEspecialidad Int                       @id @default(autoincrement()) @map("idEspecialidad")
+  nombre         String                    @unique @map("nombre")
+  descripcion    String?                   @map("descripcion")
+  isActive       Boolean                   @default(true) @map("is_active")
+  profesionales  ProfesionalEspecialidad[]
+
+  @@map("Especialidad")
+}
+
+model ProfesionalEspecialidad {
+  profesionalId  Int
+  especialidadId Int
+  especialidad   Especialidad @relation(fields: [especialidadId], references: [idEspecialidad])
+  profesional    Profesional  @relation(fields: [profesionalId], references: [idProfesional], onDelete: Cascade)
+
+  @@id([profesionalId, especialidadId])
+  @@map("ProfesionalEspecialidad")
 }
 
 enum RolNombre {
@@ -39,164 +159,122 @@ enum TipoContacto {
   EMAIL
 }
 
-model Rol {
-  idRol     Int       @id @default(autoincrement()) @map("idRol")
-  nombreRol RolNombre @map("nombreRol")
-  usuarios  Usuario[]
+// ======= Enums Agenda =======
 
-  @@unique([nombreRol]) // evita duplicados de rol
-  @@map("Rol")
+enum RelacionPaciente {
+  PADRE
+  MADRE
+  TUTOR
+  CONYUGE
+  FAMILIAR
+  OTRO
 }
 
-/**
- * Tabla Usuarios
- */
-model Usuario {
-  idUsuario      Int     @id @default(autoincrement()) @map("idUsuario")
-  usuario        String  @unique @map("usuario") // username
-  email          String? @unique @map("email") // opcional
-  passwordHash   String // hash bcrypt             @map("contrasena_hash")  <- si quieres mapear
-  nombreApellido String  @map("nombre_apellido")
-  rolId          Int     @map("Rol_idRol")
-  rol            Rol     @relation(fields: [rolId], references: [idRol])
-
-  // Sugeridos para auth
-  estaActivo    Boolean   @default(true) @map("esta_activo")
-  ultimoLoginAt DateTime? @map("ultimo_login_at")
-
-  // Trazabilidad básica
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relaciones
-  profesional Profesional?
-
-  @@index([rolId])
-  @@map("Usuario")
+enum TipoCita {
+  CONSULTA
+  LIMPIEZA
+  ENDODONCIA
+  EXTRACCION
+  URGENCIA
+  ORTODONCIA
+  CONTROL
+  OTRO
 }
 
-// ===== Profesionales =====
-
-model Profesional {
-  idProfesional Int     @id @default(autoincrement()) @map("idProfesional")
-  userId        Int     @map("Usuario_idUsuario")
-  usuario       Usuario @relation(fields: [userId], references: [idUsuario], onDelete: Cascade)
-
-  personaId Int     @map("Persona_idPersona")
-  persona   Persona @relation(fields: [personaId], references: [idPersona], onDelete: Restrict)
-
-  numeroLicencia String? @map("numeroLicencia")
-  disponibilidad Json?   @map("disponibilidad") // plantilla semanal + excepciones (futuro)
-  estaActivo     Boolean @default(true) @map("estaActivo")
-
-  // Especialidades (M:N explícita)
-  especialidades ProfesionalEspecialidad[]
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@unique([userId]) // 1:1 Usuario <-> Profesional
-  @@unique([personaId]) // 1:1 Persona  <-> Profesional (evita duplicar ficha civil)
-  @@unique([numeroLicencia]) // si la clínica exige unicidad
-  @@index([estaActivo])
-  @@map("Profesional")
+enum EstadoCita {
+  SCHEDULED // creada
+  CONFIRMED // confirmada
+  CHECKED_IN // paciente presente
+  IN_PROGRESS // en atención
+  COMPLETED // finalizada
+  CANCELLED // cancelada
+  NO_SHOW // no asistió
 }
 
-// ===== Identidad civil =====
+// ======= Identidad clínica (Paciente) =======
+// Rol clínico: 1:1 con Persona para este MVP (una Persona puede ser Paciente)
+model Paciente {
+  idPaciente Int     @id @default(autoincrement()) @map("idPaciente")
+  personaId  Int     @unique @map("Persona_idPersona")
+  persona    Persona @relation(fields: [personaId], references: [idPersona], onDelete: Restrict)
 
-model Persona {
-  idPersona       Int       @id @default(autoincrement()) @map("idPersona")
-  // Identidad civil estable
-  nombres         String    @map("nombres")
-  apellidos       String    @map("apellidos")
-  fechaNacimiento DateTime? @map("fecha_nacimiento")
-  genero          Genero?   @map("genero")
-
-  // Dirección (puedes normalizar a futuro)
-  direccion String? @map("direccion")
-
-  // Estado y trazas
+  // Datos clínicos mínimos para agenda (puedes ampliar luego)
+  notas      String?  @map("notas")
   estaActivo Boolean  @default(true) @map("esta_activo")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  documento     Documento? // 1:1
-  contactos     PersonaContacto[]
-  profesionales Profesional[]
+  responsables PacienteResponsable[]
+  citas        Cita[]
 
-  @@index([nombres, apellidos])
-  @@map("Persona")
+  @@map("Paciente")
 }
 
-model Documento {
-  idDocumento Int     @id @default(autoincrement()) @map("idDocumento")
-  personaId   Int     @unique @map("Persona_idPersona")
-  persona     Persona @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+// Relación Paciente ↔ Persona responsable de pago/tutoría (N:M con atributos)
+model PacienteResponsable {
+  idPacResp      Int              @id @default(autoincrement()) @map("idPacienteResponsable")
+  pacienteId     Int              @map("Paciente_idPaciente")
+  personaId      Int              @map("Persona_idPersona")
+  relacion       RelacionPaciente @map("relacion")
+  esPrincipal    Boolean          @default(false) @map("es_principal") // máx. 1 por paciente (ver índice único parcial en SQL)
+  autoridadLegal Boolean          @default(false) @map("autoridad_legal")
+  vigenteDesde   DateTime         @default(now()) @map("vigente_desde")
+  vigenteHasta   DateTime?        @map("vigente_hasta")
+  notas          String?          @map("notas")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  tipo             TipoDocumento @map("tipo")
-  numero           String        @map("numero")
-  paisEmision      String?       @map("pais_emision")
-  fechaEmision     DateTime?     @map("fecha_emision")
-  fechaVencimiento DateTime?     @map("fecha_vencimiento")
-  ruc              String?       @map("ruc") // si la persona física tiene RUC
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  persona  Persona  @relation(fields: [personaId], references: [idPersona], onDelete: Restrict)
 
-  // Evita duplicados del mismo doc en toda la BD
-  @@unique([tipo, numero, paisEmision])
-  @@map("Documento")
+  @@index([pacienteId, personaId])
+  @@map("PacienteResponsable")
 }
 
-model PersonaContacto {
-  idContacto Int     @id @default(autoincrement()) @map("idContacto")
-  personaId  Int     @map("Persona_idPersona")
-  persona    Persona @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+// Consultorio / Sala (recurso físico para agenda)
+model Consultorio {
+  idConsultorio Int      @id @default(autoincrement()) @map("idConsultorio")
+  nombre        String   @unique @map("nombre")
+  colorHex      String?  @map("color_hex")
+  activo        Boolean  @default(true) @map("activo")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  tipo      TipoContacto @map("tipo") // PHONE | EMAIL
-  valorRaw  String       @map("valor_raw") // tal cual ingresó
-  valorNorm String       @map("valor_norm") // normalizado: E.164 / lowercase+trim
-  label     String?      @map("label") // Trabajo, Personal, etc.
+  citas Cita[]
 
-  // Capacidad canal (solo PHONE)
-  whatsappCapaz Boolean? @map("whatsapp_capaz")
-  smsCapaz      Boolean? @map("sms_capaz")
+  @@map("Consultorio")
+}
 
-  // Preferencias
-  esPrincipal             Boolean @default(false) @map("es_principal") // máx. 1 por (persona,tipo)
-  esPreferidoRecordatorio Boolean @default(false) @map("es_pref_recordatorio") // máx. 1 por persona
-  esPreferidoCobranza     Boolean @default(false) @map("es_pref_cobranza") // máx. 1 por persona
+// Cita / Turno (evento de agenda)
+model Cita {
+  idCita        Int  @id @default(autoincrement()) @map("idCita")
+  pacienteId    Int  @map("Paciente_idPaciente")
+  profesionalId Int  @map("Profesional_idProfesional")
+  consultorioId Int? @map("Consultorio_idConsultorio")
 
-  // Estado y trazas
-  activo    Boolean  @default(true) @map("activo")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  inicio DateTime   @map("inicio")
+  fin    DateTime   @map("fin")
+  tipo   TipoCita   @map("tipo")
+  estado EstadoCita @default(SCHEDULED) @map("estado")
+  motivo String?    @map("motivo")
+  notas  String?    @map("notas")
 
-  // Dedupe intra-persona
-  @@unique([personaId, tipo, valorNorm])
+  // Trazabilidad
+  createdById Int      @map("Usuario_idUsuario_createdBy")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  paciente    Paciente     @relation(fields: [pacienteId], references: [idPaciente], onDelete: Restrict)
+  profesional Profesional  @relation(fields: [profesionalId], references: [idProfesional], onDelete: Restrict)
+  consultorio Consultorio? @relation(fields: [consultorioId], references: [idConsultorio], onDelete: SetNull)
+  createdBy   Usuario      @relation(fields: [createdById], references: [idUsuario], onDelete: Restrict)
+
   // Búsquedas comunes
-  @@index([personaId, tipo, esPrincipal])
-  @@index([personaId, esPreferidoRecordatorio])
-  @@index([personaId, esPreferidoCobranza])
-  @@map("PersonaContacto")
-}
-
-model Especialidad {
-  idEspecialidad Int                       @id @default(autoincrement()) @map("idEspecialidad")
-  nombre         String                    @map("nombre")
-  descripcion    String?                   @map("descripcion")
-  isActive       Boolean                   @default(true) @map("is_active")
-  profesionales  ProfesionalEspecialidad[]
-
-  @@unique([nombre])
-  @@map("Especialidad")
-}
-
-model ProfesionalEspecialidad {
-  profesionalId  Int
-  especialidadId Int
-
-  profesional  Profesional  @relation(fields: [profesionalId], references: [idProfesional], onDelete: Cascade)
-  especialidad Especialidad @relation(fields: [especialidadId], references: [idEspecialidad], onDelete: Restrict)
-
-  @@id([profesionalId, especialidadId])
-  @@map("ProfesionalEspecialidad")
+  @@index([profesionalId, inicio])
+  @@index([pacienteId, inicio])
+  @@index([consultorioId, inicio])
+  @@index([estado, inicio])
+  @@map("Cita")
 }
