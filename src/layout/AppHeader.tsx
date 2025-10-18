@@ -1,14 +1,17 @@
 "use client";
 import { ThemeToggleButton } from "@/components/common/ThemeToggleButton";
 import NotificationDropdown from "@/components/header/NotificationDropdown";
-import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
 import Image from "next/image";
 import Link from "next/link";
 import React, { useState ,useEffect,useRef} from "react";
+import { UserIdentity } from "@/components/header/UserIdentity";
+import { useSession } from "next-auth/react";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
+  const { data: session, status } = useSession(); // <-- aquí
+  const isLoading = status === "loading";
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
 
@@ -39,6 +42,9 @@ const AppHeader: React.FC = () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  const userName = session?.user?.name ?? session?.user?.username ?? "Invitado";
+  const userRole = session?.user?.role; 
 
   return (
     <header className="sticky top-0 flex w-full bg-white border-gray-200 z-99999 dark:border-gray-800 dark:bg-gray-900 lg:border-b">
@@ -155,22 +161,24 @@ const AppHeader: React.FC = () => {
             </form>
           </div>
         </div>
-        <div
-          className={`${
-            isApplicationMenuOpen ? "flex" : "hidden"
-          } items-center justify-between w-full gap-4 px-5 py-4 lg:flex shadow-theme-md lg:justify-end lg:px-0 lg:shadow-none`}
-        >
-          <div className="flex items-center gap-2 2xsm:gap-3">
-            {/* <!-- Dark Mode Toggler --> */}
-            <ThemeToggleButton />
-            {/* <!-- Dark Mode Toggler --> */}
+                <div className={`${
+          isApplicationMenuOpen ? "flex" : "hidden"
+        } items-center justify-between w-full gap-4 px-5 py-4 lg:flex shadow-theme-md lg:justify-end lg:px-0 lg:shadow-none`}>
+          {/* User area: SIN dropdown */}
 
-           <NotificationDropdown /> 
-            {/* <!-- Notification Menu Area --> */}
+                
+          
+          <div className="flex items-center gap-2 2xsm:gap-3">
+            <ThemeToggleButton />
+            <NotificationDropdown />
           </div>
-          {/* <!-- User Area --> */}
-          <UserDropdown /> 
-    
+          <UserIdentity
+            name={userName}
+            role={userRole}
+            variant="header"
+            loading={isLoading}
+          />
+
         </div>
       </div>
     </header>

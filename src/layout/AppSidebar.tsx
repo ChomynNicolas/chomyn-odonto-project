@@ -359,8 +359,8 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
     >
       {/* LOGO */}
       <div
-        className={`py-8 flex ${
-          !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
+        className={`pb-8 pt-4 flex ${
+          !isExpanded && !isHovered ? "lg:justify-center" : "justify-start pb-6"
         }`}
       >
         <Link href="/">
@@ -368,25 +368,25 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
             <>
               <Image
                 className="dark:hidden"
-                src="/images/logo/logo.svg"
+                src="/images/logo/chomyn-logo.svg"
                 alt="Logo"
-                width={150}
+                width={250}
                 height={40}
               />
               <Image
                 className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
+                src="/images/logo/chomyn-logo-dark.svg"
                 alt="Logo"
-                width={150}
+                width={250}
                 height={40}
               />
             </>
           ) : (
             <Image
-              src="/images/logo/logo-icon.svg"
+              src="/images/logo/chomyn-logo-mini.svg"
               alt="Logo"
-              width={32}
-              height={32}
+              width={40}
+              height={40}
             />
           )}
         </Link>
