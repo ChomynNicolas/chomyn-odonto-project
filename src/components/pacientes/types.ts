@@ -1,3 +1,4 @@
+// src/components/pacientes/types.ts
 import { z } from "zod";
 
 export const generoEnum = z.enum(["MASCULINO","FEMENINO","OTRO","NO_DECLARA"]);
@@ -11,19 +12,20 @@ export const preferenciasContactoSchema = z.object({
 });
 
 export const pacienteSchema = z.object({
-  id: z.string().uuid().optional(),             // mock
+  id: z.string().uuid().optional(),
   nombreCompleto: z.string().min(3, "Mín. 3 caracteres"),
   genero: generoEnum,
   dni: z.string().min(5, "Documento requerido"),
   ruc: z.string().optional().nullable(),
   telefono: z.string().min(6, "Teléfono requerido"),
-  email: z.string().email("Email inválido"),
+  // ⬇️  clave: permite string válido, "", o ausente (undefined)
+  email: z.union([z.string().email("Email inválido"), z.literal(""), z.undefined()]).optional(),
   domicilio: z.string().min(3, "Domicilio requerido"),
   obraSocial: z.string().optional().nullable(),
   antecedentesMedicos: z.string().optional().nullable(),
   alergias: z.string().optional().nullable(),
   medicacion: z.string().optional().nullable(),
-  responsablePago: z.string().optional().nullable(), // si es menor
+  responsablePago: z.string().optional().nullable(),
   preferenciasContacto: preferenciasContactoSchema,
   adjuntos: z.array(z.object({
     id: z.string(),
