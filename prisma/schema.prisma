@@ -16,7 +16,7 @@ model Rol {
 }
 
 /// *
-///  * Tabla Usuarios
+/// * Tabla Usuarios
 model Usuario {
   idUsuario      Int          @id @default(autoincrement()) @map("idUsuario")
   usuario        String       @unique @map("usuario")
@@ -30,10 +30,10 @@ model Usuario {
   ultimoLoginAt  DateTime?    @map("ultimo_login_at")
   profesional    Profesional?
   rol            Rol          @relation(fields: [rolId], references: [idRol])
-  Cita           Cita[]
 
   @@index([rolId])
   @@map("Usuario")
+  Cita Cita[]
 }
 
 model Profesional {
@@ -48,30 +48,30 @@ model Profesional {
   persona        Persona                   @relation(fields: [personaId], references: [idPersona])
   usuario        Usuario                   @relation(fields: [userId], references: [idUsuario], onDelete: Cascade)
   especialidades ProfesionalEspecialidad[]
-  Cita           Cita[]
 
   @@index([estaActivo])
   @@map("Profesional")
+  Cita Cita[]
 }
 
 model Persona {
-  idPersona           Int                   @id @default(autoincrement()) @map("idPersona")
-  nombres             String                @map("nombres")
-  apellidos           String                @map("apellidos")
-  fechaNacimiento     DateTime?             @map("fecha_nacimiento")
-  genero              Genero?               @map("genero")
-  direccion           String?               @map("direccion")
-  estaActivo          Boolean               @default(true) @map("esta_activo")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
-  documento           Documento?
-  contactos           PersonaContacto[]
-  profesionales       Profesional?
-  Paciente            Paciente?
-  PacienteResponsable PacienteResponsable[]
+  idPersona       Int               @id @default(autoincrement()) @map("idPersona")
+  nombres         String            @map("nombres")
+  apellidos       String            @map("apellidos")
+  fechaNacimiento DateTime?         @map("fecha_nacimiento")
+  genero          Genero?           @map("genero")
+  direccion       String?           @map("direccion")
+  estaActivo      Boolean           @default(true) @map("esta_activo")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  documento       Documento?
+  contactos       PersonaContacto[]
+  profesionales   Profesional?
 
   @@index([nombres, apellidos])
   @@map("Persona")
+  Paciente Paciente[]
+  PacienteResponsable PacienteResponsable[]
 }
 
 model Documento {
@@ -159,8 +159,6 @@ enum TipoContacto {
   EMAIL
 }
 
-// ======= Enums Agenda =======
-
 enum RelacionPaciente {
   PADRE
   MADRE
@@ -182,99 +180,98 @@ enum TipoCita {
 }
 
 enum EstadoCita {
-  SCHEDULED // creada
-  CONFIRMED // confirmada
-  CHECKED_IN // paciente presente
-  IN_PROGRESS // en atención
-  COMPLETED // finalizada
-  CANCELLED // cancelada
-  NO_SHOW // no asistió
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }
 
-// ======= Identidad clínica (Paciente) =======
-// Rol clínico: 1:1 con Persona para este MVP (una Persona puede ser Paciente)
+// ======== MODELOS ========
+
+// Paciente
 model Paciente {
-  idPaciente Int     @id @default(autoincrement()) @map("idPaciente")
-  personaId  Int     @unique @map("Persona_idPersona")
-  persona    Persona @relation(fields: [personaId], references: [idPersona], onDelete: Restrict)
+  idPaciente   Int       @id @default(autoincrement()) @map("idPaciente")
+  personaId    Int       @unique                      @map("Persona_idPersona")
+  notas        String?   @map("notas")
+  estaActivo   Boolean   @default(true)               @map("esta_activo")
+  createdAt    DateTime  @default(now())              @map("created_at")
+  updatedAt    DateTime  @updatedAt                   @map("updated_at")
 
-  // Datos clínicos mínimos para agenda (puedes ampliar luego)
-  notas      String?  @map("notas")
-  estaActivo Boolean  @default(true) @map("esta_activo")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  // Relaciones
+  persona      Persona   @relation(fields: [personaId], references: [idPersona])
   responsables PacienteResponsable[]
-  citas        Cita[]
+  citas        Cita[]    // <— importante: relación inversa (solo lectura)
 
   @@map("Paciente")
 }
 
-// Relación Paciente ↔ Persona responsable de pago/tutoría (N:M con atributos)
+// Responsable de pago / tutor
 model PacienteResponsable {
-  idPacResp      Int              @id @default(autoincrement()) @map("idPacienteResponsable")
-  pacienteId     Int              @map("Paciente_idPaciente")
-  personaId      Int              @map("Persona_idPersona")
-  relacion       RelacionPaciente @map("relacion")
-  esPrincipal    Boolean          @default(false) @map("es_principal") // máx. 1 por paciente (ver índice único parcial en SQL)
-  autoridadLegal Boolean          @default(false) @map("autoridad_legal")
-  vigenteDesde   DateTime         @default(now()) @map("vigente_desde")
-  vigenteHasta   DateTime?        @map("vigente_hasta")
-  notas          String?          @map("notas")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
+  idPacienteResponsable Int               @id @default(autoincrement()) @map("idPacienteResponsable")
+  pacienteId            Int               @map("Paciente_idPaciente")
+  personaId             Int               @map("Persona_idPersona")
+  relacion              RelacionPaciente  @map("relacion")
+  esPrincipal           Boolean           @default(false)               @map("es_principal")
+  autoridadLegal        Boolean           @default(false)               @map("autoridad_legal")
+  vigenteDesde          DateTime          @default(now())               @map("vigente_desde")
+  vigenteHasta          DateTime?         @map("vigente_hasta")
+  notas                 String?           @map("notas")
+  createdAt             DateTime          @default(now())               @map("created_at")
+  updatedAt             DateTime          @updatedAt                    @map("updated_at")
 
-  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
-  persona  Persona  @relation(fields: [personaId], references: [idPersona], onDelete: Restrict)
+  paciente              Paciente          @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  persona               Persona           @relation(fields: [personaId], references: [idPersona])
 
   @@index([pacienteId, personaId])
   @@map("PacienteResponsable")
 }
 
-// Consultorio / Sala (recurso físico para agenda)
+// Consultorio / Box
 model Consultorio {
   idConsultorio Int      @id @default(autoincrement()) @map("idConsultorio")
-  nombre        String   @unique @map("nombre")
+  nombre        String   @unique                       @map("nombre")
   colorHex      String?  @map("color_hex")
-  activo        Boolean  @default(true) @map("activo")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  activo        Boolean  @default(true)                @map("activo")
+  createdAt     DateTime @default(now())               @map("created_at")
+  updatedAt     DateTime @updatedAt                    @map("updated_at")
 
-  citas Cita[]
+  citas         Cita[]
 
   @@map("Consultorio")
 }
 
-// Cita / Turno (evento de agenda)
+// Cita / Turno
 model Cita {
-  idCita        Int  @id @default(autoincrement()) @map("idCita")
-  pacienteId    Int  @map("Paciente_idPaciente")
-  profesionalId Int  @map("Profesional_idProfesional")
-  consultorioId Int? @map("Consultorio_idConsultorio")
+  idCita          Int          @id @default(autoincrement()) @map("idCita")
 
-  inicio DateTime   @map("inicio")
-  fin    DateTime   @map("fin")
-  tipo   TipoCita   @map("tipo")
-  estado EstadoCita @default(SCHEDULED) @map("estado")
-  motivo String?    @map("motivo")
-  notas  String?    @map("notas")
+  // FKs ESCALARES (deben existir para poder enviar ids sueltos en create)
+  pacienteId      Int          @map("Paciente_idPaciente")
+  profesionalId   Int          @map("Profesional_idProfesional")
+  consultorioId   Int?         @map("Consultorio_idConsultorio")
+  createdByUserId Int          @map("Usuario_idUsuario_createdBy")
 
-  // Trazabilidad
-  createdById Int      @map("Usuario_idUsuario_createdBy")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  inicio          DateTime     @map("inicio")
+  fin             DateTime     @map("fin")
+  tipo            TipoCita     @map("tipo")
+  estado          EstadoCita   @default(SCHEDULED)          @map("estado")
+  motivo          String?      @map("motivo")
+  notas           String?      @map("notas")
+  createdAt       DateTime     @default(now())              @map("created_at")
+  updatedAt       DateTime     @updatedAt                   @map("updated_at")
 
-  // Relaciones
-  paciente    Paciente     @relation(fields: [pacienteId], references: [idPaciente], onDelete: Restrict)
-  profesional Profesional  @relation(fields: [profesionalId], references: [idProfesional], onDelete: Restrict)
-  consultorio Consultorio? @relation(fields: [consultorioId], references: [idConsultorio], onDelete: SetNull)
-  createdBy   Usuario      @relation(fields: [createdById], references: [idUsuario], onDelete: Restrict)
+  // RELACIONES con fields/references correctamente enlazadas
+  paciente        Paciente     @relation(fields: [pacienteId], references: [idPaciente])
+  profesional     Profesional  @relation(fields: [profesionalId], references: [idProfesional])
+  consultorio     Consultorio? @relation(fields: [consultorioId], references: [idConsultorio])
+  creadoPor       Usuario      @relation(fields: [createdByUserId], references: [idUsuario])
 
-  // Búsquedas comunes
   @@index([profesionalId, inicio])
   @@index([pacienteId, inicio])
   @@index([consultorioId, inicio])
   @@index([estado, inicio])
   @@map("Cita")
 }
+
+
