@@ -2,7 +2,7 @@
 
 import { prisma as db } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { normalizeEmail, normalizePhone } from "@/lib/normalize";
+import { normalizeEmail, normalizePhonePY } from "@/lib/normalize";
 import { canCreatePaciente, canUpdatePaciente, canDeletePaciente, type Rol } from "@/lib/rbac";
 import { pacienteCreateSchema, pacienteUpdateSchema, pacienteDeleteSchema, type PacienteCreateDTO, type PacienteUpdateDTO, type PacienteDeleteDTO } from "@/lib/schema/paciente";
 import { auth } from "@/auth";
@@ -38,7 +38,7 @@ export async function createPaciente(input: PacienteCreateDTO): Promise<ActionRe
   const contactos = (dto.contactos ?? []).map(c => ({
     tipo: c.tipo,
     valorRaw: c.valor.trim(),
-    valorNorm: c.tipo === "EMAIL" ? normalizeEmail(c.valor) : normalizePhone(c.valor),
+    valorNorm: c.tipo === "EMAIL" ? normalizeEmail(c.valor) : normalizePhonePY(c.valor),
     label: c.label,
   }));
 
@@ -234,7 +234,7 @@ export async function updatePaciente(input: PacienteUpdateDTO): Promise<ActionRe
         });
 
         for (const c of dto.contactos) {
-          const valorNorm = c.tipo === "EMAIL" ? normalizeEmail(c.valor) : normalizePhone(c.valor);
+          const valorNorm = c.tipo === "EMAIL" ? normalizeEmail(c.valor) : normalizePhonePY(c.valor);
           await tx.personaContacto.upsert({
             where: { personaId_tipo_valorNorm: { personaId: pac.personaId, tipo: c.tipo, valorNorm } },
             create: {

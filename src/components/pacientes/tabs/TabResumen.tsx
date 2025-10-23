@@ -1,84 +1,128 @@
-// src/components/pacientes/tabs/TabResumen.tsx
-"use client";
+"use client"
 
-import type { PacienteDetailDTO } from "@/lib/api/pacientes.detail.types";
+import type { PacienteDetailDTO } from "@/lib/api/pacientes.detail.types"
+import { Calendar, Clock, DollarSign, XCircle } from "lucide-react"
 
 function fmtFechaHora(iso?: string | null) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString(); // puedes usar Intl más fino si quieres
+  if (!iso) return "—"
+  const d = new Date(iso)
+  return new Intl.DateTimeFormat("es-PY", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(d)
 }
 
 function telefonoPrincipal(p: PacienteDetailDTO) {
-  return p.persona.contactos.find(c => c.tipo === "PHONE" && c.activo)?.valorNorm ?? "—";
+  return p.persona.contactos.find((c) => c.tipo === "PHONE" && c.activo)?.valorNorm ?? "—"
 }
 
 function emailPrincipal(p: PacienteDetailDTO) {
-  return p.persona.contactos.find(c => c.tipo === "EMAIL" && c.activo)?.valorNorm ?? "—";
+  return p.persona.contactos.find((c) => c.tipo === "EMAIL" && c.activo)?.valorNorm ?? "—"
 }
 
 export default function TabResumen({ paciente }: { paciente: PacienteDetailDTO }) {
   const kpis = [
-    { label: "Próximo turno", value: fmtFechaHora(paciente.kpis.proximoTurno) },
-    { label: "Turnos en 90 días", value: String(paciente.kpis.turnos90dias) },
-    { label: "Saldo", value: `₲ ${paciente.kpis.saldo.toLocaleString()}` },
-    { label: "No show", value: String(paciente.kpis.noShow) },
-  ] as const;
+    {
+      label: "Próximo turno",
+      value: fmtFechaHora(paciente.kpis.proximoTurno),
+      icon: Calendar,
+      color: "text-blue-600 dark:text-blue-400",
+    },
+    {
+      label: "Turnos en 90 días",
+      value: String(paciente.kpis.turnos90dias),
+      icon: Clock,
+      color: "text-purple-600 dark:text-purple-400",
+    },
+    {
+      label: "Saldo",
+      value: `₲ ${paciente.kpis.saldo.toLocaleString()}`,
+      icon: DollarSign,
+      color: "text-green-600 dark:text-green-400",
+    },
+    {
+      label: "No show",
+      value: String(paciente.kpis.noShow),
+      icon: XCircle,
+      color: "text-red-600 dark:text-red-400",
+    },
+  ] as const
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {kpis.map((k) => (
-          <div key={k.label} className="rounded-lg border border-border bg-white p-4 shadow-theme-xs dark:bg-gray-800">
-            <div className="text-theme-xs uppercase text-muted-foreground">{k.label}</div>
-            <div className="mt-1 text-lg font-semibold">{k.value}</div>
+          <div key={k.label} className="rounded-lg border border-border bg-background p-4 shadow-sm">
+            <div className="flex items-center gap-2">
+              <k.icon className={`size-4 ${k.color}`} aria-hidden="true" />
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{k.label}</div>
+            </div>
+            <div className="mt-2 text-xl font-semibold">{k.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Tarjetas rápidas */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-lg border border-border bg-white p-4 dark:bg-gray-800">
-          <h4 className="text-sm font-medium text-foreground">Datos esenciales</h4>
-          <ul className="mt-3 space-y-1 text-sm">
-            <li><b>Teléfono:</b> {telefonoPrincipal(paciente)}</li>
-            <li><b>Email:</b> {emailPrincipal(paciente)}</li>
-            <li><b>Obra social:</b> —{/* integrar cuando tengas la fuente */}</li>
-            <li>
-              <b>Preferencias:</b>{" "}
-              {/* placeholder hasta que tengas preferencias en BD */}
-              —
-            </li>
-          </ul>
+        <div className="rounded-lg border border-border bg-background p-4">
+          <h4 className="text-sm font-semibold text-foreground">Datos esenciales</h4>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt className="inline font-medium">Teléfono:</dt>{" "}
+              <dd className="inline text-muted-foreground">{telefonoPrincipal(paciente)}</dd>
+            </div>
+            <div>
+              <dt className="inline font-medium">Email:</dt>{" "}
+              <dd className="inline text-muted-foreground">{emailPrincipal(paciente)}</dd>
+            </div>
+            <div>
+              <dt className="inline font-medium">Obra social:</dt> <dd className="inline text-muted-foreground">—</dd>
+            </div>
+            <div>
+              <dt className="inline font-medium">Preferencias:</dt> <dd className="inline text-muted-foreground">—</dd>
+            </div>
+          </dl>
         </div>
 
-        <div className="rounded-lg border border-border bg-white p-4 dark:bg-gray-800">
-          <h4 className="text-sm font-medium">Próximos turnos</h4>
-          <ol className="mt-3 space-y-2 text-sm">
-            {paciente.proximasCitas.length === 0 ? (
-              <li className="text-muted-foreground">Sin turnos agendados.</li>
-            ) : paciente.proximasCitas.map(c => (
-              <li key={c.idCita}>
-                {fmtFechaHora(c.inicio)} · {c.tipo} · {c.profesional.nombre}{c.consultorio ? ` · ${c.consultorio.nombre}` : ""}
-              </li>
-            ))}
-          </ol>
+        <div className="rounded-lg border border-border bg-background p-4">
+          <h4 className="text-sm font-semibold">Próximos turnos</h4>
+          {paciente.proximasCitas.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">Sin turnos agendados.</p>
+          ) : (
+            <ol className="mt-3 space-y-2 text-sm">
+              {paciente.proximasCitas.map((c) => (
+                <li key={c.idCita} className="text-muted-foreground">
+                  <div className="font-medium text-foreground">{fmtFechaHora(c.inicio)}</div>
+                  <div className="text-xs">
+                    {c.tipo} • {c.profesional.nombre}
+                    {c.consultorio && ` • ${c.consultorio.nombre}`}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
 
-        <div className="rounded-lg border border-border bg-white p-4 dark:bg-gray-800">
-          <h4 className="text-sm font-medium">Última actividad</h4>
-          <ul className="mt-3 space-y-2 text-sm">
-            {paciente.ultimasCitas.length === 0 ? (
-              <li className="text-muted-foreground">Sin actividad reciente.</li>
-            ) : paciente.ultimasCitas.slice(-2).map(c => (
-              <li key={c.idCita}>
-                Turno {c.tipo} · {fmtFechaHora(c.inicio)} · {c.estado}
-              </li>
-            ))}
-          </ul>
+        <div className="rounded-lg border border-border bg-background p-4">
+          <h4 className="text-sm font-semibold">Última actividad</h4>
+          {paciente.ultimasCitas.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">Sin actividad reciente.</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm">
+              {paciente.ultimasCitas
+                .slice(-3)
+                .reverse()
+                .map((c) => (
+                  <li key={c.idCita} className="text-muted-foreground">
+                    <div className="font-medium text-foreground">
+                      {c.tipo} • {fmtFechaHora(c.inicio)}
+                    </div>
+                    <div className="text-xs">{c.estado}</div>
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,62 +1,75 @@
-// src/components/pacientes/detail/PatientDetailSkeleton.tsx
+"use client"
+
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { AlertCircle, ArrowLeft } from "lucide-react"
+
 export default function PatientDetailSkeleton() {
   return (
     <section className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4">
-        <div className="h-6 w-40 animate-pulse rounded bg-muted" />
-        <div className="mt-2 h-4 w-64 animate-pulse rounded bg-muted" />
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="mt-2 h-4 w-64" />
       </div>
 
-      <nav className="flex gap-2 rounded-lg border border-border bg-card p-2">
+      <nav className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-8 w-28 animate-pulse rounded bg-muted" />
+          <Skeleton key={i} className="h-9 w-32 shrink-0" />
         ))}
       </nav>
 
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-lg border border-border bg-card p-6">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded bg-muted" />
+            <Skeleton key={i} className="h-24" />
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-40 animate-pulse rounded bg-muted" />
+            <Skeleton key={i} className="h-48" />
           ))}
         </div>
       </div>
     </section>
-  );
+  )
 }
 
-// src/components/pacientes/detail/PatientNotFound.tsx
 export function PatientNotFound({ onBack }: { onBack: () => void }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <h1 className="text-base font-semibold">Paciente no encontrado</h1>
+    <div className="rounded-lg border border-border bg-card p-8 text-center">
+      <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+        <AlertCircle className="size-6 text-muted-foreground" />
+      </div>
+      <h1 className="mt-4 text-lg font-semibold">Paciente no encontrado</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        El ID no coincide con un registro existente o ya no está activo.
+        El ID no coincide con un registro existente o el paciente ya no está activo.
       </p>
-      <button
-        className="mt-4 rounded-md border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5"
-        onClick={onBack}
-      >
+      <Button onClick={onBack} variant="outline" className="mt-6 bg-transparent">
+        <ArrowLeft className="size-4" />
         Volver al listado
-      </button>
+      </Button>
     </div>
-  );
+  )
 }
 
-// src/components/pacientes/detail/PatientError.tsx
 export function PatientError({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
-    <div
-      role="alert"
-      className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
-    >
-      Ocurrió un error al cargar el paciente.{" "}
-      <button onClick={onRetry} className="underline underline-offset-2">Reintentar</button>
-      {process.env.NODE_ENV !== "production" && message ? <span className="ml-2 opacity-70">({message})</span> : null}
+    <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="size-5 shrink-0 text-destructive" />
+        <div className="flex-1">
+          <h3 className="font-medium text-destructive">Error al cargar el paciente</h3>
+          <p className="mt-1 text-sm text-destructive/90">
+            Ocurrió un problema al obtener la información del paciente.{" "}
+            <button onClick={onRetry} className="font-medium underline underline-offset-4 hover:no-underline">
+              Reintentar
+            </button>
+          </p>
+          {process.env.NODE_ENV !== "production" && message && (
+            <p className="mt-2 text-xs text-destructive/70">{message}</p>
+          )}
+        </div>
+      </div>
     </div>
-  );
+  )
 }

@@ -18,22 +18,28 @@ model Rol {
 /// *
 /// * Tabla Usuarios
 model Usuario {
-  idUsuario      Int          @id @default(autoincrement()) @map("idUsuario")
-  usuario        String       @unique @map("usuario")
-  email          String?      @unique @map("email")
-  passwordHash   String
-  nombreApellido String       @map("nombre_apellido")
-  rolId          Int          @map("Rol_idRol")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-  estaActivo     Boolean      @default(true) @map("esta_activo")
-  ultimoLoginAt  DateTime?    @map("ultimo_login_at")
-  profesional    Profesional?
-  rol            Rol          @relation(fields: [rolId], references: [idRol])
+  idUsuario           Int                   @id @default(autoincrement()) @map("idUsuario")
+  usuario             String                @unique @map("usuario")
+  email               String?               @unique @map("email")
+  passwordHash        String
+  nombreApellido      String                @map("nombre_apellido")
+  rolId               Int                   @map("Rol_idRol")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  estaActivo          Boolean               @default(true) @map("esta_activo")
+  ultimoLoginAt       DateTime?             @map("ultimo_login_at")
+  profesional         Profesional?
+  rol                 Rol                   @relation(fields: [rolId], references: [idRol])
+  citasCreadas        Cita[]                @relation("CitaCreadaPor")
+  citasCanceladas     Cita[]                @relation("CitaCanceladaPor")
+  CitaEstadoHistorial CitaEstadoHistorial[]
+  BloqueoAgenda       BloqueoAgenda[]
+  Consulta            Consulta[]
+  ConsultaAdjunto     ConsultaAdjunto[]
+  TreatmentPlan       TreatmentPlan[]
 
   @@index([rolId])
   @@map("Usuario")
-  Cita Cita[]
 }
 
 model Profesional {
@@ -48,30 +54,32 @@ model Profesional {
   persona        Persona                   @relation(fields: [personaId], references: [idPersona])
   usuario        Usuario                   @relation(fields: [userId], references: [idUsuario], onDelete: Cascade)
   especialidades ProfesionalEspecialidad[]
+  Cita           Cita[]
+  BloqueoAgenda  BloqueoAgenda[]
+  Consulta       Consulta[]
 
   @@index([estaActivo])
   @@map("Profesional")
-  Cita Cita[]
 }
 
 model Persona {
-  idPersona       Int               @id @default(autoincrement()) @map("idPersona")
-  nombres         String            @map("nombres")
-  apellidos       String            @map("apellidos")
-  fechaNacimiento DateTime?         @map("fecha_nacimiento")
-  genero          Genero?           @map("genero")
-  direccion       String?           @map("direccion")
-  estaActivo      Boolean           @default(true) @map("esta_activo")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
-  documento       Documento?
-  contactos       PersonaContacto[]
-  profesionales   Profesional?
+  idPersona           Int                   @id @default(autoincrement()) @map("idPersona")
+  nombres             String                @map("nombres")
+  apellidos           String                @map("apellidos")
+  fechaNacimiento     DateTime?             @map("fecha_nacimiento")
+  genero              Genero?               @map("genero")
+  direccion           String?               @map("direccion")
+  estaActivo          Boolean               @default(true) @map("esta_activo")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  documento           Documento?
+  contactos           PersonaContacto[]
+  profesionales       Profesional?
+  paciente            Paciente?
+  PacienteResponsable PacienteResponsable[]
 
   @@index([nombres, apellidos])
   @@map("Persona")
-  Paciente Paciente[]
-  PacienteResponsable PacienteResponsable[]
 }
 
 model Documento {
@@ -193,36 +201,37 @@ enum EstadoCita {
 
 // Paciente
 model Paciente {
-  idPaciente   Int       @id @default(autoincrement()) @map("idPaciente")
-  personaId    Int       @unique                      @map("Persona_idPersona")
-  notas        String?   @map("notas")
-  estaActivo   Boolean   @default(true)               @map("esta_activo")
-  createdAt    DateTime  @default(now())              @map("created_at")
-  updatedAt    DateTime  @updatedAt                   @map("updated_at")
+  idPaciente Int      @id @default(autoincrement()) @map("idPaciente")
+  personaId  Int      @unique @map("Persona_idPersona")
+  notas      String?  @map("notas")
+  estaActivo Boolean  @default(true) @map("esta_activo")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  persona      Persona   @relation(fields: [personaId], references: [idPersona])
-  responsables PacienteResponsable[]
-  citas        Cita[]    // <— importante: relación inversa (solo lectura)
+  persona       Persona               @relation(fields: [personaId], references: [idPersona])
+  responsables  PacienteResponsable[]
+  citas         Cita[] // <— importante: relación inversa (solo lectura)
+  TreatmentPlan TreatmentPlan[]
 
   @@map("Paciente")
 }
 
 // Responsable de pago / tutor
 model PacienteResponsable {
-  idPacienteResponsable Int               @id @default(autoincrement()) @map("idPacienteResponsable")
-  pacienteId            Int               @map("Paciente_idPaciente")
-  personaId             Int               @map("Persona_idPersona")
-  relacion              RelacionPaciente  @map("relacion")
-  esPrincipal           Boolean           @default(false)               @map("es_principal")
-  autoridadLegal        Boolean           @default(false)               @map("autoridad_legal")
-  vigenteDesde          DateTime          @default(now())               @map("vigente_desde")
-  vigenteHasta          DateTime?         @map("vigente_hasta")
-  notas                 String?           @map("notas")
-  createdAt             DateTime          @default(now())               @map("created_at")
-  updatedAt             DateTime          @updatedAt                    @map("updated_at")
+  idPacienteResponsable Int              @id @default(autoincrement()) @map("idPacienteResponsable")
+  pacienteId            Int              @map("Paciente_idPaciente")
+  personaId             Int              @map("Persona_idPersona")
+  relacion              RelacionPaciente @map("relacion")
+  esPrincipal           Boolean          @default(false) @map("es_principal")
+  autoridadLegal        Boolean          @default(false) @map("autoridad_legal")
+  vigenteDesde          DateTime         @default(now()) @map("vigente_desde")
+  vigenteHasta          DateTime?        @map("vigente_hasta")
+  notas                 String?          @map("notas")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  paciente              Paciente          @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
-  persona               Persona           @relation(fields: [personaId], references: [idPersona])
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  persona  Persona  @relation(fields: [personaId], references: [idPersona])
 
   @@index([pacienteId, personaId])
   @@map("PacienteResponsable")
@@ -231,47 +240,340 @@ model PacienteResponsable {
 // Consultorio / Box
 model Consultorio {
   idConsultorio Int      @id @default(autoincrement()) @map("idConsultorio")
-  nombre        String   @unique                       @map("nombre")
+  nombre        String   @unique @map("nombre")
   colorHex      String?  @map("color_hex")
-  activo        Boolean  @default(true)                @map("activo")
-  createdAt     DateTime @default(now())               @map("created_at")
-  updatedAt     DateTime @updatedAt                    @map("updated_at")
+  activo        Boolean  @default(true) @map("activo")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   citas         Cita[]
+  BloqueoAgenda BloqueoAgenda[]
 
   @@map("Consultorio")
 }
 
 // Cita / Turno
 model Cita {
-  idCita          Int          @id @default(autoincrement()) @map("idCita")
+  idCita Int @id @default(autoincrement()) @map("idCita")
 
-  // FKs ESCALARES (deben existir para poder enviar ids sueltos en create)
-  pacienteId      Int          @map("Paciente_idPaciente")
-  profesionalId   Int          @map("Profesional_idProfesional")
-  consultorioId   Int?         @map("Consultorio_idConsultorio")
-  createdByUserId Int          @map("Usuario_idUsuario_createdBy")
+  // FKs
+  pacienteId      Int  @map("Paciente_idPaciente")
+  profesionalId   Int  @map("Profesional_idProfesional")
+  consultorioId   Int? @map("Consultorio_idConsultorio")
+  createdByUserId Int  @map("Usuario_idUsuario_createdBy")
 
-  inicio          DateTime     @map("inicio")
-  fin             DateTime     @map("fin")
-  tipo            TipoCita     @map("tipo")
-  estado          EstadoCita   @default(SCHEDULED)          @map("estado")
-  motivo          String?      @map("motivo")
-  notas           String?      @map("notas")
-  createdAt       DateTime     @default(now())              @map("created_at")
-  updatedAt       DateTime     @updatedAt                   @map("updated_at")
+  // Ventana y clasificación
+  inicio          DateTime   @map("inicio")
+  fin             DateTime   @map("fin")
+  duracionMinutos Int        @default(30) @map("duracion_minutos")
+  tipo            TipoCita   @map("tipo")
+  estado          EstadoCita @default(SCHEDULED) @map("estado")
 
-  // RELACIONES con fields/references correctamente enlazadas
-  paciente        Paciente     @relation(fields: [pacienteId], references: [idPaciente])
-  profesional     Profesional  @relation(fields: [profesionalId], references: [idProfesional])
-  consultorio     Consultorio? @relation(fields: [consultorioId], references: [idConsultorio])
-  creadoPor       Usuario      @relation(fields: [createdByUserId], references: [idUsuario])
+  // Descripción
+  motivo String? @map("motivo")
+  notas  String? @map("notas")
 
+  // Reprogramaciones (self-relation)
+  reprogramadaDesdeId Int?   @map("Cita_idCita_reprog_desde")
+  reprogramadaDesde   Cita?  @relation("CitaReprogramacion", fields: [reprogramadaDesdeId], references: [idCita])
+  reprogramaciones    Cita[] @relation("CitaReprogramacion")
+
+  // Timestamps de flujo (útiles para reporting)
+  checkedInAt DateTime? @map("checked_in_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Cancelación (quién, cuándo, por qué)
+  cancelReason      MotivoCancelacion? @map("cancel_reason")
+  cancelledAt       DateTime?          @map("cancelled_at")
+  cancelledByUserId Int?               @map("Usuario_idUsuario_cancelledBy")
+
+  // Metadatos/Extensión (opcional)
+  metadatos Json? @map("metadatos")
+
+  // Auditoría
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  paciente    Paciente     @relation(fields: [pacienteId], references: [idPaciente])
+  profesional Profesional  @relation(fields: [profesionalId], references: [idProfesional])
+  consultorio Consultorio? @relation(fields: [consultorioId], references: [idConsultorio])
+
+  // Importante: hay 2 relaciones a Usuario, por eso nombramos ambas
+  creadoPor           Usuario               @relation("CitaCreadaPor", fields: [createdByUserId], references: [idUsuario])
+  canceladoPor        Usuario?              @relation("CitaCanceladaPor", fields: [cancelledByUserId], references: [idUsuario])
+  CitaEstadoHistorial CitaEstadoHistorial[]
+  Consulta            Consulta[]
+
+  // Índices
   @@index([profesionalId, inicio])
   @@index([pacienteId, inicio])
   @@index([consultorioId, inicio])
   @@index([estado, inicio])
+  @@index([inicio]) // acelerador para ventanas por fecha
   @@map("Cita")
 }
 
+enum MotivoCancelacion {
+  PACIENTE
+  PROFESIONAL
+  CLINICA
+  EMERGENCIA
+  OTRO
+}
 
+enum TipoBloqueoAgenda {
+  VACACIONES
+  MANTENIMIENTO
+  CAPACITACION
+  BLOQUEO_MANUAL
+  OTRO
+}
+
+model CitaEstadoHistorial {
+  idCitaEstadoHistorial Int         @id @default(autoincrement()) @map("idCitaEstadoHistorial")
+  citaId                Int         @map("Cita_idCita")
+  estadoPrevio          EstadoCita? @map("estado_previo")
+  estadoNuevo           EstadoCita  @map("estado_nuevo")
+  nota                  String?     @map("nota")
+  changedByUserId       Int?        @map("Usuario_idUsuario_changedBy")
+  changedAt             DateTime    @default(now()) @map("changed_at")
+
+  cita        Cita     @relation(fields: [citaId], references: [idCita], onDelete: Cascade)
+  cambiadoPor Usuario? @relation(fields: [changedByUserId], references: [idUsuario])
+
+  @@index([citaId, changedAt])
+  @@index([estadoNuevo, changedAt])
+  @@map("CitaEstadoHistorial")
+}
+
+model BloqueoAgenda {
+  idBloqueoAgenda Int               @id @default(autoincrement()) @map("idBloqueoAgenda")
+  profesionalId   Int?              @map("Profesional_idProfesional")
+  consultorioId   Int?              @map("Consultorio_idConsultorio")
+  desde           DateTime          @map("desde")
+  hasta           DateTime          @map("hasta")
+  tipo            TipoBloqueoAgenda @map("tipo")
+  motivo          String?           @map("motivo")
+  recurrencia     Json?             @map("recurrencia") // RRule u otro
+  activo          Boolean           @default(true) @map("activo")
+
+  createdByUserId Int      @map("Usuario_idUsuario_createdBy")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  profesional Profesional? @relation(fields: [profesionalId], references: [idProfesional])
+  consultorio Consultorio? @relation(fields: [consultorioId], references: [idConsultorio])
+  creadoPor   Usuario      @relation(fields: [createdByUserId], references: [idUsuario])
+
+  @@index([profesionalId, desde])
+  @@index([consultorioId, desde])
+  @@index([activo, desde])
+  @@map("BloqueoAgenda")
+}
+
+enum ConsultaEstado {
+  DRAFT
+  FINAL
+}
+
+enum DienteSuperficie {
+  O // Oclusal
+  M // Mesial
+  D // Distal
+  V // Vestibular/Bucal
+  L // Lingual/Palatino
+  MO
+  DO
+  VO
+  LO
+  MOD
+  MV
+  DL
+  // agrega combinaciones que uses en clínica
+}
+
+enum ClinicoArchivoTipo {
+  XRAY
+  INTRAORAL_PHOTO
+  EXTRAORAL_PHOTO
+  DOCUMENT
+  PDF
+  IMAGE
+  LAB_REPORT
+  OTHER
+}
+
+enum TreatmentStepStatus {
+  PENDING
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DEFERRED
+}
+
+model ProcedimientoCatalogo {
+  idProcedimiento    Int      @id @default(autoincrement()) @map("idProcedimiento")
+  code               String   @unique @map("code") // p.ej. C11, ADA code, interno, etc.
+  nombre             String   @map("nombre")
+  descripcion        String?  @map("descripcion")
+  defaultDurationMin Int?     @map("default_duration_min")
+  defaultPriceCents  Int?     @map("default_price_cents")
+  aplicaDiente       Boolean  @default(false) @map("aplica_diente")
+  aplicaSuperficie   Boolean  @default(false) @map("aplica_superficie")
+  activo             Boolean  @default(true) @map("activo")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  pasos          TreatmentStep[]
+  procedimientos ConsultaProcedimiento[]
+
+  @@map("ProcedimientoCatalogo")
+}
+
+model Consulta {
+  // PK=FK a Cita (1:1)
+  citaId Int  @id @map("Cita_idCita")
+  cita   Cita @relation(fields: [citaId], references: [idCita], onDelete: Cascade)
+
+  performedById Int         @map("Profesional_idProfesional")
+  performedBy   Profesional @relation(fields: [performedById], references: [idProfesional])
+
+  status     ConsultaEstado @default(DRAFT) @map("status")
+  startedAt  DateTime?      @map("started_at")
+  finishedAt DateTime?      @map("finished_at")
+
+  reason        String? @map("reason")
+  diagnosis     String? @map("diagnosis")
+  clinicalNotes String? @map("clinical_notes")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Hijos
+  procedimientos ConsultaProcedimiento[]
+  adjuntos       ConsultaAdjunto[]
+
+  @@map("Consulta")
+}
+
+model ConsultaProcedimiento {
+  idConsultaProcedimiento Int @id @default(autoincrement()) @map("idConsultaProcedimiento")
+
+  consultaId Int      @map("Consulta_Cita_idCita")
+  consulta   Consulta @relation(fields: [consultaId], references: [citaId], onDelete: Cascade)
+
+  // Definición del acto: catálogo o texto libre (elige uno; ver CHECK más abajo)
+  procedureId Int?                   @map("Procedimiento_idProcedimiento")
+  catalogo    ProcedimientoCatalogo? @relation(fields: [procedureId], references: [idProcedimiento], onDelete: SetNull)
+  serviceType String?                @map("service_type")
+
+  // Diente / superficie (opcionales según el procedimiento)
+  toothNumber  Int?              @map("tooth_number") // 1–32 / 51–85
+  toothSurface DienteSuperficie? @map("tooth_surface")
+
+  // Cantidad y costos aplicados
+  quantity       Int  @default(1) @map("quantity")
+  unitPriceCents Int? @map("unit_price_cents")
+  totalCents     Int? @map("total_cents")
+
+  // Vínculo con planificación (si ejecuta una etapa)
+  treatmentStepId Int?           @map("TreatmentStep_idTreatmentStep")
+  treatmentStep   TreatmentStep? @relation(fields: [treatmentStepId], references: [idTreatmentStep], onDelete: SetNull)
+
+  resultNotes String? @map("result_notes")
+
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  ConsultaAdjunto ConsultaAdjunto[]
+
+  @@index([consultaId])
+  @@index([procedureId])
+  @@index([treatmentStepId])
+  @@map("ConsultaProcedimiento")
+}
+
+model ConsultaAdjunto {
+  idConsultaAdjunto Int @id @default(autoincrement()) @map("idConsultaAdjunto")
+
+  consultaId Int      @map("Consulta_Cita_idCita")
+  consulta   Consulta @relation(fields: [consultaId], references: [citaId], onDelete: Cascade)
+
+  procedimientoId Int?                   @map("ConsultaProcedimiento_idConsultaProcedimiento")
+  procedimiento   ConsultaProcedimiento? @relation(fields: [procedimientoId], references: [idConsultaProcedimiento], onDelete: SetNull)
+
+  url          String             @map("url")
+  originalName String             @map("original_name")
+  mimeType     String             @map("mime_type")
+  size         Int                @map("size")
+  tipo         ClinicoArchivoTipo @map("tipo")
+  metadata     Json?              @map("metadata")
+
+  uploadedByUserId Int     @map("Usuario_idUsuario_uploadedBy")
+  uploadedBy       Usuario @relation(fields: [uploadedByUserId], references: [idUsuario])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([consultaId])
+  @@index([procedimientoId])
+  @@map("ConsultaAdjunto")
+}
+
+model TreatmentPlan {
+  idTreatmentPlan Int      @id @default(autoincrement()) @map("idTreatmentPlan")
+  pacienteId      Int      @map("Paciente_idPaciente")
+  paciente        Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+
+  titulo      String  @map("titulo")
+  descripcion String? @map("descripcion")
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  creadoPor       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  steps TreatmentStep[]
+
+  @@index([pacienteId, isActive])
+  @@map("TreatmentPlan")
+}
+
+model TreatmentStep {
+  idTreatmentStep Int           @id @default(autoincrement()) @map("idTreatmentStep")
+  treatmentPlanId Int           @map("TreatmentPlan_idTreatmentPlan")
+  plan            TreatmentPlan @relation(fields: [treatmentPlanId], references: [idTreatmentPlan], onDelete: Cascade)
+
+  order Int @map("order")
+
+  // Definición clínica (elige catálogo o texto libre)
+  procedureId           Int?                   @map("Procedimiento_idProcedimiento")
+  procedimientoCatalogo ProcedimientoCatalogo? @relation(fields: [procedureId], references: [idProcedimiento], onDelete: SetNull)
+  serviceType           String?                @map("service_type")
+
+  toothNumber  Int?              @map("tooth_number")
+  toothSurface DienteSuperficie? @map("tooth_surface")
+
+  estimatedDurationMin Int?                @map("estimated_duration_min")
+  estimatedCostCents   Int?                @map("estimated_cost_cents")
+  priority             Int?                @map("priority") // 1..5
+  status               TreatmentStepStatus @default(PENDING) @map("status")
+  notes                String?             @map("notes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Ejecución clínica (líneas realizadas que cumplen este step)
+  consultaProcedimientos ConsultaProcedimiento[]
+
+  @@unique([treatmentPlanId, order])
+  @@index([status])
+  @@map("TreatmentStep")
+}
