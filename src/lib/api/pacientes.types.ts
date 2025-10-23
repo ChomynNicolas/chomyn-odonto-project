@@ -1,37 +1,60 @@
-import { z } from "zod";
+export type TipoDocumento = "CI" | "DNI" | "PASAPORTE" | "RUC" | "OTRO"
 
-export const zContacto = z.object({
-  tipo: z.enum(["PHONE", "EMAIL"]),
-  valorNorm: z.string(),
-  esPrincipal: z.boolean().optional(),
-  activo: z.boolean().optional(),
-});
+export interface PacienteItem {
+  idPaciente: number
+  persona: {
+    idPersona: number
+    nombres: string
+    apellidos: string
+    genero: string | null
+    documento: {
+      tipo: TipoDocumento
+      numero: string
+      ruc: string | null
+    } | null
+    contactos: Array<{
+      tipo: "PHONE" | "EMAIL"
+      valorNorm: string
+      activo: boolean
+      esPrincipal: boolean
+    }>
+  }
+}
 
-export const zDocumento = z.object({
-  tipo: z.string(),
-  numero: z.string(),
-  ruc: z.string().nullable().optional(),
-});
+export interface PacientesQueryParams {
+  q?: string
+  soloActivos?: boolean
+  limit?: number
+  cursor?: number
+}
 
-export const zPersona = z.object({
-  idPersona: z.number(),
-  nombres: z.string().nullable().optional(),
-  apellidos: z.string().nullable().optional(),
-  genero: z.string().nullable().optional(),
-  documento: zDocumento.nullable().optional(),
-  contactos: z.array(zContacto).default([]),
-});
+export interface PacientesResponse {
+  items: PacienteItem[]
+  nextCursor: number | null
+  hasMore: boolean
+}
 
-export const zPacienteItem = z.object({
-  idPaciente: z.number(),
-  estaActivo: z.boolean().optional(),
-  persona: zPersona,
-});
+export interface CreatePacienteQuickDTO {
+  nombreCompleto: string
+  genero?: "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
+  tipoDocumento: TipoDocumento
+  dni: string
+  telefono: string
+  email?: string
+}
 
-export const zPacientesResponse = z.object({
-  items: z.array(zPacienteItem),
-  nextCursor: z.string().nullable(),
-});
-
-export type PacienteItem = z.infer<typeof zPacienteItem>;
-export type PacientesResponse = z.infer<typeof zPacientesResponse>;
+export interface CreatePacienteFullDTO extends CreatePacienteQuickDTO {
+  ruc?: string
+  domicilio?: string
+  antecedentesMedicos?: string
+  alergias?: string
+  medicacion?: string
+  responsablePago?: string
+  obraSocial?: string
+  preferenciasContacto?: {
+    whatsapp?: boolean
+    sms?: boolean
+    llamada?: boolean
+    email?: boolean
+  }
+}

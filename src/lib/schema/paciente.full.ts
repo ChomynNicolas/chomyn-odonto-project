@@ -1,44 +1,58 @@
 // src/lib/schema/paciente.full.ts
-import { z } from "zod";
+import { z } from "zod"
 
-const phoneRegex = /^(?:\+?\d[\d\s\-]{5,14})$/;
-const dniRegex = /^[A-Za-z0-9.\-]{5,}$/;
+const TIPO_DOC = ["CI", "DNI", "PASAPORTE", "RUC", "OTRO"] as const
+const GENERO_DTO = ["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO", "NO_DECLARA"] as const
 
-export const generoEnum = z.enum(["MASCULINO","FEMENINO","OTRO","NO_ESPECIFICADO"]);
+const MIN_DOB = new Date("1900-01-01")
+const TODAY = new Date()
 
 export const pacienteFullCreateSchema = z.object({
-  nombreCompleto: z.string().trim().min(3, "Mín. 3 caracteres"),
-  genero: generoEnum,
-  dni: z.string().trim().regex(dniRegex, "Documento inválido"),
-  ruc: z.string().trim().optional().nullable(),
-  telefono: z.string().trim().regex(phoneRegex, "Teléfono inválido"),
-  email: z.string().trim().email("Email inválido").optional().or(z.literal("")).optional(),
-  domicilio: z.string().trim().min(3, "Domicilio requerido"),
-  obraSocial: z.string().trim().optional().nullable(),
+  nombreCompleto: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
 
-  antecedentesMedicos: z.string().trim().optional().nullable(),
-  alergias: z.string().trim().optional().nullable(),
-  medicacion: z.string().trim().optional().nullable(),
-  responsablePago: z.string().trim().optional().nullable(),
+  // Aceptamos ambas para evitar mapeos rotos y normalizamos luego
+  genero: z.enum(GENERO_DTO),
 
-  preferenciasContacto: z.object({
-    whatsapp: z.boolean().default(true),
-    llamada: z.boolean().default(false),
-    email: z.boolean().default(false),
-    sms: z.boolean().default(false),
-  }).default({ whatsapp:true, llamada:false, email:false, sms:false }),
+  // Ahora con default "CI"
+  tipoDocumento: z.enum(TIPO_DOC).optional().default("CI"),
 
-  // adjuntos mock (en el futuro irán a S3/Cloudinary)
-  adjuntos: z.array(z.object({
-    id: z.string(),
-    nombre: z.string(),
-    tipo: z.enum(["CEDULA","RADIOGRAFIA","OTRO"]),
-    url: z.string().url(),
-  })).optional().default([]),
-}).transform(v => ({
-  ...v,
-  nombreCompleto: v.nombreCompleto.replace(/\s+/g, " ").trim(),
-  email: v.email ? v.email.trim() : undefined,
-}));
+  dni: z.string().min(3, "El número de documento es requerido"),
 
-export type PacienteFullCreateDTO = z.infer<typeof pacienteFullCreateSchema>;
+  // Todos los opcionales admiten string | "" | null | undefined
+  ruc: z.union([z.string(), z.literal(""), z.null()]).optional(),
+  telefono: z.string().min(6, "El teléfono es requerido"),
+  email: z.union([z.string().email("Email inválido"), z.literal(""), z.null()]).optional(),
+
+  domicilio: z.union([z.string(), z.literal(""), z.null()]).optional(),
+
+  // Permite "", undefined o Date/string coercible y valida rango
+  fechaNacimiento: z
+    .union([
+      z.literal(""),
+      z.undefined(),
+      z.coerce
+        .date()
+        .refine((d) => d >= MIN_DOB && d <= TODAY, "Fecha inválida"),
+    ])
+    .optional(),
+
+  antecedentesMedicos: z.union([z.string(), z.literal(""), z.null()]).optional(),
+  alergias: z.union([z.string(), z.literal(""), z.null()]).optional(),
+  medicacion: z.union([z.string(), z.literal(""), z.null()]).optional(),
+  responsablePago: z.union([z.string(), z.literal(""), z.null()]).optional(),
+  obraSocial: z.union([z.string(), z.literal(""), z.null()]).optional(),
+
+  preferenciasContacto: z
+    .object({
+      whatsapp: z.boolean().default(false),
+      sms: z.boolean().default(false),
+      llamada: z.boolean().default(false),
+      email: z.boolean().default(false),
+    })
+    .optional(),
+
+  adjuntos: z.array(z.any()).optional(),
+})
+
+// Tipo exportable
+export type PacienteFullCreateDTO = z.infer<typeof pacienteFullCreateSchema>

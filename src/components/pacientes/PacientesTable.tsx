@@ -1,213 +1,369 @@
-"use client";
+"use client"
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import Button from "../ui/button/Button";
-import Badge from "../ui/badge/Badge";
-import PatientQuickCreateModal from "./PatientQuickCreateModal";
-import Banner from "../ui/Banner";
-import PacientesSkeleton from "./PacientesSkeleton";
-import { usePacientes } from "@/hooks/usePacientesQuery";
-import { PacienteItem } from "@/lib/api/pacientes.types";
+import { useDeferredValue, useState } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Card } from "@/components/ui/card"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
+import PatientQuickCreateModal from "./PatientQuickCreateModal"
+import { usePacientes } from "@/hooks/usePacientesQuery"
+import type { PacienteItem } from "@/lib/api/pacientes.types"
+import { Search, UserPlus, Users, AlertCircle, Phone, Mail, FileText } from "lucide-react"
 
 function Toolbar({
-  q, setQ, onOpenQuick,
-}: { q: string; setQ: (v: string) => void; onOpenQuick: () => void; }) {
+  q,
+  setQ,
+  onOpenQuick,
+}: {
+  q: string
+  setQ: (v: string) => void
+  onOpenQuick: () => void
+}) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="relative w-full sm:max-w-lg">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-          <svg className="h-4 w-4 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-            <path fillRule="evenodd" d="M13.78 12.72a6 6 0 1 0-1.06 1.06l3.5 3.5a.75.75 0 1 0 1.06-1.06l-3.5-3.5ZM9 13.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Z" clipRule="evenodd"/>
-          </svg>
-        </span>
-        <input
+      <div className="relative w-full sm:max-w-md">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por nombre, documento, RUC o contacto…"
           aria-label="Buscar pacientes"
-          className="mr-8 block w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900"
+          className="pl-9"
         />
       </div>
 
       <div className="flex gap-2">
-        <button
-          onClick={onOpenQuick}
-          className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
-        >
+        <Button onClick={onOpenQuick} variant="outline" className="whitespace-nowrap bg-transparent">
+          <UserPlus className="size-4" />
           Alta rápida
-        </button>
-        <Link href="/pacientes/nuevo" prefetch={false}>
-          <Button className="whitespace-nowrap">Nuevo paciente</Button>
-        </Link>
+        </Button>
+        <Button asChild className="whitespace-nowrap">
+          <Link href="/pacientes/nuevo" prefetch={false}>
+            <Users className="size-4" />
+            Nuevo paciente
+          </Link>
+        </Button>
       </div>
     </div>
-  );
+  )
 }
 
 function EmptyState({ query }: { query: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-8 text-center">
-      <svg className="mb-2 h-8 w-8 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v2H4V6Zm16 6H4v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6Z"/>
-      </svg>
-      <p className="text-sm text-muted-foreground">
-        {query ? `No encontramos pacientes para “${query}”.` : "Aún no hay pacientes cargados."}
-      </p>
+    <Empty className="border">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Users className="size-6" />
+        </EmptyMedia>
+        <EmptyTitle>{query ? "No se encontraron pacientes" : "No hay pacientes registrados"}</EmptyTitle>
+        <EmptyDescription>
+          {query
+            ? `No encontramos pacientes que coincidan con "${query}". Intenta con otros términos de búsqueda.`
+            : "Comienza agregando tu primer paciente al sistema."}
+        </EmptyDescription>
+      </EmptyHeader>
       {!query && (
-        <Link href="/pacientes/nuevo">
-          <Button variant="outline" className="mt-3">Crear primer paciente</Button>
-        </Link>
+        <EmptyContent>
+          <Button asChild>
+            <Link href="/pacientes/nuevo">
+              <Users className="size-4" />
+              Crear primer paciente
+            </Link>
+          </Button>
+        </EmptyContent>
       )}
-    </div>
-  );
+    </Empty>
+  )
 }
 
 function renderNombre(p: PacienteItem) {
-  const nom = [p.persona.nombres, p.persona.apellidos].filter(Boolean).join(" ").trim();
-  return nom || "—";
+  const nom = [p.persona.nombres, p.persona.apellidos].filter(Boolean).join(" ").trim()
+  return nom || "—"
 }
+
 function renderDocumento(p: PacienteItem) {
-  const doc = p.persona.documento;
-  if (!doc) return "—";
-  return `${doc.numero}${doc.ruc ? ` • RUC ${doc.ruc}` : ""}`;
+  const doc = p.persona.documento
+  if (!doc) return "—"
+  const tipoLabel =
+    doc.tipo === "CI"
+      ? "CI"
+      : doc.tipo === "DNI"
+        ? "DNI"
+        : doc.tipo === "PASAPORTE"
+          ? "Pasaporte"
+          : doc.tipo === "RUC"
+            ? "RUC"
+            : doc.tipo
+  return `${tipoLabel}: ${doc.numero}${doc.ruc ? ` • RUC ${doc.ruc}` : ""}`
 }
+
 function renderTelefono(p: PacienteItem) {
-  const phone = p.persona.contactos.find(c => c.tipo === "PHONE" && c.activo !== false);
-  return phone?.valorNorm || "—";
+  const phone = p.persona.contactos.find((c) => c.tipo === "PHONE" && c.activo !== false)
+  return phone?.valorNorm || "—"
 }
+
 function renderEmail(p: PacienteItem) {
-  const mail = p.persona.contactos.find(c => c.tipo === "EMAIL" && c.activo !== false);
-  return mail?.valorNorm || "—";
+  const mail = p.persona.contactos.find((c) => c.tipo === "EMAIL" && c.activo !== false)
+  return mail?.valorNorm || "—"
 }
 
 function TableDesktop({ data }: { data: PacienteItem[] }) {
   return (
-    <div className="hidden overflow-auto rounded-lg border border-border sm:block">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Listado de pacientes</caption>
-        <thead className="bg-muted/40 sticky top-0 z-10">
-          <tr className="text-muted-foreground">
-            <th scope="col" className="px-4 py-3 text-left font-medium">Nombre</th>
-            <th scope="col" className="px-4 py-3 text-left font-medium">Documento</th>
-            <th scope="col" className="px-4 py-3 text-left font-medium">Teléfono</th>
-            <th scope="col" className="px-4 py-3 text-left font-medium">Email</th>
-            <th scope="col" className="px-4 py-3 text-left font-medium">Obra social</th>
-            <th scope="col" className="px-4 py-3 text-left font-medium">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border bg-card">
-          {data.map((p) => (
-            <tr key={p.idPaciente} className="hover:bg-muted/30">
-              <td className="px-4 py-3 font-medium text-foreground">{renderNombre(p)}</td>
-              <td className="px-4 py-3">{renderDocumento(p)}</td>
-              <td className="px-4 py-3">{renderTelefono(p)}</td>
-              <td className="px-4 py-3">{renderEmail(p)}</td>
-              <td className="px-4 py-3">
-                {/* si tienes obra social en persona/paciente, adapta aquí */}
-                <span className="text-muted-foreground">—</span>
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Link className="text-primary hover:underline"
+    <Card className="overflow-hidden p-0 shadow-sm">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-[25%] font-semibold">Nombre</TableHead>
+              <TableHead className="w-[20%] font-semibold">Documento</TableHead>
+              <TableHead className="w-[18%] font-semibold">Teléfono</TableHead>
+              <TableHead className="w-[22%] font-semibold">Email</TableHead>
+              <TableHead className="w-[5%] text-right font-semibold">
+                <span className="sr-only">Acciones</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.map((p) => (
+              <TableRow key={p.idPaciente}>
+                <TableCell className="font-medium">{renderNombre(p)}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    
+                    <span className="truncate">{renderDocumento(p)}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate">{renderTelefono(p)}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate">{renderEmail(p)}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Button asChild variant="ghost" size="sm" className="h-8">
+                      <Link
                         href={`/pacientes/${p.idPaciente}`}
                         prefetch={false}
-                        aria-label={`Ver paciente ${renderNombre(p)}`}>
-                    Ver
-                  </Link>
-                  <button className="text-destructive/80 hover:text-destructive" title="Inactivar">
-                    Inactivar
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+                        aria-label={`Ver detalles de ${renderNombre(p)}`}
+                      >
+                        Ver
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-destructive hover:text-destructive"
+                      aria-label={`Inactivar a ${renderNombre(p)}`}
+                    >
+                      Inactivar
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
+  )
 }
 
 function ListMobile({ data }: { data: PacienteItem[] }) {
   return (
-    <ul className="sm:hidden space-y-3">
+    <ul className="space-y-3 sm:hidden" role="list">
       {data.map((p) => (
-        <li key={p.idPaciente} className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-medium">{renderNombre(p)}</h3>
-              <p className="truncate text-xs text-muted-foreground">
-                {renderDocumento(p)} • {renderTelefono(p)}
-              </p>
+        <li key={p.idPaciente}>
+          <Card className="p-4">
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate font-semibold leading-tight">{renderNombre(p)}</h3>
+                  <div className="mt-1.5 flex flex-col gap-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="size-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{renderDocumento(p)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="size-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{renderTelefono(p)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="size-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{renderEmail(p)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t pt-3">
+                <Button asChild variant="outline" size="sm" className="flex-1 bg-transparent">
+                  <Link
+                    href={`/pacientes/${p.idPaciente}`}
+                    prefetch={false}
+                    aria-label={`Ver detalles de ${renderNombre(p)}`}
+                  >
+                    Ver detalles
+                  </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  aria-label={`Inactivar a ${renderNombre(p)}`}
+                >
+                  Inactivar
+                </Button>
+              </div>
             </div>
-            {/* si luego agregas obraSocial, coloca aquí un <Badge> */}
-          </div>
-          <div className="mt-2 flex items-center justify-between">
-            <p className="truncate text-xs text-muted-foreground">{renderEmail(p)}</p>
-            <div className="flex items-center gap-3">
-              <Link className="text-primary text-sm hover:underline" href={`/pacientes/${p.idPaciente}`} prefetch={false}>
-                Ver
-              </Link>
-              <button className="text-destructive/80 text-sm hover:text-destructive">Inactivar</button>
-            </div>
-          </div>
+          </Card>
         </li>
       ))}
     </ul>
-  );
+  )
+}
+
+function PacientesSkeleton() {
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="font-semibold">Nombre</TableHead>
+              <TableHead className="font-semibold">Documento</TableHead>
+              <TableHead className="font-semibold">Teléfono</TableHead>
+              <TableHead className="font-semibold">Email</TableHead>
+              <TableHead className="text-right font-semibold">
+                <span className="sr-only">Acciones</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <Skeleton className="h-5 w-32" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-28" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-36" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-16" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Skeleton className="h-8 w-12" />
+                    <Skeleton className="h-8 w-20" />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
+  )
+}
+
+function SuccessBanner({
+  patientId,
+  onClose,
+}: {
+  patientId: string
+  onClose: () => void
+}) {
+  return (
+    <Alert className="border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-950/20">
+      <AlertDescription className="flex items-center justify-between gap-3">
+        <span className="text-green-900 dark:text-green-100">
+          Paciente creado correctamente.{" "}
+          <Link
+            href={`/pacientes/${patientId}`}
+            className="font-medium underline underline-offset-4 hover:text-green-700 dark:hover:text-green-300"
+          >
+            Ver detalles
+          </Link>
+        </span>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClose}
+          className="shrink-0 text-green-900 hover:bg-green-100 hover:text-green-900 dark:text-green-100 dark:hover:bg-green-900/30"
+          aria-label="Cerrar notificación"
+        >
+          <span className="sr-only">Cerrar</span>
+          <svg className="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+          </svg>
+        </Button>
+      </AlertDescription>
+    </Alert>
+  )
 }
 
 export default function PacientesTable() {
-  const [q, setQ] = useState("");
-  const [openQuick, setOpenQuick] = useState(false);
-  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [q, setQ] = useState("")
+  const [openQuick, setOpenQuick] = useState(false)
+  const [createdId, setCreatedId] = useState<string | null>(null)
 
-  // debounce UI → defer a React Query
-  const deferredQ = useDeferredValue(q);
+  const deferredQ = useDeferredValue(q)
 
-  const soloActivos = true;
-  const limit = 20;
+  const soloActivos = true
+  const limit = 20
 
   const { items, hasMore, fetchNextPage, isFetchingNextPage, isLoading, isError, error, refetch, isFetching } =
-    usePacientes({ q: deferredQ, soloActivos, limit });
+    usePacientes({ q: deferredQ, soloActivos, limit })
 
-  // feedback al crear por modal
-  const handleCreated = (id: string) => setCreatedId(id);
-
-  const showSkeleton = isLoading && !items.length;
-  const showEmpty = !isLoading && !isError && items.length === 0;
-
-  
+  const showSkeleton = isLoading && !items.length
+  const showEmpty = !isLoading && !isError && items.length === 0
 
   return (
-    <section className="space-y-4">
-      {createdId && (
-        <Banner
-          message="Paciente creado correctamente. "
-          href={`/pacientes/${createdId}`}
-          onClose={() => setCreatedId(null)}
-        />
-      )}
+    <section className="space-y-4" aria-label="Gestión de pacientes">
+      {createdId && <SuccessBanner patientId={createdId} onClose={() => setCreatedId(null)} />}
 
       <Toolbar q={q} setQ={setQ} onOpenQuick={() => setOpenQuick(true)} />
 
-      {/* Estado de error */}
       {isError && (
-        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          Ocurrió un error al cargar los pacientes.{" "}
-          <button onClick={() => refetch()} className="underline underline-offset-2">
-            Reintentar
-          </button>
-          {process.env.NODE_ENV !== "production" && (
-            <span className="ml-2 opacity-70">({(error as any)?.message || "Error"})</span>
-          )}
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>
+            <div className="flex items-center justify-between gap-3">
+              <span>
+                Ocurrió un error al cargar los pacientes.{" "}
+                <button
+                  onClick={() => refetch()}
+                  className="font-medium underline underline-offset-4 hover:no-underline"
+                >
+                  Reintentar
+                </button>
+              </span>
+            </div>
+            {process.env.NODE_ENV !== "production" && (
+              <p className="mt-1 text-xs opacity-70">{(error as any)?.message || "Error desconocido"}</p>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Skeleton inicial */}
       {showSkeleton && <PacientesSkeleton />}
 
-      {/* Contenido */}
       {!isError && !showSkeleton && (
         <>
           {showEmpty ? (
@@ -217,20 +373,17 @@ export default function PacientesTable() {
               <TableDesktop data={items} />
               <ListMobile data={items} />
 
-              {/* paginación por cursor */}
-              <div className="flex justify-center">
+              <div className="flex justify-center pt-2">
                 {hasMore ? (
-                  <Button
-                    onClick={() => fetchNextPage()}
-                    disabled={isFetchingNextPage}
-                    className="mt-2"
-                  >
-                    {isFetchingNextPage ? "Cargando..." : "Cargar más"}
+                  <Button onClick={() => fetchNextPage()} disabled={isFetchingNextPage} variant="outline" size="lg">
+                    {isFetchingNextPage ? "Cargando..." : "Cargar más pacientes"}
                   </Button>
                 ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {isFetching ? "Actualizando..." : "No hay más resultados"}
-                  </p>
+                  items.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {isFetching ? "Actualizando..." : "No hay más resultados"}
+                    </p>
+                  )
                 )}
               </div>
             </>
@@ -238,15 +391,14 @@ export default function PacientesTable() {
         </>
       )}
 
-      {/* Modal de alta rápida */}
       <PatientQuickCreateModal
-    open={openQuick}
-    onClose={() => setOpenQuick(false)}
-    onCreated={(id) => setCreatedId(id)}
-    qForList={deferredQ}
-    soloActivos={soloActivos}
-    limit={limit}
-  />
+        open={openQuick}
+        onClose={() => setOpenQuick(false)}
+        onCreated={(id) => setCreatedId(id)}
+        qForList={deferredQ}
+        soloActivos={soloActivos}
+        limit={limit}
+      />
     </section>
-  );
+  )
 }
