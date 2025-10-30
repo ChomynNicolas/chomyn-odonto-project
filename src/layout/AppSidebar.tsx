@@ -53,9 +53,9 @@ const navItems: NavItem[] = [
   {
     icon: <CalenderIcon />,
     name: "Agenda",
-    path: "/agenda",
+    path: "/calendar",
     subItems: [
-      { name: "Calendario", path: "/agenda" , badgeText: "hoy 8", pro:false, },
+      { name: "Calendario", path: "/calendar" , badgeText: "hoy 8", pro:false, },
       { name: "Turnos pendientes", path: "/agenda/pendientes",pro:false, },
       { name: "Reprogramaciones", path: "/agenda/reprogramaciones",pro:false, },
       { name: "Ausencias (no show)", path: "/agenda/ausencias",pro:false, },
