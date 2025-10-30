@@ -338,7 +338,14 @@ export default function PacientesTable() {
     <section className="space-y-4" aria-label="Gestión de pacientes">
       {createdId && <SuccessBanner patientId={createdId} onClose={() => setCreatedId(null)} />}
 
-      <Toolbar q={q} setQ={setQ} onOpenQuick={() => setOpenQuick(true)} />
+      <Toolbar
+        q={state.q}
+        setQ={setQ}
+        status={state.status}
+        setStatus={setStatus}
+        resultCount={filteredItems.length}
+        onOpenQuick={() => setOpenQuick(true)}
+      />
 
       {isError && (
         <Alert variant="destructive">
@@ -367,11 +374,17 @@ export default function PacientesTable() {
       {!isError && !showSkeleton && (
         <>
           {showEmpty ? (
-            <EmptyState query={q} />
+            <EmptyState
+              message={state.q || state.status !== "Todos"
+                ? `No encontramos pacientes para “${state.q}”.`
+                : "Aún no hay pacientes cargados."
+              }
+              showCta={!state.q && state.status === "Todos"}
+            />
           ) : (
             <>
-              <TableDesktop data={items} />
-              <ListMobile data={items} />
+              <TableDesktop data={filteredItems} />
+              <ListMobile data={filteredItems} />
 
               <div className="flex justify-center pt-2">
                 {hasMore ? (
