@@ -18,25 +18,33 @@ model Rol {
 /// *
 /// * Tabla Usuarios
 model Usuario {
-  idUsuario           Int                   @id @default(autoincrement()) @map("idUsuario")
-  usuario             String                @unique @map("usuario")
-  email               String?               @unique @map("email")
-  passwordHash        String
-  nombreApellido      String                @map("nombre_apellido")
-  rolId               Int                   @map("Rol_idRol")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
-  estaActivo          Boolean               @default(true) @map("esta_activo")
-  ultimoLoginAt       DateTime?             @map("ultimo_login_at")
-  profesional         Profesional?
-  rol                 Rol                   @relation(fields: [rolId], references: [idRol])
-  citasCreadas        Cita[]                @relation("CitaCreadaPor")
-  citasCanceladas     Cita[]                @relation("CitaCanceladaPor")
-  CitaEstadoHistorial CitaEstadoHistorial[]
-  BloqueoAgenda       BloqueoAgenda[]
-  Consulta            Consulta[]
-  ConsultaAdjunto     ConsultaAdjunto[]
-  TreatmentPlan       TreatmentPlan[]
+  idUsuario              Int                      @id @default(autoincrement()) @map("idUsuario")
+  usuario                String                   @unique @map("usuario")
+  email                  String?                  @unique @map("email")
+  passwordHash           String
+  nombreApellido         String                   @map("nombre_apellido")
+  rolId                  Int                      @map("Rol_idRol")
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+  estaActivo             Boolean                  @default(true) @map("esta_activo")
+  ultimoLoginAt          DateTime?                @map("ultimo_login_at")
+  profesional            Profesional?
+  rol                    Rol                      @relation(fields: [rolId], references: [idRol])
+  citasCreadas           Cita[]                   @relation("CitaCreadaPor")
+  citasCanceladas        Cita[]                   @relation("CitaCanceladaPor")
+  CitaEstadoHistorial    CitaEstadoHistorial[]
+  BloqueoAgenda          BloqueoAgenda[]
+  Consulta               Consulta[]
+  ConsultaAdjunto        Adjunto[]
+  TreatmentPlan          TreatmentPlan[]
+  ClinicalHistoryEntry   ClinicalHistoryEntry[]
+  PatientDiagnosis       PatientDiagnosis[]
+  PatientAllergy         PatientAllergy[]
+  PatientMedication      PatientMedication[]
+  PatientVitals          PatientVitals[]
+  OdontogramSnapshot     OdontogramSnapshot[]
+  PeriodontogramSnapshot PeriodontogramSnapshot[]
+  Adjunto                Adjunto[]                @relation("AdjuntoUploadedBy")
 
   @@index([rolId])
   @@map("Usuario")
@@ -208,10 +216,18 @@ model Paciente {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  persona       Persona               @relation(fields: [personaId], references: [idPersona])
-  responsables  PacienteResponsable[]
-  citas         Cita[] // <— importante: relación inversa (solo lectura)
-  TreatmentPlan TreatmentPlan[]
+  persona                Persona                  @relation(fields: [personaId], references: [idPersona])
+  responsables           PacienteResponsable[]
+  citas                  Cita[] // <— importante: relación inversa (solo lectura)
+  TreatmentPlan          TreatmentPlan[]
+  ClinicalHistoryEntry   ClinicalHistoryEntry[]
+  PatientDiagnosis       PatientDiagnosis[]
+  PatientAllergy         PatientAllergy[]
+  PatientMedication      PatientMedication[]
+  PatientVitals          PatientVitals[]
+  OdontogramSnapshot     OdontogramSnapshot[]
+  PeriodontogramSnapshot PeriodontogramSnapshot[]
+  Adjunto                Adjunto[]
 
   @@map("Paciente")
 }
@@ -394,15 +410,20 @@ enum DienteSuperficie {
   // agrega combinaciones que uses en clínica
 }
 
-enum ClinicoArchivoTipo {
+enum AdjuntoTipo {
   XRAY
   INTRAORAL_PHOTO
   EXTRAORAL_PHOTO
+  IMAGE
   DOCUMENT
   PDF
-  IMAGE
   LAB_REPORT
   OTHER
+}
+
+enum AccessMode {
+  PUBLIC
+  AUTHENTICATED
 }
 
 enum TreatmentStepStatus {
@@ -457,8 +478,13 @@ model Consulta {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Hijos
-  procedimientos ConsultaProcedimiento[]
-  adjuntos       ConsultaAdjunto[]
+  procedimientos         ConsultaProcedimiento[]
+  adjuntos               Adjunto[]
+  ClinicalHistoryEntry   ClinicalHistoryEntry[]
+  PatientDiagnosis       PatientDiagnosis[]
+  PatientVitals          PatientVitals[]
+  OdontogramSnapshot     OdontogramSnapshot[]
+  PeriodontogramSnapshot PeriodontogramSnapshot[]
 
   @@map("Consulta")
 }
@@ -489,9 +515,9 @@ model ConsultaProcedimiento {
 
   resultNotes String? @map("result_notes")
 
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
-  ConsultaAdjunto ConsultaAdjunto[]
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  ConsultaAdjunto Adjunto[]
 
   @@index([consultaId])
   @@index([procedureId])
@@ -499,30 +525,59 @@ model ConsultaProcedimiento {
   @@map("ConsultaProcedimiento")
 }
 
-model ConsultaAdjunto {
-  idConsultaAdjunto Int @id @default(autoincrement()) @map("idConsultaAdjunto")
+model Adjunto {
+  idAdjunto Int @id @default(autoincrement()) @map("idAdjunto")
 
-  consultaId Int      @map("Consulta_Cita_idCita")
-  consulta   Consulta @relation(fields: [consultaId], references: [citaId], onDelete: Cascade)
+  // ==== Vínculos clínicos (opcionales) ====
+  pacienteId      Int? @map("Paciente_idPaciente")
+  consultaId      Int? @map("Consulta_Cita_idCita")
+  procedimientoId Int? @map("ConsultaProcedimiento_idConsultaProcedimiento")
 
-  procedimientoId Int?                   @map("ConsultaProcedimiento_idConsultaProcedimiento")
-  procedimiento   ConsultaProcedimiento? @relation(fields: [procedimientoId], references: [idConsultaProcedimiento], onDelete: SetNull)
+  paciente      Paciente?              @relation(fields: [pacienteId], references: [idPaciente], onDelete: SetNull)
+  consulta      Consulta?              @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  procedimiento ConsultaProcedimiento? @relation(fields: [procedimientoId], references: [idConsultaProcedimiento], onDelete: SetNull)
 
-  url          String             @map("url")
-  originalName String             @map("original_name")
-  mimeType     String             @map("mime_type")
-  size         Int                @map("size")
-  tipo         ClinicoArchivoTipo @map("tipo")
-  metadata     Json?              @map("metadata")
+  // ==== Clasificación clínica ====
+  tipo        AdjuntoTipo @map("tipo")
+  descripcion String?     @map("descripcion") @db.VarChar(500)
 
+  // ==== Cloudinary / storage ====
+  // Clave primaria en storage (lo único realmente necesario para re-hidratar la URL):
+  publicId         String     @unique @map("public_id")
+  folder           String     @map("folder")
+  resourceType     String     @map("resource_type") // "image" | "video" | "raw"
+  format           String?    @map("format")
+  bytes            Int        @map("bytes")
+  width            Int?       @map("width")
+  height           Int?       @map("height")
+  duration         Float?     @map("duration")
+  originalFilename String?    @map("original_filename")
+  accessMode       AccessMode @default(AUTHENTICATED) @map("access_mode")
+
+  // Campo derivable: podrías NO persistir la URL; la regeneras firmada cuando la servís.
+  // Si quieres cachearla para thumbnails o auditoría, mantené secureUrl:
+  secureUrl String @map("secure_url")
+
+  // ==== Seguridad/borrado lógico ====
+  isActive        Boolean   @default(true) @map("is_active")
+  deletedAt       DateTime? @map("deleted_at")
+  deletedByUserId Int?      @map("Usuario_idUsuario_deletedBy")
+  deletedBy       Usuario?  @relation(fields: [deletedByUserId], references: [idUsuario])
+
+  // ==== Auditoría ====
   uploadedByUserId Int     @map("Usuario_idUsuario_uploadedBy")
-  uploadedBy       Usuario @relation(fields: [uploadedByUserId], references: [idUsuario])
+  uploadedBy       Usuario @relation("AdjuntoUploadedBy", fields: [uploadedByUserId], references: [idUsuario])
 
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([consultaId])
-  @@index([procedimientoId])
-  @@map("ConsultaAdjunto")
+  // ==== Índices ====
+  @@index([pacienteId, createdAt])
+  @@index([consultaId, createdAt])
+  @@index([procedimientoId, createdAt])
+  @@index([tipo, createdAt])
+  @@index([accessMode, createdAt])
+  @@map("Adjunto")
 }
 
 model TreatmentPlan {
@@ -576,4 +631,286 @@ model TreatmentStep {
   @@unique([treatmentPlanId, order])
   @@index([status])
   @@map("TreatmentStep")
+}
+
+// ============== 1) Historia clínica general =================
+model ClinicalHistoryEntry {
+  idClinicalHistoryEntry Int      @id @default(autoincrement()) @map("idClinicalHistoryEntry")
+  pacienteId             Int      @map("Paciente_idPaciente")
+  consultaId             Int?     @map("Consulta_Cita_idCita") // vers. histórica por cita (opcional)
+  fecha                  DateTime @default(now()) @map("fecha")
+  title                  String?  @map("title")
+  notes                  String   @map("notes")
+
+  createdByUserId Int      @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario  @relation(fields: [createdByUserId], references: [idUsuario])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  paciente Paciente  @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  consulta Consulta? @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+
+  @@index([pacienteId, fecha])
+  @@index([consultaId])
+  @@map("ClinicalHistoryEntry")
+}
+
+// ============== 2) Diagnósticos ==============================
+
+enum DiagnosisStatus {
+  ACTIVE
+  RESOLVED
+  RULED_OUT
+}
+
+model DiagnosisCatalog {
+  idDiagnosisCatalog Int      @id @default(autoincrement()) @map("idDiagnosisCatalog")
+  code               String   @unique @map("code") // CIE-10 o código interno
+  name               String   @map("name")
+  description        String?  @map("description")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  patientDiagnoses PatientDiagnosis[]
+
+  @@map("DiagnosisCatalog")
+}
+
+model PatientDiagnosis {
+  idPatientDiagnosis Int               @id @default(autoincrement()) @map("idPatientDiagnosis")
+  pacienteId         Int               @map("Paciente_idPaciente")
+  diagnosisId        Int?              @map("DiagnosisCatalog_id")
+  diagnosisCatalog   DiagnosisCatalog? @relation(fields: [diagnosisId], references: [idDiagnosisCatalog], onDelete: SetNull)
+
+  // si no usás catálogo: libre
+  code  String? @map("code")
+  label String  @map("label")
+
+  status     DiagnosisStatus @default(ACTIVE) @map("status")
+  notedAt    DateTime        @default(now()) @map("noted_at")
+  resolvedAt DateTime?       @map("resolved_at")
+  notes      String?         @map("notes")
+
+  // quién y dónde se registró
+  consultaId      Int?      @map("Consulta_Cita_idCita")
+  createdByUserId Int       @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario   @relation(fields: [createdByUserId], references: [idUsuario])
+  consulta        Consulta? @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+
+  @@index([pacienteId, status, notedAt])
+  @@index([consultaId])
+  @@map("PatientDiagnosis")
+}
+
+// ============== 3) Alergias y medicación =====================
+
+enum AllergySeverity {
+  MILD
+  MODERATE
+  SEVERE
+}
+
+model AllergyCatalog {
+  idAllergyCatalog Int      @id @default(autoincrement()) @map("idAllergyCatalog")
+  name             String   @unique @map("name")
+  description      String?  @map("description")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  patientAllergies PatientAllergy[]
+
+  @@map("AllergyCatalog")
+}
+
+model PatientAllergy {
+  idPatientAllergy Int             @id @default(autoincrement()) @map("idPatientAllergy")
+  pacienteId       Int             @map("Paciente_idPaciente")
+  allergyId        Int?            @map("AllergyCatalog_id")
+  allergyCatalog   AllergyCatalog? @relation(fields: [allergyId], references: [idAllergyCatalog], onDelete: SetNull)
+
+  // libre si no cat
+  label    String?         @map("label")
+  severity AllergySeverity @default(MODERATE) @map("severity")
+  reaction String?         @map("reaction")
+  notedAt  DateTime        @default(now()) @map("noted_at")
+  isActive Boolean         @default(true) @map("is_active")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+
+  @@index([pacienteId, isActive])
+  @@map("PatientAllergy")
+}
+
+model MedicationCatalog {
+  idMedicationCatalog Int      @id @default(autoincrement()) @map("idMedicationCatalog")
+  name                String   @unique @map("name")
+  description         String?  @map("description")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  patientMedications PatientMedication[]
+
+  @@map("MedicationCatalog")
+}
+
+model PatientMedication {
+  idPatientMedication Int                @id @default(autoincrement()) @map("idPatientMedication")
+  pacienteId          Int                @map("Paciente_idPaciente")
+  medicationId        Int?               @map("MedicationCatalog_id")
+  medicationCatalog   MedicationCatalog? @relation(fields: [medicationId], references: [idMedicationCatalog], onDelete: SetNull)
+
+  // libre si no cat
+  label    String?   @map("label")
+  dose     String?   @map("dose")
+  freq     String?   @map("freq")
+  route    String?   @map("route")
+  startAt  DateTime? @map("start_at")
+  endAt    DateTime? @map("end_at")
+  isActive Boolean   @default(true) @map("is_active")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+
+  @@index([pacienteId, isActive])
+  @@map("PatientMedication")
+}
+
+// ============== 4) Vitales ==================================
+model PatientVitals {
+  idPatientVitals Int      @id @default(autoincrement()) @map("idPatientVitals")
+  pacienteId      Int      @map("Paciente_idPaciente")
+  consultaId      Int?     @map("Consulta_Cita_idCita")
+  measuredAt      DateTime @default(now()) @map("measured_at")
+
+  // Lo habitual en sillón (agregá lo que uses)
+  heightCm  Int?   @map("height_cm")
+  weightKg  Int?   @map("weight_kg")
+  bmi       Float? @map("bmi")
+  bpSyst    Int?   @map("bp_syst")
+  bpDiast   Int?   @map("bp_diast")
+  heartRate Int?   @map("heart_rate")
+
+  notes String? @map("notes")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  paciente Paciente  @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  consulta Consulta? @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+
+  @@index([pacienteId, measuredAt])
+  @@index([consultaId])
+  @@map("PatientVitals")
+}
+
+// ============== 5) Odontograma (versionable) =================
+
+enum ToothCondition {
+  INTACT
+  CARIES
+  FILLED
+  MISSING
+  ROOT_CANAL
+  CROWN
+  BRIDGE
+  IMPLANT
+  EXTRACTION_NEEDED
+}
+
+model OdontogramSnapshot {
+  idOdontogramSnapshot Int      @id @default(autoincrement()) @map("idOdontogramSnapshot")
+  pacienteId           Int      @map("Paciente_idPaciente")
+  consultaId           Int?     @map("Consulta_Cita_idCita") // si es por cita (recomendado)
+  takenAt              DateTime @default(now()) @map("taken_at")
+  notes                String?  @map("notes")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  paciente Paciente          @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  consulta Consulta?         @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  entries  OdontogramEntry[]
+
+  @@index([pacienteId, takenAt])
+  @@index([consultaId])
+  @@map("OdontogramSnapshot")
+}
+
+model OdontogramEntry {
+  idOdontogramEntry Int               @id @default(autoincrement()) @map("idOdontogramEntry")
+  snapshotId        Int               @map("OdontogramSnapshot_id")
+  toothNumber       Int               @map("tooth_number") // 1–32 / 51–85
+  surface           DienteSuperficie? @map("surface")
+  condition         ToothCondition    @default(INTACT) @map("condition")
+  notes             String?           @map("notes")
+
+  snapshot OdontogramSnapshot @relation(fields: [snapshotId], references: [idOdontogramSnapshot], onDelete: Cascade)
+
+  @@unique([snapshotId, toothNumber, surface])
+  @@index([toothNumber])
+  @@map("OdontogramEntry")
+}
+
+// ============== 6) Periodontograma (opcional) ================
+
+enum PerioBleeding {
+  NONE
+  YES
+}
+
+model PeriodontogramSnapshot {
+  idPeriodontogramSnapshot Int      @id @default(autoincrement()) @map("idPeriodontogramSnapshot")
+  pacienteId               Int      @map("Paciente_idPaciente")
+  consultaId               Int?     @map("Consulta_Cita_idCita")
+  takenAt                  DateTime @default(now()) @map("taken_at")
+  notes                    String?  @map("notes")
+
+  createdByUserId Int     @map("Usuario_idUsuario_createdBy")
+  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+
+  paciente Paciente                @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  consulta Consulta?               @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  measures PeriodontogramMeasure[]
+
+  @@index([pacienteId, takenAt])
+  @@index([consultaId])
+  @@map("PeriodontogramSnapshot")
+}
+
+// Convención de sitio periodontal (ejemplo): de 1..6 por diente (DB, B, MB, DL, L, ML) o define un enum
+enum PerioSite {
+  DB
+  B
+  MB
+  DL
+  L
+  ML
+}
+
+model PeriodontogramMeasure {
+  idPeriodontogramMeasure Int       @id @default(autoincrement()) @map("idPeriodontogramMeasure")
+  snapshotId              Int       @map("PeriodontogramSnapshot_id")
+  toothNumber             Int       @map("tooth_number")
+  site                    PerioSite @map("site")
+
+  probingDepthMm Int?           @map("probing_depth_mm")
+  bleeding       PerioBleeding? @map("bleeding")
+  plaque         Boolean?       @map("plaque")
+  mobility       Int?           @map("mobility") // 0..3
+  furcation      Int?           @map("furcation") // 0..3
+
+  snapshot PeriodontogramSnapshot @relation(fields: [snapshotId], references: [idPeriodontogramSnapshot], onDelete: Cascade)
+
+  @@unique([snapshotId, toothNumber, site])
+  @@index([toothNumber])
+  @@map("PeriodontogramMeasure")
 }

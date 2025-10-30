@@ -1,7 +1,12 @@
 import {
   PrismaClient, RolNombre, TipoDocumento, TipoContacto, RelacionPaciente,
   TipoCita, EstadoCita, MotivoCancelacion,
-  ConsultaEstado, ClinicoArchivoTipo, TreatmentStepStatus, DienteSuperficie
+  ConsultaEstado, ClinicoArchivoTipo, TreatmentStepStatus, DienteSuperficie,
+  AllergySeverity,
+  DiagnosisStatus,
+  PerioBleeding,
+  PerioSite,
+  AdjuntoTipo
 } from "@prisma/client";
 import { normEmail, normPhonePY } from "./utils";
 
@@ -217,6 +222,8 @@ export async function ensureProcedimientoCatalogo(
   }
 }
 
+
+
 // ===================================================
 // B) TreatmentPlan & TreatmentStep (planificación)
 // ===================================================
@@ -350,6 +357,21 @@ export async function addProcedimientoALaConsulta(
   });
 }
 
+function deriveStorageFromUrl(url: string, originalName?: string) {
+  const u = new URL(url);
+  const file = (originalName ?? u.pathname.split("/").pop() ?? "file.bin");
+  const dot = file.lastIndexOf(".");
+  const nameNoExt = dot > -1 ? file.slice(0, dot) : file;
+  const ext = dot > -1 ? file.slice(dot + 1) : "bin";
+  return {
+    publicId: `seed/${nameNoExt}-${Math.random().toString(36).slice(2,8)}`,
+    folder: "seed",
+    resourceType: "image",   // si necesitas variar, deriva de mimeType
+    format: ext,
+    secureUrl: url,
+  };
+}
+
 export async function addAdjuntoAConsulta(
   prisma: PrismaClient,
   params: {
@@ -359,22 +381,179 @@ export async function addAdjuntoAConsulta(
     originalName: string;
     mimeType: string;
     size: number;
-    tipo: ClinicoArchivoTipo;
+    tipo: AdjuntoTipo;
     procedimientoId?: number | null;
-    metadata?: any;
+    metadata?: any; // ignorado aquí, pero mantenemos la firma
   }
 ) {
-  return prisma.consultaAdjunto.create({
+  const st = deriveStorageFromUrl(params.url, params.originalName);
+  return prisma.adjunto.create({
     data: {
+      // vínculos clínicos
       consultaId: params.consultaCitaId,
       procedimientoId: params.procedimientoId ?? null,
-      url: params.url,
-      originalName: params.originalName,
-      mimeType: params.mimeType,
-      size: params.size,
+
+      // clasificación clínica
       tipo: params.tipo,
-      metadata: params.metadata ?? null,
+      descripcion: params.originalName,
+
+      // storage "tipo Cloudinary"
+      publicId: st.publicId,
+      folder: st.folder,
+      resourceType: st.resourceType,
+      format: st.format,
+      secureUrl: st.secureUrl,
+      bytes: params.size,
+      originalFilename: params.originalName,
+
+      // auditoría
       uploadedByUserId: params.uploadedByUserId,
     },
   });
+}
+
+// + NUEVO:
+export async function addClinicalBasics(
+  prisma: PrismaClient,
+  params: { pacienteId: number; createdByUserId: number; consultaId?: number | null }
+) {
+  await prisma.clinicalHistoryEntry.create({
+    data: {
+      pacienteId: params.pacienteId,
+      consultaId: params.consultaId ?? null,
+      title: "Antecedentes",
+      notes: "Entrada de historia clínica demo.",
+      createdByUserId: params.createdByUserId,
+    },
+  });
+
+  const dx = await prisma.diagnosisCatalog.findFirst();
+  if (dx) {
+    await prisma.patientDiagnosis.create({
+      data: {
+        pacienteId: params.pacienteId,
+        diagnosisId: dx.idDiagnosisCatalog,
+        label: dx.name,
+        status: DiagnosisStatus.ACTIVE,
+        notes: "Diagnóstico demo",
+        createdByUserId: params.createdByUserId,
+        consultaId: params.consultaId ?? null,
+      },
+    });
+  }
+
+  const alg = await prisma.allergyCatalog.findFirst();
+  if (alg) {
+    await prisma.patientAllergy.create({
+      data: {
+        pacienteId: params.pacienteId,
+        allergyId: alg.idAllergyCatalog,
+        label: alg.name,
+        severity: AllergySeverity.MODERATE,
+        reaction: "Rash leve",
+        createdByUserId: params.createdByUserId,
+      },
+    });
+  }
+
+  const med = await prisma.medicationCatalog.findFirst();
+  if (med) {
+    await prisma.patientMedication.create({
+      data: {
+        pacienteId: params.pacienteId,
+        medicationId: med.idMedicationCatalog,
+        label: med.name,
+        dose: "1 comp",
+        freq: "c/8h",
+        route: "VO",
+        startAt: new Date(),
+        isActive: true,
+        createdByUserId: params.createdByUserId,
+      },
+    });
+  }
+
+  await prisma.patientVitals.create({
+    data: {
+      pacienteId: params.pacienteId,
+      consultaId: params.consultaId ?? null,
+      heightCm: 170,
+      weightKg: 72,
+      bmi: 24.9,
+      bpSyst: 120,
+      bpDiast: 78,
+      heartRate: 72,
+      notes: "Signos vitales dentro de parámetros.",
+      createdByUserId: params.createdByUserId,
+    },
+  });
+}
+
+export async function addOdontoAndPerio(
+  prisma: PrismaClient,
+  params: { pacienteId: number; createdByUserId: number; consultaId?: number | null }
+) {
+  const od = await prisma.odontogramSnapshot.create({
+    data: {
+      pacienteId: params.pacienteId,
+      consultaId: params.consultaId ?? null,
+      notes: "Odontograma demo",
+      createdByUserId: params.createdByUserId,
+    },
+  });
+
+  await prisma.odontogramEntry.createMany({
+    data: [
+      { OdontogramSnapshot_id: od.idOdontogramSnapshot, tooth_number: 16, surface: "O" as any, condition: "CARIES" as any },
+      { OdontogramSnapshot_id: od.idOdontogramSnapshot, tooth_number: 26, surface: "O" as any, condition: "FILLED" as any },
+    ] as any,
+  });
+
+  const perio = await prisma.periodontogramSnapshot.create({
+    data: {
+      pacienteId: params.pacienteId,
+      consultaId: params.consultaId ?? null,
+      notes: "Periodontograma demo",
+      createdByUserId: params.createdByUserId,
+    },
+  });
+
+  await prisma.periodontogramMeasure.createMany({
+    data: [
+      { PeriodontogramSnapshot_id: perio.idPeriodontogramSnapshot, tooth_number: 16, site: "MB" as PerioSite, probing_depth_mm: 3, bleeding: "NONE" as PerioBleeding },
+      { PeriodontogramSnapshot_id: perio.idPeriodontogramSnapshot, tooth_number: 16, site: "B"  as PerioSite, probing_depth_mm: 2, bleeding: "NONE" as PerioBleeding },
+    ] as any,
+  });
+}
+
+
+
+export async function ensureDiagnosisCatalog(prisma: PrismaClient, items: Array<{ code: string; name: string; description?: string }>) {
+  for (const it of items) {
+    await prisma.diagnosisCatalog.upsert({
+      where: { code: it.code },
+      update: { name: it.name, description: it.description ?? null, isActive: true },
+      create: { code: it.code, name: it.name, description: it.description ?? null, isActive: true },
+    });
+  }
+}
+
+export async function ensureAllergyCatalog(prisma: PrismaClient, items: Array<{ name: string; description?: string }>) {
+  for (const it of items) {
+    await prisma.allergyCatalog.upsert({
+      where: { name: it.name },
+      update: { description: it.description ?? null, isActive: true },
+      create: { name: it.name, description: it.description ?? null, isActive: true },
+    });
+  }
+}
+
+export async function ensureMedicationCatalog(prisma: PrismaClient, items: Array<{ name: string; description?: string }>) {
+  for (const it of items) {
+    await prisma.medicationCatalog.upsert({
+      where: { name: it.name },
+      update: { description: it.description ?? null, isActive: true },
+      create: { name: it.name, description: it.description ?? null, isActive: true },
+    });
+  }
 }
