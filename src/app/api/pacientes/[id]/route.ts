@@ -1,173 +1,78 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { prisma as db } from "@/lib/prisma"
+// src/app/api/pacientes/[id]/route.ts
+import { NextResponse, type NextRequest } from "next/server";
+import { requireRole } from "@/app/api/pacientes/_rbac";
+import { pathParamsSchema, pacienteUpdateBodySchema, deleteQuerySchema } from "./_schemas";
+import { getPacienteFicha } from "./_service.get";
+import { updatePaciente } from "./_service.update";
+import { deletePacienteById, DeletePacienteError } from "./_service.delete";
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+function jsonError(status: number, code: string, error: string) {
+  return NextResponse.json({ ok: false, code, error }, { status });
+}
+
+export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
+  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
+  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
+
   try {
-    const patientId = Number.parseInt(params.id)
-
-    if (!Number.isFinite(patientId)) {
-      return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 })
-    }
-
-    const paciente = await db.paciente.findUnique({
-      where: { idPaciente: patientId },
-      include: {
-        persona: {
-          select: {
-            idPersona: true,
-            nombres: true,
-            apellidos: true,
-            genero: true,
-            fechaNacimiento: true,
-            direccion: true,
-            documento: { select: { tipo: true, numero: true, ruc: true } },
-            contactos: {
-              select: { tipo: true, valorNorm: true, label: true, esPrincipal: true, activo: true },
-              orderBy: [{ esPrincipal: "desc" }, { createdAt: "asc" }],
-            },
-          },
-        },
-        citas: {
-          where: {
-            estado: {
-              in: ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"],
-            },
-          },
-          include: {
-            profesional: {
-              include: { persona: { select: { nombres: true, apellidos: true } } },
-            },
-            consultorio: true,
-          },
-          orderBy: { inicio: "asc" },
-          take: 50,
-        },
-      },
-    })
-
-    if (!paciente) {
-      return NextResponse.json({ ok: false, error: "Paciente no encontrado" }, { status: 404 })
-    }
-
-    const now = new Date()
-    const citasFuturas = paciente.citas.filter((c) => new Date(c.inicio) >= now)
-    const citasPasadas = paciente.citas.filter((c) => new Date(c.inicio) < now)
-
-    const nombreCompletoPersona = (p?: { nombres: string | null; apellidos: string | null }) =>
-      [p?.nombres ?? "", p?.apellidos ?? ""].join(" ").trim()
-
-    const toCitaLite = (c: any) => ({
-      idCita: c.idCita,
-      inicio: c.inicio.toISOString(),
-      fin: c.fin.toISOString(),
-      tipo: c.tipo,
-      estado: c.estado,
-      profesional: {
-        idProfesional: c.profesionalId,
-        nombre: nombreCompletoPersona(c.profesional.persona),
-      },
-      consultorio: c.consultorio ? { idConsultorio: c.consultorio.idConsultorio, nombre: c.consultorio.nombre } : null,
-    })
-
-    const proxima = citasFuturas[0]?.inicio ? citasFuturas[0].inicio.toISOString() : null
-    const en90dias = citasFuturas.filter((c) => {
-      const d = new Date(c.inicio).getTime()
-      return d <= now.getTime() + 90 * 24 * 60 * 60 * 1000
-    }).length
-
-    const dto = {
-      idPaciente: paciente.idPaciente,
-      estaActivo: paciente.estaActivo,
-      createdAt: paciente.createdAt.toISOString(),
-      updatedAt: paciente.updatedAt.toISOString(),
-      persona: {
-        idPersona: paciente.persona.idPersona,
-        nombres: paciente.persona.nombres,
-        apellidos: paciente.persona.apellidos,
-        genero: paciente.persona.genero,
-        fechaNacimiento: paciente.persona.fechaNacimiento?.toISOString() ?? null,
-        direccion: paciente.persona.direccion,
-        documento: paciente.persona.documento
-          ? {
-              tipo: paciente.persona.documento.tipo,
-              numero: paciente.persona.documento.numero,
-              ruc: paciente.persona.documento.ruc,
-            }
-          : null,
-        contactos: paciente.persona.contactos.map((c) => ({
-          tipo: c.tipo,
-          valorNorm: c.valorNorm,
-          label: c.label,
-          esPrincipal: c.esPrincipal,
-          activo: c.activo,
-        })),
-      },
-      kpis: {
-        proximoTurno: proxima,
-        turnos90dias: en90dias,
-        saldo: 0,
-        noShow: 0,
-      },
-      proximasCitas: citasFuturas.slice(0, 5).map(toCitaLite),
-      ultimasCitas: citasPasadas.slice(-5).map(toCitaLite),
-    }
-
-    return NextResponse.json({ ok: true, data: dto })
-  } catch (error) {
-    console.error("[API] Error fetching patient:", error)
-    return NextResponse.json({ ok: false, error: "Error al obtener paciente" }, { status: 500 })
+    const { id } = pathParamsSchema.parse(ctx.params);
+    const ficha = await getPacienteFicha(id);
+    if (!ficha) return jsonError(404, "NOT_FOUND", "Paciente no encontrado");
+    return NextResponse.json({ ok: true, data: ficha });
+  } catch (e: any) {
+    if (e?.name === "ZodError") return jsonError(400, "VALIDATION_ERROR", e.issues?.[0]?.message ?? "Parámetros inválidos");
+    return jsonError(e?.status ?? 500, e?.code ?? "INTERNAL_ERROR", e?.message ?? "Error al obtener paciente");
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, ctx: { params: { id: string } }) {
+  // Reglas: si luego necesitas restringir campos, cambia allowed roles aquí o agrega checks por campo
+  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
+  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
+
   try {
-    const patientId = Number.parseInt(params.id)
-    const body = await request.json()
+    const { id } = pathParamsSchema.parse(ctx.params);
+    const body = pacienteUpdateBodySchema.parse(await req.json());
 
-    // Update patient data in transaction
-    await db.$transaction(async (tx) => {
-      const patient = await tx.paciente.findUnique({
-        where: { idPaciente: patientId },
-        include: { persona: true },
-      })
+    const result = await updatePaciente(id, body);
+    return NextResponse.json(result);
+  } catch (e: any) {
+    if (e?.name === "ZodError") return jsonError(400, "VALIDATION_ERROR", e.issues?.[0]?.message ?? "Datos inválidos");
+    if (e?.status === 404) return jsonError(404, "NOT_FOUND", e.message);
+    if (e?.code === "P2002") return jsonError(409, "UNIQUE_CONFLICT", "Conflicto de unicidad");
+    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al actualizar paciente");
+  }
+}
 
-      if (!patient) {
-        throw new Error("Paciente no encontrado")
-      }
+export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
+  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
+  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
 
-      // Update persona
-      await tx.persona.update({
-        where: { idPersona: patient.personaId },
-        data: {
-          nombres: body.nombreCompleto?.split(" ")[0] || patient.persona.nombres,
-          apellidos: body.nombreCompleto?.split(" ").slice(1).join(" ") || patient.persona.apellidos,
-          genero: body.genero || patient.persona.genero,
-          fechaNacimiento: body.fechaNacimiento ? new Date(body.fechaNacimiento) : patient.persona.fechaNacimiento,
-          direccion: body.domicilio || patient.persona.direccion,
-        },
-      })
+  try {
+    const { id } = pathParamsSchema.parse(ctx.params);
+    const query = deleteQuerySchema.parse(Object.fromEntries(req.nextUrl.searchParams));
+    const role = gate.role!; // "ADMIN" | "RECEP" | "ODONT"
 
-      // Update paciente notas
-      await tx.paciente.update({
-        where: { idPaciente: patientId },
-        data: {
-          notas: JSON.stringify({
-            antecedentesMedicos: body.antecedentesMedicos,
-            alergias: body.alergias,
-            medicacion: body.medicacion,
-            responsablePago: body.responsablePago,
-            obraSocial: body.obraSocial,
-          }),
-        },
-      })
-    })
+    const result = await deletePacienteById({
+      pacienteId: id,
+      role,
+      hard: query.hard,                 // solo ADMIN lo respetará
+      alsoInactivatePersona: true,      // opcional: inactivar persona junto al paciente
+    });
 
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    console.error("[API] Error updating patient:", error)
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Error al actualizar" },
-      { status: 500 },
-    )
+    // 200 OK con payload informativo
+    return NextResponse.json({ ok: true, mode: result.mode, result });
+  } catch (e: any) {
+    if (e?.name === "ZodError") {
+      return jsonError(400, "VALIDATION_ERROR", e.issues?.[0]?.message ?? "Parámetros inválidos");
+    }
+    if (e instanceof DeletePacienteError) {
+      return jsonError(e.status, e.code, e.message, e.extra);
+    }
+    if (e?.code === "P2003") {
+      // FK violation (por si el schema no tiene cascadas esperadas)
+      return jsonError(409, "FK_CONSTRAINT", "No se puede eliminar por restricciones de integridad");
+    }
+    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al eliminar/inactivar paciente");
   }
 }

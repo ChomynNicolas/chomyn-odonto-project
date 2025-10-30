@@ -1,153 +1,47 @@
-import { NextResponse } from "next/server"
-import { prisma as db } from "@/lib/prisma"
-import { normalizeEmail, normalizePhonePY, splitNombreCompleto } from "@/lib/normalize"
-import { pacienteQuickCreateSchema } from "@/lib/schema"
+// src/app/api/pacientes/quick/route.ts
+import { NextResponse, type NextRequest } from "next/server";
+import { requireRole } from "@/app/api/pacientes/_rbac";
+import { pacienteQuickCreateSchema, idempotencyHeaderSchema } from "./_schemas";
+import { quickCreatePaciente, QuickCreateError } from "./_service.quick";
+import { auth } from "@/auth";
 
-/**
- * POST /api/pacientes/quick
- * Quick patient creation endpoint with minimal required fields
- */
-export async function POST(req: Request) {
+function jsonError(status: number, code: string, error: string, details?: any) {
+  return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status });
+}
+
+export async function POST(req: NextRequest) {
+  // RBAC: alta rápida permitida a ADMIN | RECEP | ODONT
+  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
+  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
+
   try {
-    const json = await req.json()
+    // headers opcionales (idempotencia)
+    const headers = Object.fromEntries(req.headers);
+    const _idem = idempotencyHeaderSchema.safeParse({
+      "idempotency-key": headers["idempotency-key"],
+    });
 
-    // Validate input with Zod schema
-    const parsed = pacienteQuickCreateSchema.parse(json)
+    const raw = await req.json();
+    const body = pacienteQuickCreateSchema.parse(raw);
 
-    const {nombres,apellidos} = splitNombreCompleto(parsed.nombreCompleto)
+    const session = await auth();
+    const actorUserId = Number((session?.user as any)?.id) || undefined;
 
-    // Create patient with transaction for data consistency
-    const result = await db.$transaction(async (tx) => {
-      // Create Persona with embedded Documento
-      const persona = await tx.persona.create({
-        data: {
-          nombres: nombres,
-          apellidos: apellidos,
-          genero: parsed.genero as any,
-          fechaNacimiento: parsed.fechaNacimiento ? new Date(parsed.fechaNacimiento) : null,
-          estaActivo: true,
-          documento: {
-            create: {
-              tipo: parsed.tipoDocumento,
-              numero: parsed.dni.trim(),
-              paisEmision: "PY",
-            },
-          },
-        },
-      })
+    // TODO (opcional): si implementas idempotencia persistente,
+    // busca el idemKey en una tabla antes de crear y devuelve el resultado cacheado.
 
-      // Create primary phone contact (required)
-      await tx.personaContacto.create({
-        data: {
-          personaId: persona.idPersona,
-          tipo: "PHONE",
-          valorRaw: parsed.telefono,
-          valorNorm: normalizePhonePY(parsed.telefono),
-          label: "Móvil",
-          whatsappCapaz: true,
-          smsCapaz: true,
-          esPrincipal: true,
-          esPreferidoRecordatorio: true,
-          activo: true,
-        },
-      })
-
-      // Create email contact if provided (optional)
-      if (parsed.email) {
-        await tx.personaContacto.create({
-          data: {
-            personaId: persona.idPersona,
-            tipo: "EMAIL",
-            valorRaw: parsed.email,
-            valorNorm: normalizeEmail(parsed.email),
-            label: "Trabajo",
-            esPrincipal: true,
-            esPreferidoCobranza: true,
-            activo: true,
-          },
-        })
-      }
-
-      // Create Paciente record
-      const paciente = await tx.paciente.create({
-        data: {
-          personaId: persona.idPersona,
-          estaActivo: true,
-        },
-      })
-
-      return paciente.idPaciente
-    })
-
-    // Fetch complete patient data for UI (matches PacienteItem type)
-    const item = await db.paciente.findUnique({
-      where: { idPaciente: result },
-      include: {
-        persona: {
-          select: {
-            idPersona: true,
-            nombres: true,
-            apellidos: true,
-            genero: true,
-            documento: {
-              select: {
-                tipo: true,
-                numero: true,
-                ruc: true,
-              },
-            },
-            contactos: {
-              select: {
-                tipo: true,
-                valorNorm: true,
-                activo: true,
-                esPrincipal: true,
-              },
-            },
-          },
-        },
-      },
-    })
-
-    return NextResponse.json({
-      ok: true,
-      data: {
-        idPaciente: result,
-        item,
-      },
-    })
+    const result = await quickCreatePaciente(body, actorUserId);
+    return NextResponse.json({ ok: true, data: result }, { status: 201 });
   } catch (e: any) {
-    // Handle Zod validation errors
-    if (e.name === "ZodError") {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Datos inválidos",
-          details: e.errors,
-        },
-        { status: 400 },
-      )
+    if (e?.name === "ZodError") {
+      return jsonError(400, "VALIDATION_ERROR", "Datos inválidos", e.issues);
     }
-
-    // Handle Prisma unique constraint violations
-    if (e.code === "P2002") {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Ya existe un paciente con ese documento o contacto",
-        },
-        { status: 409 },
-      )
+    if (e instanceof QuickCreateError) {
+      return jsonError(e.status, e.code, e.message);
     }
-
-    // Generic error handler
-    console.error("[API] Error creating patient:", e)
-    return NextResponse.json(
-      {
-        ok: false,
-        error: e.message ?? "Error al crear paciente",
-      },
-      { status: 500 },
-    )
+    if (e?.code === "P2002") {
+      return jsonError(409, "UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto");
+    }
+    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al crear paciente");
   }
 }

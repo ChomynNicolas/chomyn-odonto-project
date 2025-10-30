@@ -5,7 +5,7 @@ import {
   PrismaClient,
   EstadoCita,
   ConsultaEstado,
-  ClinicoArchivoTipo,
+  AdjuntoTipo,
   DienteSuperficie,
   TreatmentStepStatus,
 } from "@prisma/client";
@@ -17,6 +17,8 @@ import {
   createConsultaParaCita,
   addProcedimientoALaConsulta,
   addAdjuntoAConsulta,
+  addClinicalBasics,           // + NUEVO
+  addOdontoAndPerio 
 } from "./ensure";
 
 /** Devuelve números de dientes adultos realistas */
@@ -62,23 +64,18 @@ export async function poblarTratamientosYConsultas(prisma: PrismaClient, opts: {
 
   // 3) A partir de citas COMPLETED (y algunas CONFIRMED pasadas) crear Consulta + líneas + adjuntos
   const citas = await prisma.cita.findMany({
-    where: {
-      OR: [
-        { estado: EstadoCita.COMPLETED },
-        {
-          estado: EstadoCita.CONFIRMED,
-          fin: { lt: new Date() },
-        },
-      ],
-    },
-    select: {
-      idCita: true,
-      profesionalId: true,
-      pacienteId: true,
-      fin: true,
-    },
-    take: 120, // limitar para seeds grandes
-  });
+  where: {
+    OR: [
+      { estado: EstadoCita.COMPLETED }, // por si en algún momento hay pasadas
+      {
+        estado: { in: [EstadoCita.CONFIRMED, EstadoCita.SCHEDULED] },
+        inicio: { gt: new Date() }, // próximas (futuras)
+      },
+    ],
+  },
+  select: { idCita: true, profesionalId: true, pacienteId: true, fin: true, inicio: true },
+  take: 120,
+});
 
   for (const c of citas) {
     const consulta = await createConsultaParaCita(prisma, {
@@ -121,11 +118,23 @@ export async function poblarTratamientosYConsultas(prisma: PrismaClient, opts: {
           originalName: `foto_${line.idConsultaProcedimiento}.jpg`,
           mimeType: "image/jpeg",
           size: faker.number.int({ min: 120_000, max: 2_000_000 }),
-          tipo: faker.helpers.arrayElement([ClinicoArchivoTipo.INTRAORAL_PHOTO, ClinicoArchivoTipo.XRAY]),
+          tipo: faker.helpers.arrayElement([AdjuntoTipo.INTRAORAL_PHOTO, AdjuntoTipo.XRAY]),
           metadata: { side: faker.helpers.arrayElement(["left", "right"]), angle: faker.helpers.arrayElement(["occlusal", "bitewing"]) },
         });
       }
     }
+
+    await addClinicalBasics(prisma, {
+  pacienteId: c.pacienteId,
+  createdByUserId: opts.createdByUserId,
+  consultaId: consulta.citaId,
+});
+
+await addOdontoAndPerio(prisma, {
+  pacienteId: c.pacienteId,
+  createdByUserId: opts.createdByUserId,
+  consultaId: consulta.citaId,
+});
 
     // (Opcional) Si hay plan activo, marcar algún step como COMPLETED aleatoriamente
     const planActivo = await prisma.treatmentPlan.findFirst({
