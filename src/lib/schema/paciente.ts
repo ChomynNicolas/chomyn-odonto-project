@@ -1,88 +1,92 @@
-import { z } from "zod";
+// src/lib/schemas/pacientes.ts
+import { z } from "zod"
 
-export const GeneroEnum = z.enum(["MASCULINO","FEMENINO","OTRO","NO_ESPECIFICADO"]);
-export const TipoDocumentoEnum = z.enum(["CI","DNI","PASAPORTE","RUC","OTRO"]);
-export const TipoContactoEnum = z.enum(["PHONE","EMAIL"]);
+/** Utilidades de normalización */
+const trim = (s: string) => s.trim()
+const relaxedString = z
+  .union([z.string(), z.literal(""), z.null(), z.undefined()])
+  .transform((v) => (typeof v === "string" ? trim(v) : v))
+  .transform((v) => (v === "" || v === null ? undefined : v)) // => string | undefined
 
-const phoneRegex = /^\+?[0-9\s\-().]{7,20}$/;
+/** Enums compartidos */
+export const GeneroEnum = z.enum(["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"])
+export const TipoDocumentoEnum = z.enum(["CI", "DNI", "PASAPORTE", "RUC", "OTRO"])
+export const RelacionPacienteEnum = z.enum(["PADRE", "MADRE", "TUTOR", "CONYUGE", "FAMILIAR", "OTRO"])
 
-export const contactoSchema = z.object({
-  tipo: TipoContactoEnum,
-  valor: z.string().trim().min(3).max(120),
-  label: z.string().trim().max(60).optional()
-});
+/** Sub-esquemas compartidos */
+export const PreferenciasContactoSchema = z
+  .object({
+    whatsapp: z.boolean().default(false),
+    sms: z.boolean().default(false),
+    llamada: z.boolean().default(false),
+    email: z.boolean().default(false),
+  })
+  .partial()
+  .default({})
 
-export const documentoSchema = z.object({
-  tipo: TipoDocumentoEnum,
-  numero: z.string().trim().min(3).max(40),
-  paisEmision: z.string().trim().max(60).optional().nullable(),
-  ruc: z.string().trim().max(25).optional().nullable(), // opcional según requerimiento
-  fechaEmision: z.coerce.date().optional().nullable(),
-  fechaVencimiento: z.coerce.date().optional().nullable(),
-});
+export const ResponsablePagoSchema = z.object({
+  personaId: z.number().int().positive(),
+  relacion: RelacionPacienteEnum,
+  esPrincipal: z.boolean().default(true),
+})
 
-export const datosClinicosSchema = z.object({
-  obraSocial: z.string().trim().max(120).optional().nullable(),
-  antecedentesMedicos: z.string().trim().max(2000).optional().nullable(),
-  alergias: z.string().trim().max(1000).optional().nullable(),
-  medicacion: z.string().trim().max(1000).optional().nullable(),
-}).optional();
+/** Fecha (acepta "", undefined, o fecha; valida rango) */
+const MIN_DOB = new Date("1900-01-01")
+const TODAY = new Date()
+const FechaNacimientoSchema = z
+  .union([
+    z.literal(""),
+    z.undefined(),
+    z.coerce.date().refine((d) => d >= MIN_DOB && d <= TODAY, "Fecha inválida"),
+  ])
+  .transform((v) => (v instanceof Date ? v : undefined)) // => Date | undefined
 
-export const pacienteCreateSchema = z.object({
-  // Persona
-  nombres: z.string().trim().min(2, "Nombres demasiado corto").max(80),
-  apellidos: z.string().trim().min(2, "Apellidos demasiado corto").max(80),
-  genero: GeneroEnum.optional().nullable(),
-  fechaNacimiento: z.coerce.date().optional().nullable(),
-  direccion: z.string().trim().max(200).optional().nullable(),
+/** Email (acepta "", undefined; valida si existe) */
+const EmailOptionalSchema = z
+  .union([z.string().email("Email inválido"), z.literal(""), z.undefined(), z.null()])
+  .transform((v) => (v === "" || v === null ? undefined : v)) // => string | undefined
 
-  // Documento (obligatorio: DNI/Cédula; RUC si corresponde)
-  documento: documentoSchema,
+/** Esquema principal de creación (compartido front/back) */
+export const PacienteCreateSchema = z.object({
+  nombreCompleto: z
+    .string({ required_error: "El nombre es requerido" })
+    .min(2, "El nombre debe tener al menos 2 caracteres")
+    .transform(trim),
+  genero: GeneroEnum, // Unificado: usar NO_ESPECIFICADO cuando aplique
+  tipoDocumento: TipoDocumentoEnum.optional().default("CI"),
+  dni: z
+    .string({ required_error: "El número de documento es requerido" })
+    .min(3, "Documento demasiado corto")
+    .max(32)
+    .transform(trim),
 
-  // Contactos (teléfono y correo)
-  contactos: z.array(contactoSchema).min(1, "Agrega al menos un contacto"),
-  telefonoObligatorio: z.string().regex(phoneRegex, "Teléfono inválido").optional(), // por si lo separas
-  // Clínico
-  datosClinicos: datosClinicosSchema,
+  ruc: relaxedString,               // string | undefined
+  telefono: z.string().min(6, "El teléfono es requerido").max(40).transform(trim),
+  email: EmailOptionalSchema,       // string | undefined
+  domicilio: relaxedString,
+  obraSocial: relaxedString,
 
-  // Responsable de pago (opcional)
-  responsablePago: z.object({
-    personaId: z.number().int().positive().optional(), // si ya existe en DB
-    nombres: z.string().trim().min(2).max(80).optional(),
-    apellidos: z.string().trim().min(2).max(80).optional(),
-    genero: GeneroEnum.optional(),
-    documento: documentoSchema.optional(),
-    relacion: z.enum(["PADRE","MADRE","TUTOR","CONYUGE","FAMILIAR","OTRO"]).optional(),
-    esPrincipal: z.boolean().optional(),
-    autoridadLegal: z.boolean().optional(),
-  }).optional(),
-});
+  antecedentesMedicos: relaxedString,
+  alergias: relaxedString,
+  medicacion: relaxedString,
 
-export type PacienteCreateDTO = z.infer<typeof pacienteCreateSchema>;
+  fechaNacimiento: FechaNacimientoSchema, // Date | undefined
 
-export const pacienteUpdateSchema = z.object({
-  idPaciente: z.number().int().positive(),
-  // Persona
-  nombres: z.string().trim().min(2).max(80).optional(),
-  apellidos: z.string().trim().min(2).max(80).optional(),
-  genero: GeneroEnum.optional().nullable(),
-  fechaNacimiento: z.coerce.date().optional().nullable(),
-  direccion: z.string().trim().max(200).optional().nullable(),
+  responsablePago: ResponsablePagoSchema.optional(),
+  preferenciasContacto: PreferenciasContactoSchema.optional(),
 
-  // Documento (upsert)
-  documento: documentoSchema.optional(),
+  /** Campo de front (tolerado en back). El servicio puede ignorarlo. */
+  adjuntos: z.array(z.any()).optional(),
+})
 
-  // Contactos (full-sync opcional)
-  contactos: z.array(contactoSchema).optional(),
+/** Tipos compartidos */
+export type PacienteCreateDTO = z.infer<typeof PacienteCreateSchema>
 
-  datosClinicos: datosClinicosSchema,
-  estaActivo: z.boolean().optional(),
-  // Concurrencia optimista
-  updatedAt: z.string().datetime().optional(),
-});
-export type PacienteUpdateDTO = z.infer<typeof pacienteUpdateSchema>;
+/** Variante para formularios (si quisieras diferenciar a futuro).
+ *  Por ahora es igual: ya incluye transforms "relajados".
+ */
+export const PacienteCreateFormSchema = PacienteCreateSchema
+export type PacienteCreateFormDTO = PacienteCreateDTO
 
-export const pacienteDeleteSchema = z.object({
-  idPaciente: z.number().int().positive(),
-});
-export type PacienteDeleteDTO = z.infer<typeof pacienteDeleteSchema>;
+export const LinkResponsablePagoSchema = ResponsablePagoSchema
+export type LinkResponsablePagoDTO = z.infer<typeof LinkResponsablePagoSchema>

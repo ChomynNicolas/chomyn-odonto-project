@@ -2,7 +2,7 @@
 import { z } from "zod"
 
 const TIPO_DOC = ["CI", "DNI", "PASAPORTE", "RUC", "OTRO"] as const
-const GENERO_DTO = ["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO", "NO_DECLARA"] as const
+const GENERO_DTO = ["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"] as const
 
 const MIN_DOB = new Date("1900-01-01")
 const TODAY = new Date()
@@ -39,7 +39,6 @@ export const pacienteFullCreateSchema = z.object({
   antecedentesMedicos: z.union([z.string(), z.literal(""), z.null()]).optional(),
   alergias: z.union([z.string(), z.literal(""), z.null()]).optional(),
   medicacion: z.union([z.string(), z.literal(""), z.null()]).optional(),
-  responsablePago: z.union([z.string(), z.literal(""), z.null()]).optional(),
   obraSocial: z.union([z.string(), z.literal(""), z.null()]).optional(),
 
   preferenciasContacto: z

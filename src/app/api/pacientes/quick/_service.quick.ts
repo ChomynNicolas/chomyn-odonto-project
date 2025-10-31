@@ -1,47 +1,70 @@
 // src/app/api/pacientes/quick/_service.quick.ts
-import { prisma } from "@/lib/prisma";
-import { pacienteRepo } from "@/app/api/pacientes/_repo";
-import type { PacienteQuickCreateDTO } from "./_schemas";
-import { splitNombreCompleto, mapGeneroToDB } from "./_dto";
-import { normalizeEmail, normalizePhonePY } from "@/lib/normalize";
+import { prisma } from "@/lib/prisma"
+import { pacienteRepo } from "@/app/api/pacientes/_repo"
+import type { PacienteQuickCreateDTO } from "./_schemas"
+import { splitNombreCompleto, mapGeneroToDB } from "./_dto"
+import { normalizeEmail, normalizePhonePY } from "@/lib/normalize"
+import type { Prisma } from "@prisma/client"
 
 export class QuickCreateError extends Error {
-  code: string;
-  status: number;
-  constructor(code: string, message: string, status = 400) {
-    super(message);
-    this.code = code;
-    this.status = status;
+  code: "VALIDATION_ERROR" | "UNIQUE_CONFLICT" | "INTERNAL_ERROR"
+  status: number
+  constructor(code: QuickCreateError["code"], message: string, status = 400) {
+    super(message)
+    this.code = code
+    this.status = status
   }
 }
 
-/**
- * Alta rápida mínima. 
- * - Persona + Documento + Contacto PHONE (required) + EMAIL (opcional) + Paciente
- * - Devuelve un item listo para UI.
- * - Si existe conflicto único (P2002), emite error 'UNIQUE_CONFLICT'.
- * - (Opcional) idempotenciaKey puede persistirse en una tabla si lo necesitas.
- */
-export async function quickCreatePaciente(input: PacienteQuickCreateDTO, actorUserId?: number) {
-  const { nombres, apellidos } = splitNombreCompleto(input.nombreCompleto);
-  const generoDB = mapGeneroToDB(input.genero);
+export type QuickCreateResult = {
+  idPaciente: number
+  idPersona: number
+  item: Awaited<ReturnType<typeof pacienteRepo.getPacienteUI>>
+}
 
-  // Pre-chequeo simple para mensaje más claro (evita ir directo a P2002)
+/** Convierte YYYY-MM-DD a Date UTC 00:00:00; null si no aplica */
+function toDateUTCFromYYYYMMDD(v?: string): Date | null {
+  if (!v) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v)
+  if (!m) return null
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3])
+  return new Date(Date.UTC(y, mo - 1, d, 0, 0, 0, 0))
+}
+
+function isPrismaUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestError {
+  return !!e && typeof e === "object" && (e as any).code === "P2002"
+}
+
+export async function quickCreatePaciente(
+  input: PacienteQuickCreateDTO,
+  actorUserId?: number
+): Promise<QuickCreateResult> {
+  const { nombres, apellidos } = splitNombreCompleto(input.nombreCompleto)
+  const generoDB = mapGeneroToDB(input.genero)
+
+  const phoneNorm = normalizePhonePY(input.telefono)
+  if (!phoneNorm) throw new QuickCreateError("VALIDATION_ERROR", "Teléfono inválido o no normalizable", 400)
+
+  let emailNorm: string | undefined
+  if (input.email) {
+    emailNorm = normalizeEmail(input.email) ?? undefined
+    if (!emailNorm) throw new QuickCreateError("VALIDATION_ERROR", "Email inválido", 400)
+  }
+
+  // Pre-check documento
   const docExists = await prisma.documento.findFirst({
     where: { tipo: input.tipoDocumento as any, numero: input.dni.trim() },
     select: { idDocumento: true },
-  });
-  if (docExists) {
-    throw new QuickCreateError("UNIQUE_CONFLICT", "Ya existe un paciente con ese documento", 409);
-  }
+  })
+  if (docExists) throw new QuickCreateError("UNIQUE_CONFLICT", "Ya existe un paciente con ese documento", 409)
 
   try {
-    const createdId = await prisma.$transaction(async (tx) => {
+    const { idPaciente, idPersona } = await prisma.$transaction(async (tx) => {
       const persona = await pacienteRepo.createPersonaConDocumento(tx, {
         nombres,
         apellidos,
         genero: generoDB,
-        fechaNacimiento: input.fechaNacimiento ? new Date(input.fechaNacimiento) : null,
+        fechaNacimiento: toDateUTCFromYYYYMMDD(input.fechaNacimiento),
         direccion: null,
         doc: {
           tipo: input.tipoDocumento,
@@ -49,46 +72,40 @@ export async function quickCreatePaciente(input: PacienteQuickCreateDTO, actorUs
           ruc: null,
           paisEmision: "PY",
         },
-      });
+      })
 
       await pacienteRepo.createContactoTelefono(tx, {
         personaId: persona.idPersona,
         valorRaw: input.telefono,
-        valorNorm: normalizePhonePY(input.telefono),
-        // en quick, recordatorio por phone y cobranza por email si hay
-        prefer: { recordatorio: true, cobranza: !input.email },
-      });
+        valorNorm: phoneNorm,
+        prefer: { recordatorio: true, cobranza: !emailNorm },
+      })
 
-      if (input.email) {
-        const norm = normalizeEmail(input.email);
-        if (norm) {
-          await pacienteRepo.createContactoEmail(tx, {
-            personaId: persona.idPersona,
-            valorRaw: input.email,
-            valorNorm: norm,
-            prefer: { recordatorio: true, cobranza: true },
-          });
-        }
+      if (emailNorm) {
+        await pacienteRepo.createContactoEmail(tx, {
+          personaId: persona.idPersona,
+          valorRaw: input.email!,
+          valorNorm: emailNorm,
+          prefer: { recordatorio: true, cobranza: true },
+        })
       }
 
       const paciente = await pacienteRepo.createPaciente(tx, {
         personaId: persona.idPersona,
-        notasJson: {}, // quick no completa historial clínico
-      });
+        notasJson: {},
+      })
 
-      // (Opcional) AuditLog PACIENTE_CREATE_QUICK
-      // await tx.auditLog.create({ data: { actorId: actorUserId ?? null, action: "PACIENTE_CREATE_QUICK", entity: "Paciente", entityId: String(paciente.idPaciente), meta: input } });
+      // Auditoría opcional…
 
-      return paciente.idPaciente;
-    });
+      return { idPaciente: paciente.idPaciente, idPersona: persona.idPersona }
+    })
 
-    const item = await pacienteRepo.getPacienteUI(createdId);
-
-    return { idPaciente: createdId, item };
+    const item = await pacienteRepo.getPacienteUI(idPaciente)
+    return { idPaciente, idPersona, item }
   } catch (e: any) {
-    if (e?.code === "P2002") {
-      throw new QuickCreateError("UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto", 409);
+    if (isPrismaUniqueError(e)) {
+      throw new QuickCreateError("UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto", 409)
     }
-    throw e;
+    throw e
   }
 }

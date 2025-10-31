@@ -4,21 +4,10 @@ import { pacienteCreateBodySchema } from "./_schemas";
 import { createPaciente } from "./_service.create";
 import { requireRole } from "./_rbac";
 import { auth } from "@/auth";
-import { prisma as db } from "@/lib/prisma";
 import { parsePacientesListQuery, listPacientes } from "./_service.list";
-import z from "zod";
-
-// Utilidad para respuestas de error uniformes
-function jsonError(status: number, code: string, error: string) {
-  return NextResponse.json({ ok: false, code, error }, { status });
-}
+import { errors, okCreatedWithIdempotency } from "../_http";
 
 
-// (opcional) mueve este mapper a ./_dto.ts y reutilízalo en POST
-function mapGeneroToDB(g: string) {
-  if (g === "NO_ESPECIFICADO") return "NO_DECLARA"
-  return g
-}
 
 export async function GET(request: NextRequest) {
   // 1) RBAC lectura
@@ -60,81 +49,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  // RBAC
-  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
-  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
+  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
+  if (!gate.ok) return errors.forbidden()
 
   try {
-    const raw = await req.json();
-    const body = pacienteCreateBodySchema.parse(raw);
+    const raw = await req.json()
+    const body = pacienteCreateBodySchema.parse(raw)
 
-    // Puedes pasar el actor (si lo usas en auditoría)
-    const session = await auth();
-    const actorUserId = Number((session?.user as any)?.id) || undefined;
+    const session = await auth()
+    const actorUserId = Number((session?.user as any)?.id) || undefined
 
-    const result = await createPaciente(body, actorUserId);
-    return NextResponse.json(result, { status: 201 });
+    const result = await createPaciente(body, actorUserId)
+    // Sobre estándar + eco opcional de X-Idempotency-Key
+    return okCreatedWithIdempotency(req, result)
   } catch (e: any) {
-    // Prisma unique conflict
-    if (e?.code === "P2002") {
-      return jsonError(409, "UNIQUE_CONFLICT", "Documento o contacto ya existe");
-    }
-    // Zod
-    if (e?.name === "ZodError") {
-      return jsonError(400, "VALIDATION_ERROR", e.issues?.[0]?.message ?? "Datos inválidos");
-    }
-    // Otros
-    const message = e?.message ?? "Error interno al crear paciente";
-    return jsonError(500, "INTERNAL_ERROR", message);
+    if (e?.code === "P2002") return errors.conflict("Documento o contacto ya existe")
+    if (e?.name === "ZodError") return errors.validation(e.issues?.[0]?.message ?? "Datos inválidos")
+    return errors.internal(e?.message ?? "Error interno al crear paciente")
   }
-}
-
-
-const patchSchema = z.object({
-  accion: z.enum(["INACTIVAR", "ACTIVAR"]),
-  motivo: z.string().max(300).optional(),
-});
-
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const session = await auth();
-  const role = (session?.user as any)?.role as string | undefined;
-  if (!role || !["ADMIN", "RECEP"].includes(role))
-    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 403 });
-
-  const idPaciente = Number(params.id);
-  const body = patchSchema.parse(await req.json());
-
-  const updated = await db.$transaction(async (tx) => {
-    const paciente = await tx.paciente.update({
-      where: { idPaciente },
-      data: { estaActivo: body.accion === "ACTIVAR" },
-      include: {
-        persona: {
-          select: {
-            idPersona: true, nombres: true, apellidos: true, genero: true,
-            documento: { select: { tipo: true, numero: true, ruc: true } },
-            contactos: { select: { tipo: true, valorNorm: true, esPrincipal: true, activo: true } },
-          },
-        },
-      },
-    });
-
-    // AuditLog (simple; activa cuando tengas el modelo)
-    // await tx.auditLog.create({
-    //   data: {
-    //     actorId: Number((session!.user as any).idUsuario),
-    //     action: body.accion === "ACTIVAR" ? "PACIENTE_ACTIVAR" : "PACIENTE_INACTIVAR",
-    //     entity: "Paciente",
-    //     entityId: String(idPaciente),
-    //     meta: { motivo: body.motivo ?? null },
-    //   },
-    // });
-
-    return paciente;
-  });
-
-  return NextResponse.json({ ok: true, item: updated });
 }
