@@ -1,23 +1,45 @@
 // src/app/api/pacientes/quick/_schemas.ts
-import { z } from "zod";
+import { z } from "zod"
+import { GeneroEnum, TipoDocumentoEnum } from "@/lib/schema/paciente"
 
-export const GeneroEnum = z.enum(["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"]);
-export const TipoDocumentoEnum = z.enum(["CI", "DNI", "PASAPORTE", "RUC", "OTRO"]);
+/** 'YYYY-MM-DD' o vacío → undefined */
+const FechaYYYYMMDD = z
+  .string()
+  .optional()
+  .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined))
+  .refine((v) => v === undefined || /^\d{4}-\d{2}-\d{2}$/.test(v), {
+    message: "Fecha inválida (formato esperado YYYY-MM-DD)",
+  })
+
+/** Email opcional ("" → undefined) */
+const EmailOpcional = z
+  .string()
+  .optional()
+  .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined))
+  .refine((v) => v === undefined || z.string().email().safeParse(v).success, {
+    message: "Email inválido",
+  })
+
+/** Teléfono (mínima validación) */
+const TelefonoMin = z
+  .string()
+  .min(6, "El teléfono debe tener al menos 6 dígitos")
+  .max(40, "El teléfono no debe exceder 40 caracteres")
+  .transform((v) => v.trim())
 
 export const pacienteQuickCreateSchema = z.object({
-  nombreCompleto: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres").max(160),
+  nombreCompleto: z.string().trim().min(2).max(160),
   genero: GeneroEnum.optional(),
   tipoDocumento: TipoDocumentoEnum,
-  dni: z.string().trim().min(3, "El número de documento debe tener al menos 3 caracteres").max(32),
-  telefono: z.string().trim().min(6, "El teléfono debe tener al menos 6 dígitos").max(40),
-  email: z.string().email("Email inválido").optional().or(z.literal("")).transform(v => v || undefined),
-  fechaNacimiento: z.union([z.string().date().optional(), z.string().length(0)]).optional().transform(v => v || undefined),
-});
+  dni: z.string().trim().min(3).max(32),
+  telefono: TelefonoMin,
+  email: EmailOpcional,
+  fechaNacimiento: FechaYYYYMMDD,
+})
+export type PacienteQuickCreateDTO = z.infer<typeof pacienteQuickCreateSchema>
 
-export type PacienteQuickCreateDTO = z.infer<typeof pacienteQuickCreateSchema>;
-
-// Idempotencia opcional vía header
+/** Idempotencia opcional vía header */
 export const idempotencyHeaderSchema = z.object({
   "idempotency-key": z.string().uuid().optional(),
-});
-export type IdempotencyHeaders = z.infer<typeof idempotencyHeaderSchema>;
+})
+export type IdempotencyHeaders = z.infer<typeof idempotencyHeaderSchema>

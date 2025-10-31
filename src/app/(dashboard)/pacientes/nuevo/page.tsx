@@ -1,69 +1,103 @@
-// src/app/(dashboard)/pacientes/nuevo/page.tsx
 "use client"
 
-import { useRouter } from "next/navigation"
-import PacienteForm from "@/components/pacientes/PacienteForm"
-import type { PacienteFullCreateDTO } from "@/lib/schema/paciente.full"
-import { useCreatePacienteFull } from "@/hooks/useCreatePacienteFull"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
+import PacienteForm from "@/components/pacientes/PacienteForm"
+import { useCreatePacienteFull } from "@/hooks/useCreatePacienteFull"
+import type { PacienteCreateDTO } from "@/lib/schema/paciente"
+import { toast } from "sonner"
 
-function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
+type Intent = "open" | "schedule"
 
 export default function PageNuevoPaciente() {
   const router = useRouter()
-  const createMutation = useCreatePacienteFull()
+  const sp = useSearchParams()
+
+  // Filtros de lista para invalidación correcta
+  const qForList = sp.get("q") ?? ""
+  const soloActivos = sp.get("soloActivos") !== "false"
+  const limit = Number(sp.get("limit") ?? 20) || 20
+
+  const createMutation = useCreatePacienteFull({ qForList, soloActivos, limit })
   const [apiError, setApiError] = useState<string | null>(null)
 
-  const onSubmit = async (values: any) => {
+  const onSubmit = async (values: PacienteCreateDTO, intent: Intent) => {
     setApiError(null)
 
-    const fechaNac =
-      values.fechaNacimiento instanceof Date
-        ? toYMD(values.fechaNacimiento)
-        : values.fechaNacimiento || undefined
-
-    const payload: PacienteFullCreateDTO = {
-      nombreCompleto: values.nombreCompleto,
-      // Aceptamos NO_DECLARA y lo pasamos tal cual (el schema ya lo permite)
-      genero: values.genero,
-      tipoDocumento: values.tipoDocumento || "CI",
-      dni: values.dni,
-      ruc: values.ruc || undefined,
-      telefono: values.telefono,
-      fechaNacimiento: fechaNac,
-      email: values.email || undefined,
-      domicilio: values.domicilio || undefined,
-      obraSocial: values.obraSocial || undefined,
-      antecedentesMedicos: values.antecedentesMedicos || undefined,
-      alergias: values.alergias || undefined,
-      medicacion: values.medicacion || undefined,
-      responsablePago: values.responsablePago || undefined,
-      preferenciasContacto: values.preferenciasContacto,
-      adjuntos: values.adjuntos || [],
-    }
+    // 1) Separar el draft de responsable del payload de creación
+    const { responsablePago: responsableDraft, ...payload } = values
 
     try {
+      // 2) Crear paciente (sin linkear responsable en esta transacción)
       const data = await createMutation.mutateAsync(payload)
-      // Ajuste: asume que el hook devuelve { idPaciente } plano (ver ruta POST abajo)
-      router.push(`/pacientes/${data.idPaciente}`)
+
+      toast("Paciente creado", {
+        description: `${values.nombreCompleto} (ID ${data.idPaciente})`,
+      })
+
+      // 3) Linkeo en background si hay responsable seleccionado
+      if (responsableDraft) {
+        ;(async () => {
+          try {
+            const idem = (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : `${Date.now()}-fallback`
+
+            const res = await fetch(`/api/pacientes/${data.idPaciente}/responsables`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                "X-Idempotency-Key": idem,     // ⬅️ NUEVO
+              },
+              body: JSON.stringify({
+                personaId: responsableDraft.personaId,
+                relacion: responsableDraft.relacion,
+                esPrincipal: responsableDraft.esPrincipal ?? true,
+              }),
+            })
+
+            const body = await res.json()
+            if (!res.ok || !body?.ok) {
+              throw new Error(body?.error ?? "No se pudo vincular el responsable")
+            }
+
+            // Mensaje estándar
+            const linked = body.data as { personaId: number, idempotent?: boolean }
+            toast(body?.data?.idempotent ? "Responsable ya estaba vinculado" : "Responsable vinculado", {
+              description: `Persona ${linked.personaId} asociada`,
+            })
+          } catch (err: any) {
+            toast.error("No se pudo vincular el responsable", {
+              description: err?.message ?? "Intenta desde la ficha del paciente",
+            })
+          }
+        })()
+      }
+
+      // 4) Redirección según intent
+      if (intent === "open") {
+        router.push(`/pacientes/${data.idPaciente}`)
+      } else {
+        router.push(`/agenda?pacienteId=${data.idPaciente}`)
+      }
     } catch (e: any) {
-      setApiError(e.message || "Error al crear paciente")
+      const message = e?.message ?? "Error al crear paciente"
+      setApiError(message)
+      toast.error("Error al crear paciente", { description: message })
     }
   }
 
   return (
-    <main className="p-6 mx-auto max-w-5xl space-y-6">
+    <main className="mx-auto max-w-5xl p-6">
       {apiError && (
         <div
           role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+          className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
         >
           {apiError}
         </div>
       )}
-      <PacienteForm onSubmit={onSubmit} submitLabel={createMutation.isPending ? "Guardando…" : "Crear paciente"} />
+
+      <PacienteForm busy={createMutation.isPending} onSubmit={onSubmit} />
     </main>
   )
 }

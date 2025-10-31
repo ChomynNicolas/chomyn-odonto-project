@@ -127,7 +127,6 @@ export interface CreatePacienteFullDTO extends CreatePacienteQuickDTO {
   antecedentesMedicos?: string;
   alergias?: string;
   medicacion?: string;
-  responsablePago?: string;
   obraSocial?: string;
   preferenciasContacto?: {
     whatsapp?: boolean;
