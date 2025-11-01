@@ -1,70 +1,94 @@
-// src/app/api/agenda/citas/calendar/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { prisma as db } from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+import { requireSessionWithRoles } from "@/app/api/_lib/auth";
 
-export const revalidate = 0;
+export const revalidate = 0; // no ISR
+export const dynamic = "force-dynamic"; // evita caché en runtime
 
-const qSchema = z.object({
-  start: z.string().min(1),
-  end: z.string().min(1),
-  prof: z.string().optional(),
-  cons: z.string().optional(),
-  est: z.string().optional(),
-  tip: z.string().optional(),
+const prisma = new PrismaClient();
+
+const asDate = z.preprocess((v) => (typeof v === "string" ? new Date(v) : v), z.date());
+const querySchema = z.object({
+  start: asDate, // requerido por FullCalendar
+  end: asDate,   // requerido por FullCalendar
 });
 
-function toInts(csv?: string | null) {
-  if (!csv) return undefined;
-  const arr = csv.split(",").map(Number).filter((n) => !Number.isNaN(n));
-  return arr.length ? arr : undefined;
-}
-const fn = (p?: { nombres?: string | null; apellidos?: string | null }) =>
-  [p?.nombres, p?.apellidos].filter(Boolean).join(" ");
-
 export async function GET(req: NextRequest) {
-  const parsed = qSchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
-  if (!parsed.success) return NextResponse.json([], { status: 400 });
+  // RBAC: RECEP, ODONT, ADMIN
+  const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"]);
+  if (!auth.authorized) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  }
 
-  const { start, end, prof, cons, est, tip } = parsed.data;
-  const startDt = new Date(start); const endDt = new Date(end);
-  if (Number.isNaN(+startDt) || Number.isNaN(+endDt)) return NextResponse.json([], { status: 400 });
+  const url = new URL(req.url);
+  const parsed = querySchema.safeParse(Object.fromEntries(url.searchParams.entries()));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { ok: false, error: "BAD_REQUEST", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
 
-  const where: any = { inicio: { gte: startDt, lt: endDt } };
-  const profIds = toInts(prof); if (profIds) where.profesionalId = { in: profIds };
-  const consIds = toInts(cons); if (consIds) where.consultorioId = { in: consIds };
-  if (est) where.estado = { in: est.split(",") as any };
-  if (tip) where.tipo = { in: tip.split(",") as any };
+  const { start, end } = parsed.data;
 
-  const citas = await db.cita.findMany({
-    where,
-    include: {
-      paciente: { include: { persona: { select: { nombres: true, apellidos: true } } } },
-      profesional: { include: { persona: { select: { nombres: true, apellidos: true } } } },
-      consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
-    },
-    orderBy: [{ inicio: "asc" }],
-  });
+  try {
+    const rows = await prisma.cita.findMany({
+      where: {
+        inicio: { lt: end },
+        fin: { gt: start },
+      },
+      orderBy: { inicio: "asc" },
+      select: {
+        idCita: true,
+        inicio: true,
+        fin: true,
+        tipo: true,
+        estado: true,
+        motivo: true,
+        profesional: {
+          select: { idProfesional: true, persona: { select: { nombres: true, apellidos: true } } },
+        },
+        paciente: {
+          select: { idPaciente: true, persona: { select: { nombres: true, apellidos: true } } },
+        },
+        consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
+      },
+    });
 
-  const events = citas.map((c) => ({
-    id: c.idCita,
-    title: `${fn(c.paciente.persona)} — ${c.motivo ?? c.tipo}`,
-    start: c.inicio.toISOString(),
-    end: c.fin.toISOString(),
-    backgroundColor: c.consultorio?.colorHex ?? undefined,
-    borderColor: c.consultorio?.colorHex ?? undefined,
-    extendedProps: {
-      estado: c.estado,
-      profesionalId: c.profesionalId,
-      profesionalNombre: fn(c.profesional.persona),
-      consultorioId: c.consultorioId,
-      consultorioNombre: c.consultorio?.nombre ?? null,
-      consultorioColorHex: c.consultorio?.colorHex ?? null,
-      urgencia: c.tipo === "URGENCIA",
-      primeraVez: false,
-      planActivo: false,
-    },
-  }));
+    const events = rows.map((c) => {
+      const pacienteNombre = `${c.paciente.persona.nombres} ${c.paciente.persona.apellidos}`.trim();
+      const profesionalNombre = `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim();
+      const title = `${pacienteNombre} — ${c.motivo ?? c.tipo}`;
 
-  return NextResponse.json(events, { headers: { "Cache-Control": "no-store" } });
+      return {
+        id: c.idCita,
+        title,
+        start: c.inicio.toISOString(),
+        end: c.fin.toISOString(),
+        extendedProps: {
+          estado: c.estado,
+          tipo: c.tipo,
+          pacienteId: c.paciente.idPaciente,
+          pacienteNombre,
+          profesionalId: c.profesional.idProfesional,
+          profesionalNombre,
+          consultorioId: c.consultorio?.idConsultorio ?? null,
+          consultorioNombre: c.consultorio?.nombre ?? null,
+          consultorioColor: c.consultorio?.colorHex ?? null,
+          // flags opcionales para badges UI:
+          urgencia: c.tipo === "URGENCIA",
+          primeraVez: false,
+          planActivo: false,
+        },
+      };
+    });
+
+    const res = NextResponse.json({ ok: true, data: events }, { status: 200 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  } catch (e: any) {
+    console.error("GET /api/agenda/citas/calendar error:", e?.code || e?.message);
+    return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 });
+  }
 }

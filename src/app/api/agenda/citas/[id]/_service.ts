@@ -1,4 +1,3 @@
-// app/api/agenda/citas/[id]/_service.ts
 import { PrismaClient } from "@prisma/client";
 import type { CitaDetailDTO } from "./_dto";
 
@@ -6,7 +5,7 @@ const prisma = new PrismaClient();
 
 /**
  * Obtiene una cita con relaciones mínimas necesarias y mapea a DTO estable.
- * Select explícitos para no filtrar datos sensibles por accidente.
+ * Select explícitos para evitar fugas de datos.
  */
 export async function getCitaDetail(idCita: number): Promise<CitaDetailDTO | null> {
   const row = await prisma.cita.findUnique({
@@ -29,20 +28,10 @@ export async function getCitaDetail(idCita: number): Promise<CitaDetailDTO | nul
       updatedAt: true,
 
       reprogramadaDesdeId: true,
-      reprogramaciones: { select: { idCita: true } }, // hijas
+      reprogramaciones: { select: { idCita: true } },
 
-      creadoPor: {
-        select: {
-          idUsuario: true,
-          nombreApellido: true,
-        },
-      },
-      canceladoPor: {
-        select: {
-          idUsuario: true,
-          nombreApellido: true,
-        },
-      },
+      creadoPor: { select: { idUsuario: true, nombreApellido: true } },
+      canceladoPor: { select: { idUsuario: true, nombreApellido: true } },
 
       profesional: {
         select: {
@@ -56,9 +45,7 @@ export async function getCitaDetail(idCita: number): Promise<CitaDetailDTO | nul
           persona: { select: { nombres: true, apellidos: true } },
         },
       },
-      consultorio: {
-        select: { idConsultorio: true, nombre: true, colorHex: true },
-      },
+      consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
     },
   });
 
@@ -83,10 +70,7 @@ export async function getCitaDetail(idCita: number): Promise<CitaDetailDTO | nul
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
 
-    creadoPor: {
-      id: row.creadoPor.idUsuario,
-      nombre: row.creadoPor.nombreApellido,
-    },
+    creadoPor: { id: row.creadoPor.idUsuario, nombre: row.creadoPor.nombreApellido },
     canceladoPor: row.canceladoPor
       ? { id: row.canceladoPor.idUsuario, nombre: row.canceladoPor.nombreApellido }
       : null,
@@ -100,11 +84,7 @@ export async function getCitaDetail(idCita: number): Promise<CitaDetailDTO | nul
       nombre: `${row.paciente.persona.nombres} ${row.paciente.persona.apellidos}`.trim(),
     },
     consultorio: row.consultorio
-      ? {
-          id: row.consultorio.idConsultorio,
-          nombre: row.consultorio.nombre,
-          colorHex: row.consultorio.colorHex,
-        }
+      ? { id: row.consultorio.idConsultorio, nombre: row.consultorio.nombre, colorHex: row.consultorio.colorHex }
       : undefined,
 
     reprogramadaDesdeId: row.reprogramadaDesdeId ?? null,

@@ -1,27 +1,18 @@
 "use client";
 
-import React, { useMemo, useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import esLocale from "@fullcalendar/core/locales/es";
-import type {
-  DateSelectArg,
-  EventApi,
-  EventClickArg,
-  EventContentArg,
-} from "@fullcalendar/core";
+import type { DateSelectArg, EventApi, EventClickArg, EventContentArg } from "@fullcalendar/core";
 
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { CalendarTopbar } from "./CalendarTopbar";
-import { CalendarLegend } from "./CalendarLegend";
 import { CitaDrawer } from "./CitaDrawer";
-import { useCalendarFilters } from "@/hooks/useCalendarFilters";
 import { useCitasCalendarSource } from "@/hooks/useCitasCalendarSource";
 import { apiCreateCita } from "@/lib/api/agenda/citas";
-import { isRole } from "@/lib/rbac";
 
 // ====== Enums locales (alineados a tu Prisma) ======
 export type EstadoCita =
@@ -43,16 +34,6 @@ export type TipoCita =
   | "CONTROL"
   | "OTRO";
 
-export type CalendarRange = "HOY" | "SEMANA" | "MES";
-
-export type CalendarFilters = {
-  profesionalIds: number[];
-  consultorioIds: number[];
-  estados: EstadoCita[];
-  tipos: TipoCita[];
-  range: CalendarRange;
-};
-
 // Podés inyectar user/rol desde tu sesión (NextAuth)
 type CurrentUser = {
   idUsuario: number;
@@ -62,24 +43,13 @@ type CurrentUser = {
 
 export default function CitasCalendar({
   currentUser,
-  clinicAllowsCrossView = true,
 }: {
   currentUser?: CurrentUser;
-  clinicAllowsCrossView?: boolean;
 }) {
   const calendarRef = useRef<FullCalendar>(null);
 
-  // ===== Filtros persistentes (URL + localStorage) =====
-  const {
-    filters,
-    setFilters,
-    applyFiltersToUrl,
-    clearFilters,
-    initialRangeNavigation,
-  } = useCalendarFilters({ currentUser, clinicAllowsCrossView });
-
-  // ===== Fuente dinámica por rango + filtros =====
-  const events = useCitasCalendarSource(filters);
+  // ===== Fuente dinámica SOLO por rango (sin filtros) =====
+  const events = useCitasCalendarSource();
 
   // ===== Modal/Drawer estado =====
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -91,7 +61,7 @@ export default function CitasCalendar({
   }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
-  // ====== Creación rápida (smoke) ======
+  // ====== Creación rápida MVP ======
   const [quick, setQuick] = useState({
     pacienteId: "",
     profesionalId: "",
@@ -101,24 +71,41 @@ export default function CitasCalendar({
     fin: "",
   });
 
-  const onSelectDate = (arg: DateSelectArg) => {
+  const ensureQuickBasics = async (): Promise<boolean> => {
+    // MVP: pedir por prompt si faltan datos
+    let pacienteId = quick.pacienteId?.trim();
+    if (!pacienteId) {
+      pacienteId = window.prompt("ID del paciente:", "") ?? "";
+      if (!pacienteId) return false;
+    }
+
+    let profesionalId = quick.profesionalId?.trim();
+    if (!profesionalId) {
+      profesionalId =
+        (currentUser?.rol === "ODONT" && currentUser?.profesionalId
+          ? String(currentUser.profesionalId)
+          : window.prompt("ID del profesional:", "")) ?? "";
+      if (!profesionalId) return false;
+    }
+
+    setQuick((f) => ({ ...f, pacienteId, profesionalId }));
+    return true;
+  };
+
+  const onSelectDate = async (arg: DateSelectArg) => {
     setQuick((f) => ({
       ...f,
       inicio: toLocalDT(arg.start),
       fin: toLocalDT(arg.end ?? arg.start),
     }));
-    // Abro un mini modal nativo (temporal) o podrías usar un Dialog bien bonito.
+
     const ok = window.confirm(
-      "Crear cita rápida en el rango seleccionado?\nLuego podrás editarla."
+      "¿Crear una cita rápida en el rango seleccionado?\nLuego podrás editarla."
     );
-    if (ok) {
-      // Si hay profesional por defecto en filtros, úsalo
-      const profId =
-        quick.profesionalId ||
-        (filters.profesionalIds[0] ? String(filters.profesionalIds[0]) : "");
-      setQuick((f) => ({ ...f, profesionalId: profId }));
-      onCreate();
-    }
+    if (!ok) return;
+
+    if (!(await ensureQuickBasics())) return;
+    onCreate();
   };
 
   const onEventClick = (arg: EventClickArg) => {
@@ -128,8 +115,8 @@ export default function CitasCalendar({
 
   const onCreate = async () => {
     try {
-      if (!quick.pacienteId || !quick.profesionalId || !quick.inicio || !quick.fin) {
-        alert("Faltan datos mínimos: paciente, profesional, inicio y fin.");
+      if (!quick.pacienteId || !quick.profesionalId || !quick.inicio) {
+        alert("Faltan datos: paciente, profesional e inicio.");
         return;
       }
       const body = {
@@ -138,7 +125,7 @@ export default function CitasCalendar({
         consultorioId: quick.consultorioId ? Number(quick.consultorioId) : undefined,
         motivo: quick.motivo || "Cita",
         inicio: new Date(quick.inicio).toISOString(),
-        fin: new Date(quick.fin).toISOString(),
+        fin: quick.fin ? new Date(quick.fin).toISOString() : undefined, // wrapper calcula duración
       };
       await apiCreateCita(body);
       calendarRef.current?.getApi().refetchEvents();
@@ -155,7 +142,7 @@ export default function CitasCalendar({
     }
   };
 
-  // ====== A11y: permitir Enter para abrir; Esc para cerrar ======
+  // ====== A11y: permitir Enter para abrir ======
   const eventDidMountA11y = useCallback((arg: { el: HTMLElement; event: EventApi }) => {
     arg.el.setAttribute("role", "button");
     arg.el.setAttribute(
@@ -163,64 +150,46 @@ export default function CitasCalendar({
       `Cita ${arg.event.title ?? ""} ${arg.event.start?.toLocaleString() ?? ""}`
     );
     arg.el.tabIndex = 0;
-    const onKey = (ev: KeyboardEvent) => {
+    arg.el.addEventListener("keydown", (ev: KeyboardEvent) => {
       if (ev.key === "Enter") {
         const id = Number(arg.event.id);
         if (!Number.isNaN(id)) openDrawer(id);
       }
-    };
-    arg.el.addEventListener("keydown", onKey);
+    });
+
+    // Color por consultorio (usa CSS var en el evento)
+    const ext = arg.event.extendedProps as any;
+    if (ext?.consultorioColor) {
+      arg.el.style.setProperty("--legend-consultorio", String(ext.consultorioColor));
+    }
   }, [openDrawer]);
-
-  // ===== Navegación inicial según rango rápido (al montar / al cambiar) =====
-  const onCalendarReady = useCallback(() => {
-    const api = calendarRef.current?.getApi();
-    if (!api) return;
-    initialRangeNavigation(api, filters.range);
-  }, [filters.range, initialRangeNavigation]);
-
-  // ===== Cambiar vista según range =====
-  const onRangeChange = useCallback(
-    (range: CalendarRange) => {
-      setFilters((f) => ({ ...f, range }));
-      const api = calendarRef.current?.getApi();
-      if (!api) return;
-      if (range === "HOY") {
-        api.changeView("timeGridDay");
-        api.today();
-      } else if (range === "SEMANA") {
-        api.changeView("timeGridWeek");
-        api.today();
-      } else {
-        api.changeView("dayGridMonth");
-        api.today();
-      }
-    },
-    [setFilters]
-  );
 
   return (
     <div className="rounded-2xl border border-border bg-background">
-      {/* Topbar de filtros persistentes */}
+      {/* Leyenda de colorimetría / estados (opcional) */}
       <div className="p-3 sm:p-4 border-b border-border">
-        <CalendarTopbar
-          filters={filters}
-          setFilters={setFilters}
-          onApply={() => {
-            applyFiltersToUrl();
-            calendarRef.current?.getApi().refetchEvents();
-          }}
-          onClear={() => {
-            clearFilters();
-            calendarRef.current?.getApi().refetchEvents();
-          }}
-          onRangeChange={onRangeChange}
-          currentUser={currentUser}
-        />
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-base font-semibold">Agenda</h3>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const now = new Date();
+              const in30 = new Date(now.getTime() + 30 * 60 * 1000);
+              setQuick((f) => ({
+                ...f,
+                inicio: toLocalDT(now),
+                fin: toLocalDT(in30),
+                motivo: "",
+              }));
+              if (!(await ensureQuickBasics())) return;
+              onCreate();
+            }}
+          >
+            Nueva Cita +
+          </Button>
+        </div>
       </div>
 
-      {/* Leyenda de colorimetría / estados */}
-      <CalendarLegend className="px-3 sm:px-4 py-2" />
 
       {/* Calendario */}
       <div className="custom-calendar">
@@ -239,7 +208,7 @@ export default function CitasCalendar({
           expandRows
           height="auto"
           headerToolbar={{
-            left: "prev,next today addEventButton",
+            left: "prev,next today",
             center: "title",
             right: "dayGridMonth,timeGridWeek,timeGridDay",
           }}
@@ -252,32 +221,14 @@ export default function CitasCalendar({
           slotLabelFormat={{ hour: "2-digit", minute: "2-digit", meridiem: false, hour12: false }}
           events={events}
           eventDidMount={(arg) => {
-            // A11y + foco + “punto” de consultorio
             eventDidMountA11y(arg);
-            arg.el.classList.add("fc-event--clinic");
+            arg.el.classList.add("fc-event--clinic"); // para el “punto” y estilos
           }}
           eventContent={renderEventContent}
-          customButtons={{
-            addEventButton: {
-              text: "Nueva Cita +",
-              click: () => {
-                const now = new Date();
-                const in30 = new Date(now.getTime() + 30 * 60 * 1000);
-                setQuick((f) => ({
-                  ...f,
-                  inicio: toLocalDT(now),
-                  fin: toLocalDT(in30),
-                  motivo: "",
-                }));
-                onCreate(); // atajo rápido
-              },
-            },
-          }}
-          datesSet={onCalendarReady}
         />
       </div>
 
-      {/* Drawer de detalle con acciones contextuales */}
+      {/* Drawer de detalle */}
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent side="right" className="w-full sm:max-w-md p-0">
           {selectedEventId && (
@@ -286,7 +237,6 @@ export default function CitasCalendar({
               onClose={closeDrawer}
               currentUser={currentUser}
               onAfterChange={() => {
-                // Refrescar eventos tras una transición
                 calendarRef.current?.getApi().refetchEvents();
               }}
             />
@@ -302,10 +252,11 @@ function renderEventContent(arg: EventContentArg) {
   const ext = arg.event.extendedProps as any;
   const estado: string = String(ext?.estado ?? "");
   const chip =
-    estado &&
-    <span className="ml-auto text-[10px] px-1 rounded bg-black/10 dark:bg-white/10">
-      {estado.replaceAll("_", " ")}
-    </span>;
+    estado && (
+      <span className="ml-auto text-[10px] px-1 rounded bg-black/10 dark:bg-white/10">
+        {estado.replaceAll("_", " ")}
+      </span>
+    );
 
   const badges = (
     <div className="mt-0.5 flex flex-wrap gap-1">
@@ -322,7 +273,7 @@ function renderEventContent(arg: EventContentArg) {
         {chip}
       </div>
       <div className="leading-tight text-[12px] font-medium">
-        {arg.event.title /* “Paciente — motivo” desde tu adapter */}
+        {arg.event.title /* “Paciente — motivo/tipo” */}
       </div>
       <div className="text-[11px] opacity-80">
         {ext?.profesionalNombre ? `Dr/a. ${ext.profesionalNombre}` : `Profesional #${ext?.profesionalId}`}
@@ -334,11 +285,7 @@ function renderEventContent(arg: EventContentArg) {
 }
 
 function Badge({ text }: { text: string }) {
-  return (
-    <span className="text-[10px] px-1 py-[1px] rounded border border-border">
-      {text}
-    </span>
-  );
+  return <span className="text-[10px] px-1 py-[1px] rounded border border-border">{text}</span>;
 }
 
 function toLocalDT(d: Date) {

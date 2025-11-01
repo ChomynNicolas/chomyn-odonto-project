@@ -1,4 +1,3 @@
-// app/api/agenda/citas/[id]/_schemas.ts
 import { z } from "zod";
 
 export const paramsSchema = z.object({
