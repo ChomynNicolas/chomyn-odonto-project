@@ -869,3 +869,24 @@ span.flatpickr-weekday,
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Punto/left-dot para eventos, toma el background actual (consultorio color) */
+.fc .fc-event.fc-event--clinic {
+  position: relative;
+  overflow: hidden;
+}
+.fc .fc-event.fc-event--clinic::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  border-radius: 999px;
+  background: currentColor;
+}
+/* currentColor = color de texto; hacemos match con background para dot */
+.fc .fc-event.fc-event--clinic {
+  color: inherit;
+}

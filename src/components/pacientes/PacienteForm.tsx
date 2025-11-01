@@ -17,11 +17,16 @@ import { Button } from "@/components/ui/button"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import PreferenciasContacto from "./PreferenciasContacto"
-import AdjuntosDropzone from "./AdjuntosDropzone"
+import AdjuntosDropzone, { FileItem } from "./AdjuntosDropzone"
 import { Info } from "lucide-react"
 import ResponsablePagoSelector, { type ResponsablePagoValue } from "./ResponsablePagoSelector"
 
 type Intent = "open" | "schedule"
+
+
+type PacienteFormDTO = Omit<PacienteCreateDTO, "adjuntos"> & {
+  adjuntos: FileItem[]
+}
 
 function Required({ children }: { children: React.ReactNode }) {
   return <span className="after:ml-0.5 after:text-destructive after:content-['*']">{children}</span>
@@ -38,7 +43,7 @@ type Props = {
 export default function PacienteForm({ defaultValues, onSubmit, busy = false }: Props) {
   const [intent, setIntent] = React.useState<Intent>("open")
 
-  const form = useForm<PacienteCreateDTO>({
+  const form = useForm<PacienteFormDTO>({
     resolver: zodResolver(PacienteCreateFormSchema),
     defaultValues: {
       nombreCompleto: "",
@@ -61,7 +66,9 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
     mode: "onBlur",
   })
 
-  const isSubmitting = form.formState.isSubmitting || busy
+  const [uploadingAdjuntos, setUploadingAdjuntos] = React.useState(false)
+  const isSubmitting = form.formState.isSubmitting || busy || uploadingAdjuntos
+
   const todayYMD = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   /** ── Accesibilidad: foco/scroll al primer error tras submit inválido ───────── */
@@ -473,6 +480,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                   <AdjuntosDropzone
                     files={form.watch("adjuntos") ?? []}
                     onChange={(arr) => form.setValue("adjuntos", arr, { shouldDirty: true })}
+                    onBusyChange={setUploadingAdjuntos}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">Próximamente: Cloudinary/S3 con verificación y antivirus.</p>
                 </fieldset>

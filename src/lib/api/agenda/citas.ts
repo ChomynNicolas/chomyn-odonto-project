@@ -1,89 +1,57 @@
-import {
-  CitasListApiResponseSchema,
-  CitaItemSchema,
-  type CreateCitaBody,
-  CreateCitaBodySchema,
-  type CitaItem,
-} from "@/lib/schema/cita.calendar";
+// GET detalle
+export async function apiGetCitaDetalle(id: number) {
+  const r = await fetch(`/api/agenda/citas/${id}`, { cache: "no-store" });
+  if (!r.ok) throw new Error("No se pudo cargar el detalle de la cita");
+  const j = await r.json();
+  return j?.data ?? j;
+}
 
-type ListParams = {
-  start?: string; // ISO
-  end?: string;   // ISO
-  profesionalId?: number | string;
-  consultorioId?: number | string;
-  page?: number;
-  limit?: number;
+// POST crear (agrega defaults requeridos por tu schema)
+type CreateReq = {
+  pacienteId: number;
+  profesionalId: number;
+  consultorioId?: number;
+  inicio: string; // ISO
+  fin?: string;   // opcional si mandás duracionMinutos
+  motivo?: string;
+  tipo?: string;             // default "CONSULTA"
+  duracionMinutos?: number;  // default 30
+  notas?: string;
 };
 
-function buildQuery(params: ListParams) {
-  const q = new URLSearchParams();
-  // Usa los nombres que el backend espera (ajustado previamente)
-  if (params.start) q.set("start", params.start);
-  if (params.end) q.set("end", params.end);
-  if (params.profesionalId) q.set("profesionalId", String(params.profesionalId));
-  if (params.consultorioId) q.set("consultorioId", String(params.consultorioId));
-  q.set("page", String(params.page ?? 1));
-  q.set("limit", String(params.limit ?? 500));
-  return q.toString();
-}
+export async function apiCreateCita(payload: CreateReq) {
+  const duracionMin = payload.duracionMinutos ?? (
+    payload.fin ? Math.max(5, Math.round((+new Date(payload.fin) - +new Date(payload.inicio)) / 60000)) : 30
+  );
+  const body = {
+    pacienteId: payload.pacienteId,
+    profesionalId: payload.profesionalId,
+    consultorioId: payload.consultorioId,
+    inicio: payload.inicio,
+    duracionMinutos: duracionMin,
+    tipo: (payload.tipo ?? "CONSULTA") as any,
+    motivo: payload.motivo ?? "Cita",
+    notas: payload.notas ?? undefined,
+  };
 
-export async function apiListCitas(params: ListParams): Promise<{ data: CitaItem[]; meta: any }> {
-  const qs = buildQuery(params);
-  const res = await fetch(`/api/agenda/citas?${qs}`, {
-    credentials: "include",
-    cache: "no-store",
-  });
-
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error("GET /api/agenda/citas error body:", json);
-    throw new Error(`GET /api/agenda/citas failed: ${res.status}`);
-  }
-
-  // 1) valida contra el shape REAL de la API
-  const parsedApi = CitasListApiResponseSchema.safeParse(json);
-  if (!parsedApi.success) {
-    console.error("API response not matching API schema:", parsedApi.error.format());
-    throw new Error("Invalid citas API response");
-  }
-
-  // 2) normaliza cada item y valida contra CitaItemSchema (DTO)
-  const normalized = parsedApi.data.data.map((c) => {
-    const norm = {
-      idCita: c.idCita,
-      inicio: c.inicio,
-      fin: c.fin,
-      motivo: c.motivo ?? null,
-      estado: c.estado,
-      pacienteId: c.paciente.id,
-      profesionalId: c.profesional.id,
-      consultorioId: c.consultorio?.id ?? null,
-      profesionalNombre: c.profesional.nombre,
-      pacienteNombre: c.paciente.nombre,
-      consultorioNombre: c.consultorio?.nombre,
-      consultorioColorHex: c.consultorio?.colorHex,
-    };
-    const v = CitaItemSchema.parse(norm);
-    return v;
-  });
-
-  return { data: normalized, meta: parsedApi.data.meta };
-}
-
-export async function apiCreateCita(body: CreateCitaBody) {
-  const parsed = CreateCitaBodySchema.safeParse(body);
-  if (!parsed.success) {
-    throw new Error("Invalid create cita body");
-  }
-  const res = await fetch("/api/agenda/citas", {
+  const r = await fetch(`/api/agenda/citas`, {
     method: "POST",
-    credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(parsed.data),
+    body: JSON.stringify(body),
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(json?.error ?? `POST /api/agenda/citas failed: ${res.status}`);
-  }
-  return json;
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) throw new Error(j?.error ?? "Error creando cita");
+  return j.data;
+}
+
+// POST transición de estado
+export async function apiTransitionCita(id: number, action: "CONFIRM" | "CHECKIN" | "START" | "COMPLETE" | "CANCEL" | "NO_SHOW", note?: string) {
+  const r = await fetch(`/api/agenda/citas/${id}/transition`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, note }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) throw new Error(j?.error ?? "Error en transición");
+  return j.data;
 }

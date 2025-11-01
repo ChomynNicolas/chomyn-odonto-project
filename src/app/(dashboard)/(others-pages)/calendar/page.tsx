@@ -1,17 +1,16 @@
 import CitasCalendar from "@/components/agenda/CitasCalendar";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import { Metadata } from "next";
-import React from "react";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Agenda | Chomyn Odontología",
   description: "Agenda de turnos",
 };
 
-export default function page() {
+export default function Page() {
   return (
-    <div>
-      <PageBreadcrumb pageTitle="Calendar" />
+    <div className="space-y-4">
+      <PageBreadcrumb pageTitle="Agenda clínica" />
       <CitasCalendar />
     </div>
   );

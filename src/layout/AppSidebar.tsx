@@ -5,16 +5,16 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import {
-  BoxCubeIcon,
-  CalenderIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
   PageIcon,
-  PlugInIcon,
-  UserCircleIcon,
 } from "../icons/index";
 
+import { BookUser, CalendarDays, CalendarSearch, FileText, LogIn, UserRoundCog, UserRoundPlus, Users } from "lucide-react";
+import { PiToothLight } from "react-icons/pi";
+import { HiOutlineIdentification } from "react-icons/hi";
+import { MdOutlineMedicalInformation } from "react-icons/md";
+import { SlUserFollow } from "react-icons/sl";
 /** =========================
  * Tipos y RBAC
  * ========================= */
@@ -34,32 +34,28 @@ type NavItem = {
 const navItems: NavItem[] = [
   // Operación
   { group: "Operación", name: "Inicio", path: "/", icon: <GridIcon /> },
-  { group: "Operación", name: "Agenda", path: "/calendar", icon: <CalenderIcon /> },
-  { group: "Operación", name: "Turnos pendientes", path: "/agenda/pendientes", icon: <ListIcon />, roles: ["ADMIN", "RECEP"] },
-  { group: "Operación", name: "Reprogramaciones", path: "/agenda/reprogramaciones", icon: <ListIcon />, roles: ["ADMIN", "RECEP"] },
-  { group: "Operación", name: "Ausencias (no show)", path: "/agenda/ausencias", icon: <ListIcon />, roles: ["ADMIN", "RECEP"] },
+  { group: "Operación", name: "Agenda", path: "/calendar", icon: <CalendarDays /> },
+  
 
   // Pacientes
-  { group: "Pacientes", name: "Pacientes", path: "/pacientes", icon: <UserCircleIcon /> },
-  { group: "Pacientes", name: "Nuevo paciente", path: "/pacientes/nuevo", icon: <UserCircleIcon />, roles: ["ADMIN", "RECEP"] },
+  { group: "Pacientes", name: "Pacientes", path: "/pacientes", icon: <Users /> },
+  { group: "Pacientes", name: "Nuevo paciente", path: "/pacientes/nuevo", icon: <UserRoundPlus />, roles: ["ADMIN", "RECEP"] },
 
   // Clínica (launchers a detalle por ID)
   { group: "Clínica", name: "Ir a paciente", path: "/pacientes/detalle", icon: <PageIcon /> },
-  { group: "Clínica", name: "Historia clínica", path: "/pacientes/historia", icon: <PageIcon />, roles: ["ADMIN", "ODONT"] },
-  { group: "Clínica", name: "Odontograma", path: "/pacientes/odontograma", icon: <PageIcon />, roles: ["ADMIN", "ODONT"] },
-  { group: "Clínica", name: "Citas del paciente", path: "/pacientes/citas", icon: <PageIcon /> },
-  { group: "Clínica", name: "Adjuntos del paciente", path: "/pacientes/adjuntos", icon: <PageIcon /> },
+  { group: "Clínica", name: "Historia clínica", path: "/pacientes/historia", icon: <FileText />, roles: ["ADMIN", "ODONT"] },
+  { group: "Clínica", name: "Odontograma", path: "/pacientes/odontograma", icon: <PiToothLight size={26} className="-ml-0.5" />, roles: ["ADMIN", "ODONT"] },
+  { group: "Clínica", name: "Citas del paciente", path: "/pacientes/citas", icon: <CalendarSearch /> },
+  { group: "Clínica", name: "Adjuntos del paciente", path: "/pacientes/adjuntos", icon: <BookUser /> },
 
   // Configuración (solo ADMIN)
-  { group: "Configuración", name: "Usuarios y roles", path: "/configuracion/usuarios", icon: <BoxCubeIcon />, roles: ["ADMIN"] },
-  { group: "Configuración", name: "Profesionales", path: "/configuracion/profesionales", icon: <BoxCubeIcon />, roles: ["ADMIN"] },
-  { group: "Configuración", name: "Tratamientos/Servicios", path: "/configuracion/servicios", icon: <BoxCubeIcon />, roles: ["ADMIN"] },
+  { group: "Configuración", name: "Usuarios y roles", path: "/configuracion/usuarios", icon: <UserRoundCog />, roles: ["ADMIN"] },
+  { group: "Configuración", name: "Profesionales", path: "/configuracion/profesionales", icon: <HiOutlineIdentification size={26} />, roles: ["ADMIN"] },
+  { group: "Configuración", name: "Tratamientos/Servicios", path: "/configuracion/servicios", icon: <MdOutlineMedicalInformation size={26} />, roles: ["ADMIN"] },
 
   // Utilidades
-  { group: "Utilidades", name: "Iniciar sesión", path: "/signin", icon: <PlugInIcon /> },
-  { group: "Utilidades", name: "Crear cuenta", path: "/signup", icon: <PlugInIcon />, roles: ["ADMIN"] },
-  { group: "Utilidades", name: "Página en blanco", path: "/blank", icon: <PageIcon /> },
-  { group: "Utilidades", name: "Error 404", path: "/error-404", icon: <PageIcon /> },
+  { group: "Utilidades", name: "Iniciar sesión", path: "/signin", icon: <LogIn /> },
+  { group: "Utilidades", name: "Crear cuenta", path: "/signup", icon: <SlUserFollow size={28} className="-ml-1" />, roles: ["ADMIN"] },
 ];
 
 /** =========================

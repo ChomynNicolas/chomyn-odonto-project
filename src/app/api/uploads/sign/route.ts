@@ -1,67 +1,76 @@
-// src/app/api/uploads/sign/route.ts
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { cloudinary } from "@/lib/cloudinary";
-import { auth } from "@/auth";
-// TODO: integra NextAuth y RBAC reales
+import { NextResponse, type NextRequest } from "next/server"
+import { z } from "zod"
+import { cloudinary } from "@/lib/cloudinary"
+import { requireRole } from "@/app/api/pacientes/_rbac"
 
-const SignBody = z.object({
+function jsonError(status: number, code: string, error: string, details?: any) {
+  return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
+}
+function jsonOk(data: any, status = 200) {
+  const res = NextResponse.json({ ok: true, data }, { status })
+  res.headers.set("Cache-Control", "no-store")
+  return res
+}
+
+const AdjuntoTipoEnum = z.enum([
+  "XRAY",
+  "INTRAORAL_PHOTO",
+  "EXTRAORAL_PHOTO",
+  "IMAGE",
+  "DOCUMENT",
+  "PDF",
+  "LAB_REPORT",
+  "OTHER",
+])
+
+const Body = z.object({
   pacienteId: z.number().int().positive().optional(),
   procedimientoId: z.number().int().positive().optional(),
-  tipo: z.enum(["FOTO", "RX", "LAB", "OTRO"]),
-  accessMode: z.enum(["PUBLIC","AUTHENTICATED"]).default(
-    (process.env.CLOUDINARY_DEFAULT_ACCESS_MODE?.toUpperCase() as "PUBLIC"|"AUTHENTICATED") ?? "AUTHENTICATED"
-  ),
-  // Opcional: para idempotencia/nombre controlado
-  publicId: z.string().min(3).max(120).optional(),
-});
+  tipo: AdjuntoTipoEnum, // carpeta según tipo
+  accessMode: z.enum(["PUBLIC", "AUTHENTICATED"]).optional(),
+  publicId: z.string().min(3).max(180).regex(/^[a-zA-Z0-9/_-]+$/).optional(),
+})
 
-export async function POST(req: Request) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // TODO: verifica rol (ADMIN|ODONT|RECEP) y permisos por paciente
+export async function POST(req: NextRequest) {
+  const gate = await requireRole(["ADMIN", "ODONT", "RECEP"])
+  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado")
 
-  const json = await req.json();
-  const parsed = SignBody.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  }
-  const { pacienteId, procedimientoId, tipo, accessMode, publicId } = parsed.data;
+  let raw: unknown
+  try { raw = await req.json() } catch { return jsonError(400, "VALIDATION_ERROR", "JSON inválido") }
+  const parsed = Body.safeParse(raw)
+  if (!parsed.success) return jsonError(400, "VALIDATION_ERROR", "Body inválido", parsed.error.issues)
 
-  const ts = Math.floor(Date.now() / 1000);
+  const { pacienteId, procedimientoId, tipo, publicId } = parsed.data
+  const accessMode = parsed.data.accessMode ?? ((process.env.CLOUDINARY_DEFAULT_ACCESS_MODE?.toUpperCase() as "PUBLIC"|"AUTHENTICATED") || "AUTHENTICATED")
 
-  const folderBase = process.env.CLOUDINARY_BASE_FOLDER || "chomyn/dev";
-  const folderParts = [
+  const ts = Math.floor(Date.now() / 1000)
+  const folderBase = process.env.CLOUDINARY_BASE_FOLDER || "chomyn/dev"
+  const folder = [
     folderBase,
     pacienteId ? `pacientes/${pacienteId}` : "otros",
     procedimientoId ? `procedimientos/${procedimientoId}` : "sin-procedimiento",
-    tipo.toLowerCase(),
-  ];
-  const folder = folderParts.join("/");
+    tipo.toLowerCase(), // p.ej. "xray", "pdf", "image"
+  ].join("/")
 
-  // Parâmetros de subida fija: recurso tipo image por defecto (el widget detecta)
-  const paramsToSign: Record<string, string> = {
+  const params: Record<string, string> = {
     timestamp: String(ts),
     folder,
-    access_mode: accessMode.toLowerCase(), // "authenticated" | "public"
-    // eager transform opcional (thumbnails)
-    // eager: "c_fill,w_640,h_480/q_auto:eco",
+    access_mode: accessMode.toLowerCase(),
     ...(publicId ? { public_id: publicId } : {}),
-  };
+  }
 
-  const signature = cloudinary.utils.api_sign_request(
-    paramsToSign,
-    process.env.CLOUDINARY_API_SECRET as string
-  );
+  const secret = process.env.CLOUDINARY_API_SECRET
+  if (!secret) return jsonError(500, "CONFIG_ERROR", "Falta CLOUDINARY_API_SECRET")
 
-  return NextResponse.json({
-    ok: true,
+  const signature = cloudinary.utils.api_sign_request(params, secret)
+
+  return jsonOk({
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
     timestamp: ts,
     signature,
     folder,
     accessMode,
-    publicId: publicId || null,
-  });
+    publicId: publicId ?? null,
+  })
 }
