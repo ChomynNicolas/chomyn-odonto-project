@@ -20,7 +20,7 @@ export default function TiemposAtencion({ tiempos, colas }:{ tiempos: KpiTiempos
 
       <div className="grid md:grid-cols-2 gap-4">
         <div>
-          <h4 className="text-sm font-medium text-gray-900 mb-2">En sala (CHECKED_IN)</h4>
+          <h4 className="text-sm font-medium text-gray-900 mb-2">En sala</h4>
           <ul className="space-y-2">
             {colas.checkIn.map((c) => (
               <li key={c.idCita} className="text-sm text-gray-700 flex justify-between">
@@ -32,7 +32,7 @@ export default function TiemposAtencion({ tiempos, colas }:{ tiempos: KpiTiempos
           </ul>
         </div>
         <div>
-          <h4 className="text-sm font-medium text-gray-900 mb-2">En atención (IN_PROGRESS)</h4>
+          <h4 className="text-sm font-medium text-gray-900 mb-2">En atención</h4>
           <ul className="space-y-2">
             {colas.enAtencion.map((c) => (
               <li key={c.idCita} className="text-sm text-gray-700 flex justify-between">

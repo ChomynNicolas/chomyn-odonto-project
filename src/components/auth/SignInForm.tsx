@@ -6,6 +6,8 @@ import { signIn } from "next-auth/react"
 import Label from "@/components/form/Label"
 import Button from "@/components/ui/button/Button"
 import Image from "next/image"
+import fondoInicio from "/public/images/logo/fondoinicio2.jpg"
+
 
 export default  function SignInForm() {
 
@@ -40,12 +42,12 @@ export default  function SignInForm() {
       {/* Imagen izquierda */}
       <div className="relative hidden lg:block">
         <Image
-          src="https://img.freepik.com/fotos-premium/imagen-fondo_910766-187.jpg?w=826"
+          src={fondoInicio}
           alt="Clínica odontológica"
           className="absolute inset-0 h-full w-full object-cover"
           loading="lazy"
-          width={1000}
-          height={1000}
+          width={640}
+          height={400}
         />
         <div className="absolute inset-0 bg-sky-900/10" />
       </div>
