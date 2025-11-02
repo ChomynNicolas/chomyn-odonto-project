@@ -1,4 +1,4 @@
-// src/app/api/dashboard/kpi/_dto.ts
+// src/app/api/dashboard/kpi/_dto.ts  (reemplazo de tipos ampliado)
 import type { EstadoCita } from "@prisma/client";
 
 export type KpiCitasHoyDTO = {
@@ -6,6 +6,35 @@ export type KpiCitasHoyDTO = {
   confirmadas: number;
   canceladas: number;
   noShow: number;
+  // Nuevos
+  confirmRate: number;   // 0..100 (redondeado)
+  cancelRate: number;    // 0..100
+  noShowRate: number;    // 0..100
+  sinConfirmar24h: number; // cantidad (para card rápida)
+};
+
+export type KpiTiemposDTO = {
+  atencionesHoy: number;
+  promedioMin: number | null;
+  medianaMin: number | null;
+};
+
+export type ProximaCitaItem = {
+  idCita: number;
+  inicioISO: string;
+  estado: EstadoCita;
+  paciente: string;
+  profesional: string;
+  consultorio?: string | null;
+};
+
+export type CitaAtrasadaItem = {
+  idCita: number;
+  inicioISO: string;       // ya pasó
+  minutosAtraso: number;   // ahora - inicio
+  paciente: string;
+  profesional: string;
+  consultorio?: string | null;
 };
 
 export type KpiOcupacionItem = {
@@ -16,12 +45,6 @@ export type KpiOcupacionItem = {
   ocupadas: number;
   bloqueos: number;
   libres: number;
-};
-
-export type KpiTiemposDTO = {
-  atencionesHoy: number;            // cantidad con startedAt & completedAt hoy
-  promedioMin: number | null;       // promedio en minutos
-  medianaMin: number | null;        // opcional
 };
 
 export type AlertaSinConfirmar = {
@@ -59,15 +82,9 @@ export type DashboardKpiResponse = {
   data: {
     fecha: string; // YYYY-MM-DD
     kpis: KpiCitasHoyDTO;
-    proximas10: Array<{
-      idCita: number;
-      inicioISO: string;
-      estado: EstadoCita;
-      paciente: string;
-      profesional: string;
-      consultorio?: string | null;
-    }>;
-    ocupacion: KpiOcupacionItem[];
+    proximas10: ProximaCitaItem[];
+    atrasadas: CitaAtrasadaItem[];   // 👈 NUEVO
+    // ocupacion: KpiOcupacionItem[]; // 👈 REMOVIDO DEL TAB HOY, pero lo dejamos por si lo reusas en otro tab
     tiempos: KpiTiemposDTO;
     alertas: {
       sinConfirmar24h: AlertaSinConfirmar[];

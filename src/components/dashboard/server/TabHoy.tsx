@@ -1,10 +1,9 @@
-// src/components/dashboard/server/TabHoy.tsx  (SERVER COMPONENT)
+// src/components/dashboard/server/TabHoy.tsx
 import { buildDashboardKpi } from "@/app/api/dashboard/kpi/_service";
 import type { Rol } from "@/lib/rbac";
 import KpiCards from "@/components/dashboard/KpiCards";
 import CitasProximas from "@/components/dashboard/CitasProximas";
-import TiemposAtencion from "@/components/dashboard/TiemposAtencion";
-import OcupacionConsultorios from "@/components/dashboard/OcupacionConsultorios";
+import FlujoAtencion from "@/components/dashboard/FlujoAtencion"; // renombrado
 import AlertasOperativas from "@/components/dashboard/AlertasOperativas";
 
 export default async function TabHoy({ role }:{ role: Rol }) {
@@ -18,20 +17,23 @@ export default async function TabHoy({ role }:{ role: Rol }) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 rounded-xl border bg-white p-4 shadow-sm">
-          <CitasProximas items={data.proximas10} />
-      </div>
+          <CitasProximas items={data.proximas10} atrasadas={data.atrasadas} />
+        </div>
         <div className="lg:col-span-1 rounded-xl border bg-white p-4 shadow-sm">
-          <TiemposAtencion tiempos={data.tiempos} colas={data.colas} />
+          <FlujoAtencion tiempos={data.tiempos} colas={data.colas} />
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <OcupacionConsultorios items={data.ocupacion} />
-        </div>
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <AlertasOperativas alertas={data.alertas} />
-        </div>
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <AlertasOperativas
+          alertas={data.alertas}
+          resumen={{
+            sinConfirmar24h: data.kpis.sinConfirmar24h,
+            atrasadas: data.atrasadas.length,
+            conflictos: data.alertas.conflictos.length,
+            bloqueos: data.alertas.bloqueosActivos.length,
+          }}
+        />
       </div>
     </div>
   );

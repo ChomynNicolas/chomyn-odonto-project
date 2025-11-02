@@ -15,7 +15,7 @@ export type WidgetDef = {
 import KpiCards from "@/components/dashboard/KpiCards";
 import CitasProximas from "@/components/dashboard/CitasProximas";
 import OcupacionConsultorios from "@/components/dashboard/OcupacionConsultorios";
-import TiemposAtencion from "@/components/dashboard/TiemposAtencion";
+import TiemposAtencion from "@/components/dashboard/FlujoAtencion";
 import AlertasOperativas from "@/components/dashboard/AlertasOperativas";
 
 // Tab "hoy": ordenamos por valor (KPIs -> próximas -> tiempos/colas -> ocupación -> alertas)
