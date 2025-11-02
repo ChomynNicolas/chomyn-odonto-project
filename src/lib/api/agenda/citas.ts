@@ -1,10 +1,5 @@
 // GET detalle
-export async function apiGetCitaDetalle(id: number) {
-  const r = await fetch(`/api/agenda/citas/${id}`, { cache: "no-store" })
-  if (!r.ok) throw new Error("No se pudo cargar el detalle de la cita")
-  const j = await r.json()
-  return j?.data ?? j
-}
+
 
 // POST crear (agrega defaults requeridos por tu schema)
 type CreateReq = {
@@ -44,18 +39,49 @@ export async function apiCreateCita(payload: CreateReq) {
   return j.data
 }
 
-// POST transición de estado
+
+
+
+// GET detalle (igual que ya tenías)
+export async function apiGetCitaDetalle(id: number) {
+  const r = await fetch(`/api/agenda/citas/${id}`, { cache: "no-store" })
+  if (!r.ok) throw new Error("No se pudo cargar el detalle de la cita")
+  const j = await r.json()
+  return j?.data ?? j
+}
+
+// POST transición de estado (ahora soporta cancelReason)
 export async function apiTransitionCita(
   id: number,
   action: "CONFIRM" | "CHECKIN" | "START" | "COMPLETE" | "CANCEL" | "NO_SHOW",
   note?: string,
+  cancelReason?: "PACIENTE" | "PROFESIONAL" | "CLINICA" | "EMERGENCIA" | "OTRO",
 ) {
+  const body: any = { action, note }
+  if (action === "CANCEL") body.cancelReason = cancelReason // requerido por /transition
+
   const r = await fetch(`/api/agenda/citas/${id}/transition`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, note }),
+    body: JSON.stringify(body),
   })
   const j = await r.json().catch(() => null)
-  if (!r.ok || !j?.ok) throw new Error(j?.error ?? "Error en transición")
+  if (!r.ok || !j?.ok) throw new Error(j?.message ?? j?.error ?? "Error en transición")
+  return j.data
+}
+
+// PATCH cancelar (endpoint dedicado)
+export async function apiCancelCita(
+  id: number,
+  motivoCancelacion: "PACIENTE" | "PROFESIONAL" | "CLINICA" | "EMERGENCIA" | "OTRO",
+  notas?: string,
+) {
+  const r = await fetch(`/api/agenda/citas/${id}/cancelar`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ motivoCancelacion, notas }),
+  })
+  const j = await r.json().catch(() => null)
+  if (!r.ok || !j?.ok) throw new Error(j?.message ?? j?.error ?? "Error cancelando cita")
   return j.data
 }

@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, context: { params: { id: string } 
   }
 
   // Params
-  const parsedParams = paramsSchema.safeParse(context.params);
+  const parsedParams = paramsSchema.safeParse(await context.params); // ✅
   if (!parsedParams.success) {
     return NextResponse.json(
       { ok: false, error: "BAD_REQUEST", details: parsedParams.error.flatten() },

@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { PacientePeek } from "@/components/pacientes/PacientePeek"
-import { apiGetCitaDetalle } from "@/lib/api/agenda/citas"
+import { apiCancelCita, apiGetCitaDetalle } from "@/lib/api/agenda/citas"
 import { apiTransitionCita } from "@/lib/api/agenda/citas"
 import {
   CalendarClock,
@@ -47,6 +47,11 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
   const [expandNotes, setExpandNotes] = React.useState(false)
   const [privacyMode, setPrivacyMode] = React.useState(false)
   const [actionLoading, setActionLoading] = React.useState<AccionCita | null>(null)
+  const [cancelOpen, setCancelOpen] = React.useState(false)
+const [cancelReason, setCancelReason] = React.useState<"PACIENTE"|"PROFESIONAL"|"CLINICA"|"EMERGENCIA"|"OTRO">("PACIENTE")
+const [cancelNotes, setCancelNotes] = React.useState("")
+const [cancelSubmitting, setCancelSubmitting] = React.useState(false)
+
 
   const loadData = React.useCallback(async () => {
     try {
@@ -66,18 +71,53 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
   }, [loadData])
 
   const handleAction = async (action: Exclude<AccionCita, "RESCHEDULE">, note?: string) => {
-    if (!dto) return
-    try {
-      setActionLoading(action)
-      await apiTransitionCita(idCita, action, note)
-      await loadData()
-      onAfterChange?.()
-    } catch (e: any) {
-      alert(e?.message ?? "Error en transición")
-    } finally {
-      setActionLoading(null)
-    }
+  if (!dto) return
+  if (action === "CANCEL") {
+    setCancelOpen(true)
+    return
   }
+  try {
+    setActionLoading(action)
+    await apiTransitionCita(idCita, action, note) // otras acciones
+    await loadData()
+    onAfterChange?.()
+  } catch (e: any) {
+    alert(e?.message ?? "Error en transición")
+  } finally {
+    setActionLoading(null)
+  }
+}
+
+const onConfirmCancel = async () => {
+  try {
+    setCancelSubmitting(true)
+    // Opción A: usar endpoint dedicado (recomendado)
+    await apiCancelCita(idCita, cancelReason, cancelNotes || undefined)
+
+    // Opción B (si preferís unificar en /transition):
+    // await apiTransitionCita(idCita, "CANCEL", cancelNotes || undefined, cancelReason)
+
+    await loadData()
+    onAfterChange?.()
+    setCancelOpen(false)
+  } catch (e: any) {
+    alert(e?.message ?? "No se pudo cancelar la cita")
+  } finally {
+    setCancelSubmitting(false)
+  }
+}
+
+function prettyMotivo(m: "PACIENTE"|"PROFESIONAL"|"CLINICA"|"EMERGENCIA"|"OTRO") {
+  switch (m) {
+    case "PACIENTE": return "Paciente";
+    case "PROFESIONAL": return "Profesional";
+    case "CLINICA": return "Clínica";
+    case "EMERGENCIA": return "Emergencia";
+    default: return "Otro";
+  }
+}
+
+
 
   if (loading) {
     return (
@@ -364,6 +404,13 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
               {dto.timestamps.completeAt && (
                 <p>Completada: {new Date(dto.timestamps.completeAt).toLocaleString("es")}</p>
               )}
+              {dto.timestamps.cancelledAt && (
+  <p>
+    Cancelada: {new Date(dto.timestamps.cancelledAt).toLocaleString("es")}
+    {dto.cancelReason && ` (${prettyMotivo(dto.cancelReason)})`}
+    {dto.auditoria.canceladoPor && ` — por ${dto.auditoria.canceladoPor}`}
+  </p>
+)}
             </div>
           </section>
         </div>
@@ -396,6 +443,17 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
           </Button>
         </div>
       </div>
+
+      <CancelCitaDialog
+  open={cancelOpen}
+  onOpenChange={setCancelOpen}
+  value={cancelReason}
+  onChange={setCancelReason}
+  notes={cancelNotes}
+  onNotesChange={setCancelNotes}
+  onConfirm={onConfirmCancel}
+  submitting={cancelSubmitting}
+/>
     </div>
   )
 }
@@ -636,3 +694,73 @@ function getAccionesPermitidas(
   // Filtrar por rol
   return acciones.filter((a) => !rol || a.roles.includes(rol))
 }
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+function CancelCitaDialog({
+  open,
+  onOpenChange,
+  value,
+  onChange,
+  notes,
+  onNotesChange,
+  onConfirm,
+  submitting,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  value: "PACIENTE" | "PROFESIONAL" | "CLINICA" | "EMERGENCIA" | "OTRO"
+  onChange: (v: "PACIENTE" | "PROFESIONAL" | "CLINICA" | "EMERGENCIA" | "OTRO") => void
+  notes: string
+  onNotesChange: (v: string) => void
+  onConfirm: () => void
+  submitting: boolean
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cancelar cita</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Motivo</Label>
+            <Select value={value} onValueChange={onChange}>
+              <SelectTrigger><SelectValue placeholder="Seleccionar motivo" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PACIENTE">Paciente</SelectItem>
+                <SelectItem value="PROFESIONAL">Profesional</SelectItem>
+                <SelectItem value="CLINICA">Clínica</SelectItem>
+                <SelectItem value="EMERGENCIA">Emergencia</SelectItem>
+                <SelectItem value="OTRO">Otro</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notas (opcional)</Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => onNotesChange(e.target.value)}
+              placeholder="Detalle o comentario adicional…"
+              maxLength={2000}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Volver
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={submitting}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : "Confirmar cancelación"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

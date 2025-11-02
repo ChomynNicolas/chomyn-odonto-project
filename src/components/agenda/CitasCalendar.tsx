@@ -17,6 +17,34 @@ import type { CurrentUser, AgendaFilters, EstadoCita } from "@/types/agenda"
 import { cn } from "@/lib/utils"
 import { NuevaCitaSheet } from "./NuevaCitaSheet"
 
+// Constantes de horario laboral (local)
+const WORK_START = "08:00";
+const WORK_END = "16:00";
+
+function isWithinWorkingHours(start: Date, end: Date) {
+  const [sh, sm] = WORK_START.split(":").map(Number);
+  const [eh, em] = WORK_END.split(":").map(Number);
+
+  const s = new Date(start);
+  const e = new Date(end);
+
+  const startMinutes = s.getHours() * 60 + s.getMinutes();
+  const endMinutes = e.getHours() * 60 + e.getMinutes();
+  const workStartMinutes = sh * 60 + (sm || 0);
+  const workEndMinutes = eh * 60 + (em || 0);
+
+  // Misma fecha calendario
+  const sameYMD =
+    s.getFullYear() === e.getFullYear() &&
+    s.getMonth() === e.getMonth() &&
+    s.getDate() === e.getDate();
+
+  if (!sameYMD) return false;
+  // Debe iniciar >= 08:00 y terminar <= 16:00
+  return startMinutes >= workStartMinutes && endMinutes <= workEndMinutes;
+}
+
+
 export default function CitasCalendar({
   currentUser,
 }: {
@@ -47,13 +75,21 @@ export default function CitasCalendar({
     setDrawerOpen(false)
   }, [])
 
+  function roundToMinutes(d: Date, stepMin = 15) {
+  const ms = stepMin * 60_000;
+  return new Date(Math.round(d.getTime() / ms) * ms);
+}
+
   const onSelectDate = useCallback((arg: DateSelectArg) => {
-    setNuevaCitaDefaults({
-      inicio: arg.start,
-      fin: arg.end ?? new Date(arg.start.getTime() + 30 * 60000),
-    })
-    setNuevaCitaOpen(true)
-  }, [])
+  const start = roundToMinutes(arg.start, 15);
+  const end = arg.end ? roundToMinutes(arg.end, 15) : new Date(start.getTime() + 30 * 60_000);
+
+  setNuevaCitaDefaults({ inicio: start, fin: end });
+  setNuevaCitaOpen(true);
+
+  // Limpia la selección visual del calendario
+  arg.view.calendar.unselect?.();
+}, []);
 
   const onEventClick = useCallback(
     (arg: EventClickArg) => {
@@ -62,6 +98,8 @@ export default function CitasCalendar({
     },
     [openDrawer],
   )
+ 
+
 
   const handleAfterChange = useCallback(() => {
     calendarRef.current?.getApi().refetchEvents()
@@ -115,8 +153,14 @@ export default function CitasCalendar({
             locale="es"
             timeZone="local"
             initialView="timeGridWeek"
-            slotMinTime="07:00:00"
-            slotMaxTime="21:00:00"
+            slotMinTime={WORK_START}
+  slotMaxTime={WORK_END}
+  businessHours={{
+    // Lunes a sábado (ajusta si trabajas otros días)
+    daysOfWeek: [1, 2, 3, 4, 5, 6],
+    startTime: WORK_START,
+    endTime: WORK_END,
+  }}
             slotDuration="00:15:00"
             scrollTime="08:00:00"
             nowIndicator
@@ -129,6 +173,7 @@ export default function CitasCalendar({
             }}
             selectable
             selectMirror
+            selectAllow={(si) => isWithinWorkingHours(si.start, si.end)}
             select={onSelectDate}
             eventClick={onEventClick}
             displayEventEnd
@@ -165,12 +210,14 @@ export default function CitasCalendar({
       </Sheet>
 
       <NuevaCitaSheet
-        open={nuevaCitaOpen}
-        onOpenChange={setNuevaCitaOpen}
-        defaults={nuevaCitaDefaults}
-        currentUser={currentUser}
-        onSuccess={handleAfterChange}
-      />
+  key={nuevaCitaDefaults.inicio?.getTime() ?? 0}
+  open={nuevaCitaOpen}
+  onOpenChange={setNuevaCitaOpen}
+  defaults={nuevaCitaDefaults}
+  currentUser={currentUser}
+  onSuccess={handleAfterChange}
+/>
+
     </div>
   )
 }

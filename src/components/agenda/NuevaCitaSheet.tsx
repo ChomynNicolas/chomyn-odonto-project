@@ -41,6 +41,14 @@ interface NuevaCitaSheetProps {
   onSuccess?: () => void
 }
 
+function pad(n: number) { return String(n).padStart(2, "0"); }
+function toLocalDateInputValue(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function toLocalTimeInputValue(d: Date): string {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSuccess }: NuevaCitaSheetProps) {
   const [checking, setChecking] = React.useState(false)
   const [disponibilidad, setDisponibilidad] = React.useState<{
@@ -55,6 +63,7 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
     reset,
     watch,
     setValue,
+    getValues,
   } = useForm<NuevaCitaForm>({
     resolver: zodResolver(nuevaCitaSchema),
     defaultValues: {
@@ -62,12 +71,14 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
       duracionMinutos: 30,
       tipo: "CONSULTA",
       motivo: "Cita",
-      fecha: defaults?.inicio ? toDateString(defaults.inicio) : toDateString(new Date()),
-      horaInicio: defaults?.inicio ? toTimeString(defaults.inicio) : "09:00",
+      fecha: defaults?.inicio ? toLocalDateInputValue(defaults.inicio) : toLocalDateInputValue(new Date()),
+      horaInicio: defaults?.inicio ? toLocalTimeInputValue(defaults.inicio) : "09:00",
     },
   })
 
   const watchedFields = watch(["fecha", "horaInicio", "duracionMinutos", "profesionalId", "consultorioId"])
+
+  
 
   React.useEffect(() => {
     const [fecha, horaInicio, duracionMinutos, profesionalId, consultorioId] = watchedFields
@@ -94,6 +105,26 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
 
     return () => clearTimeout(timer)
   }, watchedFields)
+
+  React.useEffect(() => {
+    if (!open) return;
+    const inicio = defaults?.inicio ?? new Date();
+
+    // Conserva lo que el usuario ya tocó si aplica
+    const current = getValues();
+    reset({
+      ...current,
+      fecha: toLocalDateInputValue(inicio),
+      horaInicio: toLocalTimeInputValue(inicio),
+      // respeta profesional si es ODONT
+      profesionalId:
+        current.profesionalId ??
+        (currentUser?.rol === "ODONT" ? currentUser.profesionalId ?? undefined : undefined),
+      // mantén otros defaults
+      duracionMinutos: current.duracionMinutos || 30,
+      tipo: (current.tipo as NuevaCitaForm["tipo"]) || "CONSULTA",
+    });
+  }, [open, defaults?.inicio, reset, getValues, currentUser]);
 
   const onSubmit = async (data: NuevaCitaForm) => {
     try {
@@ -280,10 +311,10 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
                                 type="button"
                                 className="underline hover:no-underline"
                                 onClick={() => {
-                                  const d = new Date(alt.inicio)
-                                  setValue("fecha", toDateString(d))
-                                  setValue("horaInicio", toTimeString(d))
-                                }}
+  const d = new Date(alt.inicio)
+  setValue("fecha", toLocalDateInputValue(d))
+  setValue("horaInicio", toLocalTimeInputValue(d))
+}}
                               >
                                 {new Date(alt.inicio).toLocaleString("es", {
                                   weekday: "short",
@@ -330,10 +361,3 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
   )
 }
 
-function toDateString(d: Date): string {
-  return d.toISOString().split("T")[0]
-}
-
-function toTimeString(d: Date): string {
-  return d.toTimeString().slice(0, 5)
-}

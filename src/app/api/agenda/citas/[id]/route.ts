@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   }
 
   try {
-    const rol = (auth.session.user as any)?.rol
+    const rol = (auth.session.user as any)?.rolNombre ?? (auth.session.user as any)?.rol ?? "RECEP"
     const dto = await getCitaDetail(parsed.data.id, rol)
 
     if (!dto) {

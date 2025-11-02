@@ -142,16 +142,18 @@ export interface CitaDetalleDTO {
       fecha: string // ISO
       motivo: string | null
     } | null
+    canceladoPor?: string | null
   }
 
   // Cancelación/No-show
-  cancelReason: string | null
+  cancelReason?: "PACIENTE"|"PROFESIONAL"|"CLINICA"|"EMERGENCIA"|"OTRO" | null
 
   // Timestamps de transiciones
   timestamps: {
     checkinAt: string | null
     startAt: string | null
     completeAt: string | null
+    cancelledAt: string | null  
   }
 }
 

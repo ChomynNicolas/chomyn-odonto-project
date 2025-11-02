@@ -2,7 +2,7 @@
 // API CLIENT - Disponibilidad de Agenda
 // ============================================================================
 
-import type { DisponibilidadResponse } from "@/lib/types/agenda"
+import type { DisponibilidadResponse } from "@/types/agenda"
 
 export interface GetDisponibilidadParams {
   fecha: string // YYYY-MM-DD
@@ -41,7 +41,7 @@ export async function apiGetDisponibilidad(params: GetDisponibilidadParams): Pro
  */
 export async function apiCheckSlotDisponible(params: {
   fecha: string
-  inicio: string // HH:mm
+  inicio: string // HH:mm local
   duracionMinutos: number
   profesionalId?: number
   consultorioId?: number
@@ -55,32 +55,33 @@ export async function apiCheckSlotDisponible(params: {
     consultorioId: params.consultorioId,
     duracionMinutos: params.duracionMinutos,
     intervalo: 15,
-  })
+  });
 
-  // Construir datetime del slot solicitado
-  const [h, m] = params.inicio.split(":").map(Number)
-  const solicitadoStart = new Date(`${params.fecha}T${params.inicio}:00`)
-  const solicitadoEnd = new Date(solicitadoStart.getTime() + params.duracionMinutos * 60000)
+  // Slot solicitado en local -> Date (local) -> epoch
+  const solicitadoStart = new Date(`${params.fecha}T${params.inicio}:00`);
+  const solicitadoEnd = new Date(solicitadoStart.getTime() + params.duracionMinutos * 60000);
 
-  // Verificar si el slot solicitado está en la lista de disponibles
+  // ¿Existe exactamente ese slot en los libres?
   const disponible = disp.slots.some((s) => {
-    const slotStart = new Date(s.slotStart)
-    const slotEnd = new Date(s.slotEnd)
-    return (
-      slotStart.getTime() === solicitadoStart.getTime() &&
-      slotEnd.getTime() === solicitadoEnd.getTime() &&
-      !s.motivoBloqueo
-    )
-  })
+    const slotStart = new Date(s.slotStart);
+    const slotEnd = new Date(s.slotEnd);
+    return slotStart.getTime() === solicitadoStart.getTime() &&
+           slotEnd.getTime() === solicitadoEnd.getTime() &&
+           !s.motivoBloqueo;
+  });
 
-  // Sugerir 3 alternativas (primeros 3 slots libres)
+  // Alternativas: por cercanía al solicitado
   const alternativas = disp.slots
     .filter((s) => !s.motivoBloqueo)
-    .slice(0, 3)
     .map((s) => ({
       inicio: s.slotStart,
       fin: s.slotEnd,
+      dist: Math.abs(new Date(s.slotStart).getTime() - solicitadoStart.getTime()),
     }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, 3)
+    .map(({ inicio, fin }) => ({ inicio, fin }));
 
-  return { disponible, alternativas }
+  return { disponible, alternativas };
 }
+
