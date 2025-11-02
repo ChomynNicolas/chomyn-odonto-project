@@ -1,59 +1,45 @@
-// app/api/agenda/citas/_service.ts
-import { PrismaClient, EstadoCita } from "@prisma/client";
-import type { GetCitasQuery } from "./_schemas";
-import type { CitaListItemDTO } from "./_dto";
+// ============================================================================
+// SERVICE - Listar Citas (con filtros)
+// ============================================================================
 
-const prisma = new PrismaClient();
+import { PrismaClient, type EstadoCita, type TipoCita } from "@prisma/client"
+import type { GetCitasQuery } from "./_schemas"
 
-const SORT_WHITELIST = new Set<("inicio" | "createdAt" | "updatedAt")>([
-  "inicio",
-  "createdAt",
-  "updatedAt",
-]);
+const prisma = new PrismaClient()
 
-function parseSort(sort: string): { field: "inicio" | "createdAt" | "updatedAt"; dir: "asc" | "desc" } {
-  const [rawField, rawDir] = (sort || "inicio:asc").split(":");
-  const field = (rawField as any) as "inicio" | "createdAt" | "updatedAt";
-  const dir = rawDir?.toLowerCase() === "desc" ? "desc" : "asc";
-  return {
-    field: SORT_WHITELIST.has(field) ? field : "inicio",
-    dir,
-  };
-}
+export async function listCitas(query: GetCitasQuery, page: number, limit: number, skip: number) {
+  const where: any = {}
 
-export async function listCitas(params: GetCitasQuery, page: number, limit: number, skip: number) {
-  const { fechaInicio, fechaFin, profesionalId, pacienteId, consultorioId, estado, sort } = params;
+  if (query.profesionalId) where.profesionalId = query.profesionalId
+  if (query.consultorioId) where.consultorioId = query.consultorioId
+  if (query.pacienteId) where.pacienteId = query.pacienteId
 
-  // estados: puede venir string "A,B,C" o array de schema
-  const estados: EstadoCita[] | undefined = Array.isArray(estado)
-    ? (estado as EstadoCita[])
-    : (typeof estado === "string" ? (estado.split(",").filter(Boolean) as EstadoCita[]) : undefined);
-
-  const { field, dir } = parseSort(sort || "inicio:asc");
-
-  const where: any = {};
-  if (fechaInicio || fechaFin) {
-    where.inicio = {};
-    if (fechaInicio) where.inicio.gte = fechaInicio;
-    if (fechaFin) where.inicio.lte = fechaFin;
+  if (query.estado) {
+    const estados = query.estado.split(",").map((s) => s.trim().toUpperCase())
+    where.estado = { in: estados as EstadoCita[] }
   }
-  if (profesionalId) where.profesionalId = profesionalId;
-  if (pacienteId) where.pacienteId = pacienteId;
-  if (consultorioId) where.consultorioId = consultorioId;
-  if (estados && estados.length > 0) where.estado = { in: estados };
 
-  const [total, filas] = await prisma.$transaction([
-    prisma.cita.count({ where }),
+  if (query.tipo) {
+    const tipos = query.tipo.split(",").map((t) => t.trim().toUpperCase())
+    where.tipo = { in: tipos as TipoCita[] }
+  }
+
+  if (query.desde || query.hasta) {
+    where.inicio = {}
+    if (query.desde) where.inicio.gte = new Date(query.desde)
+    if (query.hasta) where.inicio.lte = new Date(query.hasta)
+  }
+
+  const [rows, total] = await Promise.all([
     prisma.cita.findMany({
       where,
-      orderBy: { [field]: dir },
       skip,
       take: limit,
+      orderBy: { inicio: "asc" },
       select: {
         idCita: true,
         inicio: true,
         fin: true,
-        duracionMinutos: true,
         tipo: true,
         estado: true,
         motivo: true,
@@ -69,26 +55,28 @@ export async function listCitas(params: GetCitasQuery, page: number, limit: numb
             persona: { select: { nombres: true, apellidos: true } },
           },
         },
-        consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
+        consultorio: {
+          select: { idConsultorio: true, nombre: true, colorHex: true },
+        },
       },
     }),
-  ]);
+    prisma.cita.count({ where }),
+  ])
 
-  const data: CitaListItemDTO[] = filas.map((c) => ({
+  const data = rows.map((c) => ({
     idCita: c.idCita,
     inicio: c.inicio.toISOString(),
     fin: c.fin.toISOString(),
-    duracionMinutos: c.duracionMinutos,
     tipo: c.tipo,
     estado: c.estado,
-    motivo: c.motivo ?? null,
-    profesional: {
-      id: c.profesional.idProfesional,
-      nombre: `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim(),
-    },
+    motivo: c.motivo,
     paciente: {
       id: c.paciente.idPaciente,
       nombre: `${c.paciente.persona.nombres} ${c.paciente.persona.apellidos}`.trim(),
+    },
+    profesional: {
+      id: c.profesional.idProfesional,
+      nombre: `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim(),
     },
     consultorio: c.consultorio
       ? {
@@ -96,18 +84,16 @@ export async function listCitas(params: GetCitasQuery, page: number, limit: numb
           nombre: c.consultorio.nombre,
           colorHex: c.consultorio.colorHex,
         }
-      : undefined,
-  }));
+      : null,
+  }))
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const meta = {
-    page,
-    limit,
-    total,
-    totalPages,
-    hasNext: page < totalPages,
-    hasPrev: page > 1,
-  };
-
-  return { data, meta };
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  }
 }

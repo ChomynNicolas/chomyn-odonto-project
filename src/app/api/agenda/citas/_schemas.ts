@@ -1,33 +1,19 @@
-// app/api/agenda/citas/_schemas.ts
-import { z } from "zod";
+// ============================================================================
+// SCHEMAS ZOD - Citas (Query, Params)
+// ============================================================================
 
-const asDate = z.preprocess((v) => (typeof v === "string" ? new Date(v) : v), z.date());
-
-export const estadoEnum = z.enum([
-  "SCHEDULED",
-  "CONFIRMED",
-  "CHECKED_IN",
-  "IN_PROGRESS",
-  "COMPLETED",
-  "CANCELLED",
-  "NO_SHOW",
-]);
+import { z } from "zod"
 
 export const getCitasQuerySchema = z.object({
-  fechaInicio: asDate.optional(),
-  fechaFin: asDate.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
   profesionalId: z.coerce.number().int().positive().optional(),
-  pacienteId: z.coerce.number().int().positive().optional(),
   consultorioId: z.coerce.number().int().positive().optional(),
-  estado: z
-    .union([estadoEnum, z.string().transform((s) => s.split(",").filter(Boolean))])
-    .optional(),
-  page: z.coerce.number().int().positive().optional(),
-  limit: z.coerce.number().int().positive().max(100).optional(),
-  sort: z
-    .string()
-    .optional()
-    .default("inicio:asc"), // formato campo:dir
-});
+  pacienteId: z.coerce.number().int().positive().optional(),
+  estado: z.string().optional(), // comma-separated
+  tipo: z.string().optional(), // comma-separated
+  desde: z.string().datetime().optional(),
+  hasta: z.string().datetime().optional(),
+})
 
-export type GetCitasQuery = z.infer<typeof getCitasQuerySchema>;
+export type GetCitasQuery = z.infer<typeof getCitasQuerySchema>

@@ -1,7 +1,11 @@
-import { z } from "zod";
+// ============================================================================
+// SCHEMAS ZOD - Detalle de Cita
+// ============================================================================
+
+import { z } from "zod"
 
 export const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
-});
+})
 
-export type Params = z.infer<typeof paramsSchema>;
+export type ParamsSchema = z.infer<typeof paramsSchema>
