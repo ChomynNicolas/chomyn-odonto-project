@@ -1,13 +1,42 @@
 // src/app/api/profesionales/options/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { prisma as db } from "@/lib/prisma";
+import { z } from "zod";
 export const revalidate = 0;
-export async function GET() {
+
+const qs = z.object({
+  q: z.string().trim().min(0).max(60).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(50), // por defecto conservamos tu comportamiento “todos”
+});
+
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  const { q, limit } = qs.parse(Object.fromEntries(sp.entries()));
+
+  const where = q
+    ? {
+        AND: [
+          { estaActivo: true },
+          {
+            OR: [
+              { persona: { nombres: { contains: q, mode: "insensitive" } } },
+              { persona: { apellidos: { contains: q, mode: "insensitive" } } },
+            ],
+          },
+        ],
+      }
+    : { estaActivo: true };
+
   const rows = await db.profesional.findMany({
-    where: { estaActivo: true },
+    where,
+    take: limit,
     include: { persona: { select: { nombres: true, apellidos: true } } },
     orderBy: [{ idProfesional: "asc" }],
   });
-  const data = rows.map((r) => ({ id: r.idProfesional, nombre: [r.persona?.nombres, r.persona?.apellidos].filter(Boolean).join(" ") }));
+
+  const data = rows.map((r) => ({
+    id: r.idProfesional,
+    nombre: [r.persona?.nombres, r.persona?.apellidos].filter(Boolean).join(" "),
+  }));
   return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
 }

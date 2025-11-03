@@ -88,6 +88,7 @@ export interface CitaDetalleDTO {
   paciente: {
     id: number
     nombre: string
+    fechaNacimiento: string,
     documento: string | null
     telefono: string | null
     email: string | null

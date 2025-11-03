@@ -15,6 +15,11 @@ import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { apiCreateCita } from "@/lib/api/agenda/citas"
 import { apiCheckSlotDisponible } from "@/lib/api/agenda/disponibilidad"
 import type { CurrentUser } from "@/types/agenda"
+// en tu file de NuevaCitaSheet:
+import { Controller } from "react-hook-form";
+import { PacienteAsyncSelect } from "@/components/selectors/PacienteAsyncSelect";
+import { ProfesionalAsyncSelect } from "@/components/selectors/ProfesionalAsyncSelect";
+
 
 const nuevaCitaSchema = z.object({
   pacienteId: z.coerce.number().int().positive({ message: "ID de paciente requerido" }),
@@ -64,10 +69,13 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
     watch,
     setValue,
     getValues,
+    control, 
   } = useForm<NuevaCitaForm>({
     resolver: zodResolver(nuevaCitaSchema),
     defaultValues: {
+      pacienteId: undefined, // 👈 opcional pero recomendado para evitar "uncontrolled→controlled"
       profesionalId: currentUser?.rol === "ODONT" ? (currentUser.profesionalId ?? undefined) : undefined,
+      consultorioId: 1,
       duracionMinutos: 30,
       tipo: "CONSULTA",
       motivo: "Cita",
@@ -161,39 +169,43 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-6">
           {/* Paciente */}
           <div className="space-y-2">
-            <Label htmlFor="pacienteId">
-              Paciente <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="pacienteId"
-              type="number"
-              placeholder="ID del paciente"
-              {...register("pacienteId")}
-              aria-invalid={!!errors.pacienteId}
-              aria-describedby={errors.pacienteId ? "pacienteId-error" : undefined}
-            />
-            {errors.pacienteId && (
-              <p id="pacienteId-error" className="text-sm text-destructive">
-                {errors.pacienteId.message}
-              </p>
-            )}
-          </div>
+  <Label>Paciente <span className="text-destructive">*</span></Label>
+  <Controller
+    name="pacienteId"
+    control={control}  
+    render={({ field }) => (
+      <PacienteAsyncSelect
+        value={field.value}
+        onChange={(id) => field.onChange(id)}
+        placeholder="Buscar por nombre o cédula"
+        onCreateNew={() => {
+          // opcional: abrir alta rápida de paciente
+          // p.ej., setOpenAltaRapida(true)
+        }}
+      />
+    )}
+  />
+  {errors.pacienteId && <p className="text-sm text-destructive">{errors.pacienteId.message}</p>}
+</div>
 
           {/* Profesional */}
           <div className="space-y-2">
-            <Label htmlFor="profesionalId">
-              Profesional <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="profesionalId"
-              type="number"
-              placeholder="ID del profesional"
-              {...register("profesionalId")}
-              disabled={currentUser?.rol === "ODONT"}
-              aria-invalid={!!errors.profesionalId}
-            />
-            {errors.profesionalId && <p className="text-sm text-destructive">{errors.profesionalId.message}</p>}
-          </div>
+  <Label>Profesional <span className="text-destructive">*</span></Label>
+  <Controller
+    name="profesionalId"
+    control={control}  
+    render={({ field }) => (
+      <ProfesionalAsyncSelect
+        value={field.value}
+        onChange={(id) => field.onChange(id)}
+        placeholder="Buscar profesional"
+        // si el usuario es ODONT, ya lo precargas y puedes deshabilitar:
+        disabled={currentUser?.rol === "ODONT"}
+      />
+    )}
+  />
+  {errors.profesionalId && <p className="text-sm text-destructive">{errors.profesionalId.message}</p>}
+</div>
 
           {/* Consultorio */}
           <div className="space-y-2">

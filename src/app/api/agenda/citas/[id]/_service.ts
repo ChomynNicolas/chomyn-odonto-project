@@ -51,6 +51,7 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
               nombres: true,
               apellidos: true,
               documento: { select: { tipo: true, numero: true } },
+              fechaNacimiento:true,
               contactos: {
                 where: { activo: true },
                 select: { tipo: true, valorNorm: true, esPrincipal: true },
