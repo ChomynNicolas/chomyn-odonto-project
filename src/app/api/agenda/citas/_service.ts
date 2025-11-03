@@ -41,6 +41,7 @@ export async function listCitas(query: GetCitasQuery, page: number, limit: numbe
         inicio: true,
         fin: true,
         tipo: true,
+        duracionMinutos: true, // 👈 agrega esto
         estado: true,
         motivo: true,
         profesional: {
@@ -67,6 +68,7 @@ export async function listCitas(query: GetCitasQuery, page: number, limit: numbe
     idCita: c.idCita,
     inicio: c.inicio.toISOString(),
     fin: c.fin.toISOString(),
+    duracionMinutos: c.duracionMinutos, // 
     tipo: c.tipo,
     estado: c.estado,
     motivo: c.motivo,
