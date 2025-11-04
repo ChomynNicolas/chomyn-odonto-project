@@ -1,115 +1,185 @@
 // app/api/agenda/citas/[id]/_service.ts
-import { PrismaClient } from "@prisma/client";
-import type { CitaDetailDTO } from "./_dto";
+import { PrismaClient, EstadoCita } from "@prisma/client"
+import type { CitaDetalleDTO, RolUsuario } from "@/types/agenda"
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
-/**
- * Obtiene una cita con relaciones mínimas necesarias y mapea a DTO estable.
- * Select explícitos para no filtrar datos sensibles por accidente.
- */
-export async function getCitaDetail(idCita: number): Promise<CitaDetailDTO | null> {
-  const row = await prisma.cita.findUnique({
+export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<CitaDetalleDTO | null> {
+  // Select condicional para alergias
+  const patientAllergySelect: any = {
+    where: { isActive: true },
+    select: { idPatientAllergy: true, label: true },
+  }
+  if (rol === "RECEP") patientAllergySelect.take = 1
+
+  const userMiniSelect = {
+    idUsuario: true,
+    usuario: true,
+    nombreApellido: true,
+    profesional: { select: { persona: { select: { nombres: true, apellidos: true } } } },
+  } as const
+
+  const cita = await prisma.cita.findUnique({
     where: { idCita },
     select: {
       idCita: true,
       inicio: true,
       fin: true,
       duracionMinutos: true,
-      tipo: true,
       estado: true,
+      tipo: true,
       motivo: true,
       notas: true,
+
+      // cancelación (quién/cuándo/por qué)
+      cancelReason: true,
+      cancelledAt: true,
+      canceladoPor: { select: userMiniSelect },
+
+      // timestamps de flujo
       checkedInAt: true,
       startedAt: true,
       completedAt: true,
-      cancelReason: true,
-      cancelledAt: true,
+
       createdAt: true,
-      updatedAt: true,
 
-      reprogramadaDesdeId: true,
-      reprogramaciones: { select: { idCita: true } }, // hijas
-
-      creadoPor: {
-        select: {
-          idUsuario: true,
-          nombreApellido: true,
-        },
-      },
-      canceladoPor: {
-        select: {
-          idUsuario: true,
-          nombreApellido: true,
-        },
-      },
-
-      profesional: {
-        select: {
-          idProfesional: true,
-          persona: { select: { nombres: true, apellidos: true } },
-        },
-      },
       paciente: {
         select: {
           idPaciente: true,
-          persona: { select: { nombres: true, apellidos: true } },
+          persona: {
+            select: {
+              nombres: true,
+              apellidos: true,
+              documento: { select: { tipo: true, numero: true } },
+              fechaNacimiento:true,
+              contactos: {
+                where: { activo: true },
+                select: { tipo: true, valorNorm: true, esPrincipal: true },
+              },
+            },
+          },
+          PatientAllergy: patientAllergySelect,
+          citas: { where: { estado: EstadoCita.NO_SHOW }, select: { idCita: true } },
         },
       },
-      consultorio: {
-        select: { idConsultorio: true, nombre: true, colorHex: true },
+
+      profesional: { select: { idProfesional: true, persona: { select: { nombres: true, apellidos: true } } } },
+      consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
+
+      creadoPor: { select: userMiniSelect },
+
+      // ⬇️ Traemos la última transición registrada
+      CitaEstadoHistorial: {
+        orderBy: { changedAt: "desc" },
+        take: 1,
+        select: {
+          estadoPrevio: true,
+          estadoNuevo: true,
+          nota: true,
+          changedAt: true,
+          cambiadoPor: { select: userMiniSelect },
+        },
       },
     },
-  });
+  })
 
-  if (!row) return null;
+  if (!cita) return null
 
-  const dto: CitaDetailDTO = {
-    idCita: row.idCita,
-    inicio: row.inicio.toISOString(),
-    fin: row.fin.toISOString(),
-    duracionMinutos: row.duracionMinutos,
-    tipo: row.tipo,
-    estado: row.estado,
-    motivo: row.motivo ?? null,
-    notas: row.notas ?? null,
+  const contactos = cita.paciente.persona.contactos
+  const principal = contactos.find((c) => c.esPrincipal)
+  const telefono =
+    principal?.tipo === "PHONE" ? principal.valorNorm : (contactos.find((c) => c.tipo === "PHONE")?.valorNorm ?? null)
+  const email =
+    principal?.tipo === "EMAIL" ? principal.valorNorm : (contactos.find((c) => c.tipo === "EMAIL")?.valorNorm ?? null)
 
-    checkedInAt: row.checkedInAt ? row.checkedInAt.toISOString() : null,
-    startedAt: row.startedAt ? row.startedAt.toISOString() : null,
-    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+  const tieneAlergias = (cita.paciente.PatientAllergy?.length ?? 0) > 0
+  const alergiasDetalle =
+    rol === "RECEP"
+      ? null
+      : (cita.paciente.PatientAllergy?.map((a: any) => a.label).filter(Boolean).join(", ") || null)
 
-    cancelReason: row.cancelReason ?? null,
-    cancelledAt: row.cancelledAt ? row.cancelledAt.toISOString() : null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+  const noShowCount = cita.paciente.citas.length
 
-    creadoPor: {
-      id: row.creadoPor.idUsuario,
-      nombre: row.creadoPor.nombreApellido,
+  const displayUser = (u?: {
+    usuario?: string | null
+    nombreApellido?: string | null
+    profesional?: { persona?: { nombres?: string | null; apellidos?: string | null } | null } | null
+  }) => {
+    if (!u) return "Usuario"
+    const p = u.profesional?.persona
+    if (p?.nombres || p?.apellidos) return `${p?.nombres ?? ""} ${p?.apellidos ?? ""}`.trim() || (u.nombreApellido ?? u.usuario ?? "Usuario")
+    return (u.nombreApellido?.trim() || u.usuario || "Usuario")
+  }
+
+  const creadorNombre = displayUser(cita.creadoPor)
+  const last = cita.CitaEstadoHistorial?.[0]
+  const ultimaTransicion = last
+    ? {
+        usuario: displayUser(last.cambiadoPor || undefined),
+        fecha: last.changedAt.toISOString(),
+        motivo: last.nota ?? null,
+        estado: last.estadoNuevo, // opcional pero útil
+      }
+    : null
+
+  const canceladoPorNombre = cita.canceladoPor ? displayUser(cita.canceladoPor) : null
+
+  const dto: CitaDetalleDTO = {
+    idCita: cita.idCita,
+    inicio: cita.inicio.toISOString(),
+    fin: cita.fin.toISOString(),
+    duracionMinutos: cita.duracionMinutos,
+    estado: cita.estado,
+    tipo: cita.tipo,
+    motivo: cita.motivo ?? null,
+    notas: cita.notas ?? null,
+
+    paciente: {
+      id: cita.paciente.idPaciente,
+      nombre: `${cita.paciente.persona.nombres} ${cita.paciente.persona.apellidos}`.trim(),
+      documento: cita.paciente.persona.documento
+        ? `${cita.paciente.persona.documento.tipo} ${cita.paciente.persona.documento.numero}`
+        : null,
+      telefono,
+      email,
     },
-    canceladoPor: row.canceladoPor
-      ? { id: row.canceladoPor.idUsuario, nombre: row.canceladoPor.nombreApellido }
-      : null,
 
     profesional: {
-      id: row.profesional.idProfesional,
-      nombre: `${row.profesional.persona.nombres} ${row.profesional.persona.apellidos}`.trim(),
+      id: cita.profesional.idProfesional,
+      nombre: `${cita.profesional.persona.nombres} ${cita.profesional.persona.apellidos}`.trim(),
     },
-    paciente: {
-      id: row.paciente.idPaciente,
-      nombre: `${row.paciente.persona.nombres} ${row.paciente.persona.apellidos}`.trim(),
+
+    consultorio: cita.consultorio
+      ? { id: cita.consultorio.idConsultorio, nombre: cita.consultorio.nombre, colorHex: cita.consultorio.colorHex }
+      : null,
+
+    alertas: {
+      tieneAlergias,
+      alergiasDetalle,
+      obraSocial: null,
+      noShowCount,
     },
-    consultorio: row.consultorio
-      ? {
-          id: row.consultorio.idConsultorio,
-          nombre: row.consultorio.nombre,
-          colorHex: row.consultorio.colorHex,
-        }
-      : undefined,
 
-    reprogramadaDesdeId: row.reprogramadaDesdeId ?? null,
-    reprogramacionesHijas: row.reprogramaciones.map((r) => r.idCita),
-  };
+    contexto: { planActivo: null, ultimaConsulta: null, proximoTurno: null },
 
-  return dto;
+    adjuntos: [],
+
+    auditoria: {
+      creadoPor: creadorNombre,
+      creadoEn: cita.createdAt.toISOString(),
+      ultimaTransicion,          // ⬅️ ahora se llena
+      canceladoPor: canceladoPorNombre ?? null, // ⬅️ nuevo campo (si lo querés)
+    },
+
+    cancelReason: cita.cancelReason ?? null,
+
+    timestamps: {
+      checkinAt: cita.checkedInAt ? cita.checkedInAt.toISOString() : null,
+      startAt: cita.startedAt ? cita.startedAt.toISOString() : null,
+      completeAt: cita.completedAt ? cita.completedAt.toISOString() : null,
+      cancelledAt: cita.cancelledAt ? cita.cancelledAt.toISOString() : null, // ⬅️ agregado
+    },
+  }
+
+  return dto
 }

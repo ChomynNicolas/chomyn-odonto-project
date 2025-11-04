@@ -1,264 +1,115 @@
-// app/api/agenda/citas/_create.service.ts
-import { PrismaClient, EstadoCita } from "@prisma/client";
+// ============================================================================
+// SERVICE - Crear Cita (robusto y con mejores prácticas)
+// ============================================================================
+import { PrismaClient, type EstadoCita } from "@prisma/client";
 import type { CreateCitaBody } from "./_create.schema";
-import type { CitaListItemDTO } from "./_dto";
 
 const prisma = new PrismaClient();
+const ACTIVE_STATES: EstadoCita[] = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"];
 
-// Estados que bloquean agenda (activos)
-const ACTIVE_STATES: EstadoCita[] = [
-  "SCHEDULED",
-  "CONFIRMED",
-  "CHECKED_IN",
-  "IN_PROGRESS",
-];
+export async function createCita(
+  body: CreateCitaBody & { createdByUserId: number }
+): Promise<{ ok: boolean; data?: any; error?: string; status: number }> {
+  try {
+    const inicio = new Date(body.inicio);
+    if (Number.isNaN(inicio.getTime())) {
+      return { ok: false, error: "INVALID_DATETIME", status: 400 };
+    }
+    const fin = new Date(inicio.getTime() + body.duracionMinutos * 60_000);
 
-function makeFin(inicio: Date, duracionMinutos: number) {
-  return new Date(inicio.getTime() + duracionMinutos * 60 * 1000);
-}
+    // (1) FKs existen y están activos
+    const [pac, prof, cons] = await Promise.all([
+      prisma.paciente.findUnique({
+        where: { idPaciente: body.pacienteId },
+        select: { idPaciente: true, estaActivo: true },
+      }),
+      prisma.profesional.findUnique({
+        where: { idProfesional: body.profesionalId },
+        select: { idProfesional: true, estaActivo: true },
+      }),
+      body.consultorioId
+        ? prisma.consultorio.findUnique({
+            where: { idConsultorio: body.consultorioId },
+            select: { idConsultorio: true, activo: true },
+          })
+        : Promise.resolve(null),
+    ]);
 
-/**
- * Verifica si hay solape para profesional y/o consultorio.
- * (App-level; DB-level se blinda con EXCLUDE tsrange).
- */
-async function hasOverlap(params: {
-  profesionalId: number;
-  consultorioId?: number | null;
-  inicio: Date;
-  fin: Date;
-}) {
-  const { profesionalId, consultorioId, inicio, fin } = params;
+    if (!pac) return { ok: false, error: "PACIENTE_NOT_FOUND", status: 404 };
+    if (!prof) return { ok: false, error: "PROFESIONAL_NOT_FOUND", status: 404 };
+    if (body.consultorioId && !cons) return { ok: false, error: "CONSULTORIO_NOT_FOUND", status: 404 };
+    if (pac.estaActivo === false) return { ok: false, error: "PACIENTE_INACTIVO", status: 409 };
+    if (prof.estaActivo === false) return { ok: false, error: "PROFESIONAL_INACTIVO", status: 409 };
+    if (cons && cons.activo === false) return { ok: false, error: "CONSULTORIO_INACTIVO", status: 409 };
 
-  const [prof, room] = await Promise.all([
-    prisma.cita.findFirst({
+    // (2) Política: no crear citas en el pasado (opcional)
+    if (inicio < new Date()) return { ok:false, error:"NO_PAST_APPOINTMENTS", status:400 };
+
+    // (3) Chequeo de solape en servidor (siempre)
+    const clash = await prisma.cita.findFirst({
       where: {
-        profesionalId,
         estado: { in: ACTIVE_STATES },
         inicio: { lt: fin },
         fin: { gt: inicio },
+        OR: [
+          { profesionalId: body.profesionalId },
+          ...(body.consultorioId ? [{ consultorioId: body.consultorioId }] : []),
+        ],
       },
       select: { idCita: true },
-    }),
-    consultorioId
-      ? prisma.cita.findFirst({
-          where: {
-            consultorioId,
-            estado: { in: ACTIVE_STATES },
-            inicio: { lt: fin },
-            fin: { gt: inicio },
-          },
-          select: { idCita: true },
-        })
-      : Promise.resolve(null),
-  ]);
+    });
+    if (clash) return { ok: false, error: "SLOT_TAKEN", status: 409 };
 
-  return Boolean(prof || room);
-}
-
-/**
- * Verifica bloqueos de agenda (profesional y/o consultorio).
- * Un bloqueo aplica si coincide por profesional o consultorio;
- * si ambos son null podría representar bloqueo general (según tu uso).
- */
-async function hasBlocking(params: {
-  profesionalId: number;
-  consultorioId?: number | null;
-  inicio: Date;
-  fin: Date;
-}) {
-  const { profesionalId, consultorioId, inicio, fin } = params;
-
-  const bloqueo = await prisma.bloqueoAgenda.findFirst({
-    where: {
-      activo: true,
-      // match por profesional o consultorio cuando correspondan
-      OR: [
-        { profesionalId },
-        consultorioId ? { consultorioId } : undefined,
-      ].filter(Boolean) as any,
-      // intersección de rangos: desde < fin && hasta > inicio
-      desde: { lt: fin },
-      hasta: { gt: inicio },
-    },
-    select: { idBloqueoAgenda: true },
-  });
-
-  return Boolean(bloqueo);
-}
-
-/**
- * Verifica existencia/estado básico de entidades vinculadas.
- */
-async function validateEntities(params: {
-  pacienteId: number;
-  profesionalId: number;
-  consultorioId?: number | null;
-}) {
-  const { pacienteId, profesionalId, consultorioId } = params;
-
-  const [paciente, profesional, consultorio] = await Promise.all([
-    prisma.paciente.findUnique({
-      where: { idPaciente: pacienteId },
-      select: { idPaciente: true, estaActivo: true },
-    }),
-    prisma.profesional.findUnique({
-      where: { idProfesional: profesionalId },
-      select: { idProfesional: true, estaActivo: true },
-    }),
-    consultorioId
-      ? prisma.consultorio.findUnique({
-          where: { idConsultorio: consultorioId },
-          select: { idConsultorio: true, activo: true },
-        })
-      : Promise.resolve(null),
-  ]);
-
-  if (!paciente) return { ok: false, code: "PACIENTE_NOT_FOUND" } as const;
-  if (!profesional) return { ok: false, code: "PROFESIONAL_NOT_FOUND" } as const;
-  if (!paciente.estaActivo) return { ok: false, code: "PACIENTE_INACTIVO" } as const;
-  if (!profesional.estaActivo) return { ok: false, code: "PROFESIONAL_INACTIVO" } as const;
-  if (consultorioId && !consultorio) return { ok: false, code: "CONSULTORIO_NOT_FOUND" } as const;
-  if (consultorioId && consultorio && !consultorio.activo)
-    return { ok: false, code: "CONSULTORIO_INACTIVO" } as const;
-
-  return { ok: true } as const;
-}
-
-/**
- * Crea la cita y registra historial en transacción.
- */
-export async function createCita(params: CreateCitaBody & { createdByUserId: number }): Promise<
-  | { ok: true; data: CitaListItemDTO }
-  | { ok: false; status: number; error: string; details?: any }
-> {
-  const inicio = new Date(params.inicio);
-  const fin = makeFin(inicio, params.duracionMinutos);
-
-  // 1) validaciones de entidades
-  const ent = await validateEntities({
-    pacienteId: params.pacienteId,
-    profesionalId: params.profesionalId,
-    consultorioId: params.consultorioId ?? null,
-  });
-  if (!ent.ok) {
-    const map: Record<string, number> = {
-      PACIENTE_NOT_FOUND: 404,
-      PROFESIONAL_NOT_FOUND: 404,
-      CONSULTORIO_NOT_FOUND: 404,
-      PACIENTE_INACTIVO: 409,
-      PROFESIONAL_INACTIVO: 409,
-      CONSULTORIO_INACTIVO: 409,
-    };
-    return { ok: false, status: map[ent.code], error: ent.code };
-  }
-
-  // 2) validación de solapamientos
-  const overlap = await hasOverlap({
-    profesionalId: params.profesionalId,
-    consultorioId: params.consultorioId ?? null,
-    inicio,
-    fin,
-  });
-  if (overlap) {
-    return { ok: false, status: 409, error: "OVERLAP_DETECTED" };
-  }
-
-  // 3) validación de bloqueos
-  const blocked = await hasBlocking({
-    profesionalId: params.profesionalId,
-    consultorioId: params.consultorioId ?? null,
-    inicio,
-    fin,
-  });
-  if (blocked) {
-    return { ok: false, status: 409, error: "BLOCKED_BY_SCHEDULE" };
-  }
-
-  // 4) crear en transacción (cita + historial)
-  const [cita] = await prisma.$transaction([
-    prisma.cita.create({
+    // (4) Crear con relaciones via connect (best practice)
+    const created = await prisma.cita.create({
       data: {
-        pacienteId: params.pacienteId,
-        profesionalId: params.profesionalId,
-        consultorioId: params.consultorioId ?? null,
-        createdByUserId: params.createdByUserId,
         inicio,
         fin,
-        duracionMinutos: params.duracionMinutos,
-        tipo: params.tipo,
-        motivo: params.motivo ?? null,
-        notas: params.notas ?? null,
+        duracionMinutos: body.duracionMinutos,
+        tipo: body.tipo,
         estado: "SCHEDULED",
+        motivo: body.motivo,
+        notas: body.notas ?? null,
+
+        paciente: { connect: { idPaciente: body.pacienteId } },
+        profesional: { connect: { idProfesional: body.profesionalId } },
+        ...(body.consultorioId
+          ? { consultorio: { connect: { idConsultorio: body.consultorioId } } }
+          : {}),
+
+        // OJO: el nombre de la relación es "creadoPor" y la PK es idUsuario
+        creadoPor: { connect: { idUsuario: body.createdByUserId } },
       },
       select: {
         idCita: true,
         inicio: true,
         fin: true,
-        duracionMinutos: true,
+        
         tipo: true,
         estado: true,
         motivo: true,
-        profesional: {
-          select: {
-            idProfesional: true,
-            persona: { select: { nombres: true, apellidos: true } },
-          },
-        },
-        paciente: {
-          select: {
-            idPaciente: true,
-            persona: { select: { nombres: true, apellidos: true } },
-          },
-        },
-        consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
+        duracionMinutos: true,
       },
-    }),
-    prisma.citaEstadoHistorial.create({
+    });
+
+    return {
+      ok: true,
+      status: 201,
       data: {
-        cita: { connect: {} }, // se completa en post-transaction mapping (ver comentario abajo)
-        // 👆 Prisma no permite referenciar el id que aún no existe en la misma operación select anterior.
+        idCita: created.idCita,
+        inicio: created.inicio.toISOString(),
+        fin: created.fin.toISOString(),
+        tipo: created.tipo,
+        estado: created.estado,
+        motivo: created.motivo,
+        duracionMinutos: created.duracionMinutos,
       },
-    }) as any,
-  ] as any);
-
-  // ⚠️ Truco: como no podemos crear el historial en el mismo array usando el id de la cita aún no disponible,
-  // lanzamos una segunda operación para registrar el historial inicial. (Sigue siendo atómico? -> No.
-  // Si querés 100% atómico, usa $transaction con interactiveTransactions y dos pasos con variables.
-  // Para simplicidad y compatibilidad, hacemos una segunda llamada rápida:)
-  await prisma.citaEstadoHistorial.create({
-    data: {
-      citaId: cita.idCita,
-      estadoPrevio: null,
-      estadoNuevo: "SCHEDULED",
-      nota: "Creación de cita",
-      changedAt: new Date(),
-    },
-  });
-
-  const dto: CitaListItemDTO = {
-    idCita: cita.idCita,
-    inicio: cita.inicio.toISOString(),
-    fin: cita.fin.toISOString(),
-    duracionMinutos: cita.duracionMinutos,
-    tipo: cita.tipo,
-    estado: cita.estado,
-    motivo: cita.motivo ?? null,
-    profesional: {
-      id: cita.profesional.idProfesional,
-      nombre: `${cita.profesional.persona.nombres} ${cita.profesional.persona.apellidos}`.trim(),
-    },
-    paciente: {
-      id: cita.paciente.idPaciente,
-      nombre: `${cita.paciente.persona.nombres} ${cita.paciente.persona.apellidos}`.trim(),
-    },
-    consultorio: cita.consultorio
-      ? {
-          id: cita.consultorio.idConsultorio,
-          nombre: cita.consultorio.nombre,
-          colorHex: cita.consultorio.colorHex,
-        }
-      : undefined,
-  };
-
-  return { ok: true, data: dto };
+    };
+  } catch (e: any) {
+    // Errores típicos Prisma
+    if (e?.code === "P2003") return { ok: false, error: "FOREIGN_KEY_CONSTRAINT", status: 400 };
+    if (e?.code === "P2002") return { ok: false, error: "DUPLICATE", status: 409 };
+    console.error("createCita error:", e?.code || e?.message);
+    return { ok: false, error: "INTERNAL_ERROR", status: 500 };
+  }
 }

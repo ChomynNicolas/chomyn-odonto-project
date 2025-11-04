@@ -890,3 +890,179 @@ span.flatpickr-weekday,
 .fc .fc-event.fc-event--clinic {
   color: inherit;
 }
+
+/* ============================================================================
+   ESTILOS PERSONALIZADOS - Agenda Clínica
+   ============================================================================ */
+
+/* FullCalendar custom styles */ 
+.custom-calendar {
+  --fc-border-color: var(--border);
+  --fc-button-bg-color: var(--primary);
+  --fc-button-border-color: var(--primary);
+  --fc-button-hover-bg-color: var(--primary);
+  --fc-button-hover-border-color: var(--primary);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-active-border-color: var(--primary);
+  --fc-today-bg-color: var(--accent);
+  --fc-event-bg-color: var(--card);
+  --fc-event-border-color: var(--border);
+  --fc-event-text-color: var(--foreground);
+}
+
+.custom-calendar .fc {
+  font-family: var(--font-sans);
+}
+
+.custom-calendar .fc-button {
+  text-transform: capitalize;
+  font-weight: 500;
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.custom-calendar .fc-button:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.custom-calendar .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.custom-calendar .fc-col-header-cell {
+  background: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 0.5rem;
+}
+
+.custom-calendar .fc-timegrid-slot {
+  height: 3rem;
+}
+
+.custom-calendar .fc-timegrid-slot-label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* Evento personalizado */
+.custom-calendar .fc-event {
+  border-radius: calc(var(--radius) - 4px);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.custom-calendar .fc-event:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  z-index: 10;
+}
+
+.custom-calendar .fc-event:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  z-index: 11;
+}
+
+/* Borde izquierdo por consultorio (se aplica inline) */
+.custom-calendar .fc-event--clinic {
+  border-left-width: 4px;
+}
+
+/* Estados de cita (colores de fondo sutiles) */
+.custom-calendar .fc-event--estado-scheduled {
+  background: oklch(from var(--color-blue-500) l c h / 0.05);
+}
+
+.custom-calendar .fc-event--estado-confirmed {
+  background: oklch(from var(--color-emerald-500) l c h / 0.05);
+}
+
+.custom-calendar .fc-event--estado-checked_in {
+  background: oklch(from var(--color-amber-500) l c h / 0.05);
+}
+
+.custom-calendar .fc-event--estado-in_progress {
+  background: oklch(from var(--color-violet-500) l c h / 0.05);
+}
+
+.custom-calendar .fc-event--estado-completed {
+  background: oklch(from var(--color-zinc-500) l c h / 0.05);
+  opacity: 0.7;
+}
+
+.custom-calendar .fc-event--estado-cancelled {
+  background: oklch(from var(--color-red-500) l c h / 0.05);
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.custom-calendar .fc-event--estado-no_show {
+  background: oklch(from var(--color-rose-500) l c h / 0.05);
+  opacity: 0.6;
+}
+
+/* Vista de mes (más compacta) */
+.custom-calendar .fc-daygrid-event {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.custom-calendar .fc-daygrid-event .fc-event-title {
+  font-weight: 500;
+}
+
+/* Now indicator */
+.custom-calendar .fc-timegrid-now-indicator-line {
+  border-color: var(--destructive);
+  border-width: 2px;
+}
+
+.custom-calendar .fc-timegrid-now-indicator-arrow {
+  border-color: var(--destructive);
+}
+
+/* Responsive: mobile */
+@media (max-width: 640px) {
+  .custom-calendar .fc-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .custom-calendar .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+  }
+
+  .custom-calendar .fc-button {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .custom-calendar .fc-toolbar-title {
+    font-size: 1rem;
+  }
+
+  .custom-calendar .fc-timegrid-slot {
+    height: 2.5rem;
+  }
+}
+
+/* Tokens de color para estados (CSS variables) */
+:root {
+  --color-blue-500: oklch(0.6 0.2 250);
+  --color-emerald-500: oklch(0.65 0.18 160);
+  --color-amber-500: oklch(0.75 0.15 80);
+  --color-violet-500: oklch\
+}

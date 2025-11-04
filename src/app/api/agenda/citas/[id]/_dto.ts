@@ -1,4 +1,3 @@
-// app/api/agenda/citas/[id]/_dto.ts
 import { EstadoCita, TipoCita, MotivoCancelacion } from "@prisma/client";
 
 export type UsuarioMini = { id: number; nombre: string };
@@ -34,7 +33,7 @@ export type CitaDetailDTO = {
 
   // Reprogramación
   reprogramadaDesdeId?: number | null;
-  reprogramacionesHijas: number[]; // ids de citas que nacieron de esta
+  reprogramacionesHijas: number[];
 };
 
 export type CitaDetailResponse =

@@ -1,10 +1,10 @@
-// src/app/api/dashboard/kpi/_service.ts
+// src/app/api/dashboard/kpi/_service.ts  (actualiza cálculos)
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay, differenceInMinutes, addHours, isBefore } from "date-fns";
 import type { GetKpiQuery } from "./_schemas";
 import type {
   KpiCitasHoyDTO, KpiOcupacionItem, KpiTiemposDTO,
-  AlertaSinConfirmar, AlertaBloqueo, ConflictoAgenda, DashboardKpiResponse
+  AlertaSinConfirmar, AlertaBloqueo, ConflictoAgenda, DashboardKpiResponse, CitaAtrasadaItem
 } from "./_dto";
 import { EstadoCita } from "@prisma/client";
 
@@ -14,24 +14,40 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
   const hoy = params.fecha ? new Date(params.fecha) : new Date();
   const desde = startOfDay(hoy);
   const hasta = endOfDay(hoy);
+  const ahora = new Date();
 
   // Scopes por rol
   const scopeCita:any = { inicio: { gte: desde, lte: hasta } };
   if (role === "ODONT" && params.profesionalId) scopeCita.profesionalId = params.profesionalId;
   if (role !== "ADMIN" && params.consultorioId) scopeCita.consultorioId = params.consultorioId;
 
-  // 1) KPIs rápidos
+  // 1) KPIs rápidos + tasas
   const [total, confirmadas, canceladas, noShow] = await Promise.all([
     prisma.cita.count({ where: scopeCita }),
     prisma.cita.count({ where: { ...scopeCita, estado: "CONFIRMED" } }),
     prisma.cita.count({ where: { ...scopeCita, estado: "CANCELLED" } }),
     prisma.cita.count({ where: { ...scopeCita, estado: "NO_SHOW" } }),
   ]);
-  const kpis: KpiCitasHoyDTO = { total, confirmadas, canceladas, noShow };
 
-  // 2) Próximas 10 citas (a partir de ahora)
+  const pct = (n:number, d:number) => d > 0 ? Math.round((n / d) * 100) : 0;
+
+  // 5.a) Sin confirmación (<24h) para card rápida
+  const dentro24h = addHours(ahora, 24);
+  const sinConfCount = await prisma.cita.count({
+    where: { ...scopeCita, estado: "SCHEDULED", inicio: { gte: ahora, lte: dentro24h } },
+  });
+
+  const kpis: KpiCitasHoyDTO = {
+    total, confirmadas, canceladas, noShow,
+    confirmRate: pct(confirmadas, total),
+    cancelRate: pct(canceladas, total),
+    noShowRate: pct(noShow, total),
+    sinConfirmar24h: sinConfCount,
+  };
+
+  // 2) Próximas 10
   const proximas = await prisma.cita.findMany({
-    where: { ...scopeCita, inicio: { gte: new Date() } },
+    where: { ...scopeCita, inicio: { gte: ahora } },
     orderBy: { inicio: "asc" },
     take: 10,
     select: {
@@ -42,15 +58,38 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
     }
   });
 
-  // 3) Ocupación por consultorio (slots de 'slotMin' minutos)
-  //   estrategia: contar citas activas en el día + bloqueos que tocan el rango
+  // NUEVO: 2.b) Citas atrasadas (inicio < ahora y estado no finalizado/cancelado/no-show)
+  const atrasadasRaw = await prisma.cita.findMany({
+    where: {
+      ...scopeCita,
+      inicio: { lt: ahora },
+      estado: { in: ["SCHEDULED","CONFIRMED","CHECKED_IN"] },
+    },
+    orderBy: { inicio: "asc" },
+    select: {
+      idCita: true, inicio: true,
+      profesional: { select: { persona: { select: { nombres: true, apellidos: true } } } },
+      paciente: { select: { persona: { select: { nombres: true, apellidos: true } } } },
+      consultorio: { select: { nombre: true } },
+    }
+  });
+
+  const atrasadas: CitaAtrasadaItem[] = atrasadasRaw.map(a => ({
+    idCita: a.idCita,
+    inicioISO: a.inicio.toISOString(),
+    minutosAtraso: Math.max(0, differenceInMinutes(ahora, a.inicio)),
+    paciente: `${a.paciente.persona.nombres} ${a.paciente.persona.apellidos}`.trim(),
+    profesional: `${a.profesional.persona.nombres} ${a.profesional.persona.apellidos}`.trim(),
+    consultorio: a.consultorio?.nombre ?? null,
+  }));
+
+  // 3) (dejamos ocupación calculable pero NO lo usamos en TabHoy)
   const consultorios = await prisma.consultorio.findMany({
     where: { activo: true },
     select: { idConsultorio: true, nombre: true, colorHex: true }
   });
   const slot = params.slotMin ?? 30;
   const totalSlots = Math.ceil(differenceInMinutes(hasta, desde) / slot);
-
   const [citasDia, bloqueosDia] = await Promise.all([
     prisma.cita.groupBy({
       by: ["consultorioId"],
@@ -63,26 +102,21 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
       _count: { _all: true },
     })
   ]);
-
   const citasCount = new Map<number, number>();
   citasDia.forEach(r => { if (r.consultorioId) citasCount.set(r.consultorioId, r._count._all); });
   const bloqueosCount = new Map<number, number>();
   bloqueosDia.forEach(r => { if (r.consultorioId) bloqueosCount.set(r.consultorioId, r._count._all); });
+  const ocupacion = consultorios.map(c => ({
+    consultorioId: c.idConsultorio,
+    nombre: c.nombre,
+    colorHex: c.colorHex,
+    slots: totalSlots,
+    ocupadas: citasCount.get(c.idConsultorio) ?? 0,
+    bloqueos: bloqueosCount.get(c.idConsultorio) ?? 0,
+    libres: Math.max(totalSlots - (citasCount.get(c.idConsultorio) ?? 0) - (bloqueosCount.get(c.idConsultorio) ?? 0), 0),
+  }));
 
-  const ocupacion: KpiOcupacionItem[] = consultorios.map(c => {
-    const ocupadas = citasCount.get(c.idConsultorio) ?? 0;
-    const bloqueos = bloqueosCount.get(c.idConsultorio) ?? 0; // aproximación (#bloqueos, no duración)
-    const libres = Math.max(totalSlots - ocupadas - bloqueos, 0);
-    return {
-      consultorioId: c.idConsultorio,
-      nombre: c.nombre,
-      colorHex: c.colorHex,
-      slots: totalSlots,
-      ocupadas, bloqueos, libres,
-    };
-  });
-
-  // 4) Tiempos de atención (startedAt → completedAt)
+  // 4) Tiempos
   const atencionesHoy = await prisma.cita.findMany({
     where: { ...scopeCita, startedAt: { gte: desde }, completedAt: { lte: hasta } },
     select: { startedAt: true, completedAt: true },
@@ -92,25 +126,17 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
     .filter(n => Number.isFinite(n) && n >= 0)
     .sort((a,b)=>a-b);
 
-  const promedio = duraciones.length
-    ? Math.round(duraciones.reduce((s,n)=>s+n,0) / duraciones.length)
-    : null;
+  const promedio = duraciones.length ? Math.round(duraciones.reduce((s,n)=>s+n,0) / duraciones.length) : null;
   const mediana = duraciones.length
     ? (duraciones.length%2===1
       ? duraciones[(duraciones.length-1)/2]
       : Math.round((duraciones[duraciones.length/2 -1] + duraciones[duraciones.length/2])/2))
     : null;
-  const tiempos: KpiTiemposDTO = {
-    atencionesHoy: duraciones.length,
-    promedioMin: promedio,
-    medianaMin: mediana,
-  };
+  const tiempos: KpiTiemposDTO = { atencionesHoy: duraciones.length, promedioMin: promedio, medianaMin: mediana };
 
-  // 5) Alertas
-  // 5.a) Sin confirmación (<24h): citas con estado SCHEDULED que empiezan dentro de 24h
-  const dentro24h = addHours(new Date(), 24);
+  // 5) Alertas (listas)
   const sinConfirmar = await prisma.cita.findMany({
-    where: { estado: "SCHEDULED", inicio: { gte: new Date(), lte: dentro24h }, ...(scopeCita.profesionalId && { profesionalId: scopeCita.profesionalId }) },
+    where: { ...scopeCita, estado: "SCHEDULED", inicio: { gte: ahora, lte: dentro24h } },
     orderBy: { inicio: "asc" },
     select: {
       idCita: true, inicio: true,
@@ -123,11 +149,10 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
     inicioISO: c.inicio.toISOString(),
     paciente: `${c.paciente.persona.nombres} ${c.paciente.persona.apellidos}`.trim(),
     profesional: `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim(),
-    horasFaltantes: Math.max(0, Math.round(differenceInMinutes(c.inicio, new Date())/60)),
+    horasFaltantes: Math.max(0, Math.round(differenceInMinutes(c.inicio, ahora)/60)),
   }));
 
-  // 5.b) Bloqueos activos (que tocan hoy)
-  const bloqueosAct = await prisma.bloqueoAgenda.findMany({
+  const bloqueosActRaw = await prisma.bloqueoAgenda.findMany({
     where: { activo: true, desde: { lte: hasta }, hasta: { gte: desde } },
     select: {
       idBloqueoAgenda: true, desde: true, hasta: true, tipo: true,
@@ -136,7 +161,7 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
     },
     orderBy: { desde: "asc" }
   });
-  const bloqueosActivos: AlertaBloqueo[] = bloqueosAct.map(b => ({
+  const bloqueosActivos: AlertaBloqueo[] = bloqueosActRaw.map(b => ({
     idBloqueoAgenda: b.idBloqueoAgenda,
     desdeISO: b.desde.toISOString(),
     hastaISO: b.hasta.toISOString(),
@@ -145,30 +170,30 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
     profesional: b.profesional ? `${b.profesional.persona.nombres} ${b.profesional.persona.apellidos}` : null,
   }));
 
-  // 5.c) Conflictos de agenda (solapamientos hoy, profesional/consultorio)
-  // estrategia simple: buscar pares que se crucen (para producción, usa constraint DB + job off-line)
   const activas = await prisma.cita.findMany({
     where: { ...scopeCita, estado: { in: ACTIVE_STATES } },
     select: { idCita: true, inicio: true, fin: true, profesionalId: true, consultorioId: true }
   });
   const conflictos: ConflictoAgenda[] = [];
-  // O(n^2) sobre el día — aceptable para volúmenes moderados; si crece, migrar a query SQL especializada
   for (let i=0;i<activas.length;i++){
     for (let j=i+1;j<activas.length;j++){
       const A = activas[i], B = activas[j];
       const overlap = !(A.fin <= B.inicio || B.fin <= A.inicio);
       if (!overlap) continue;
-      const solapMin = Math.min(differenceInMinutes(A.fin, B.inicio), differenceInMinutes(B.fin, A.inicio)) * -1;
+      const solapadoMin = Math.max(0, Math.min(
+        differenceInMinutes(A.fin, B.inicio),
+        differenceInMinutes(B.fin, A.inicio)
+      ) * -1);
       if (A.profesionalId === B.profesionalId) {
-        conflictos.push({ recurso: "PROFESIONAL", recursoId: A.profesionalId, idCitaA: A.idCita, idCitaB: B.idCita, solapadoMin: Math.abs(solapMin) });
+        conflictos.push({ recurso: "PROFESIONAL", recursoId: A.profesionalId, idCitaA: A.idCita, idCitaB: B.idCita, solapadoMin });
       }
       if (A.consultorioId && B.consultorioId && A.consultorioId === B.consultorioId) {
-        conflictos.push({ recurso: "CONSULTORIO", recursoId: A.consultorioId, idCitaA: A.idCita, idCitaB: B.idCita, solapadoMin: Math.abs(solapMin) });
+        conflictos.push({ recurso: "CONSULTORIO", recursoId: A.consultorioId, idCitaA: A.idCita, idCitaB: B.idCita, solapadoMin });
       }
     }
   }
 
-  // 6) Colas (CHECKED_IN / IN_PROGRESS)
+  // 6) Colas
   const [colaCheckIn, colaInProgress] = await Promise.all([
     prisma.cita.findMany({
       where: { ...scopeCita, estado: "CHECKED_IN" },
@@ -187,6 +212,7 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
       }, orderBy: { startedAt: "asc" }
     })
   ]);
+
   const colas = {
     checkIn: colaCheckIn.map(c => ({
       idCita: c.idCita,
@@ -206,7 +232,8 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
     ok: true,
     data: {
       fecha: desde.toISOString().slice(0,10),
-      kpis, proximas10: proximas.map(p => ({
+      kpis,
+      proximas10: proximas.map(p => ({
         idCita: p.idCita,
         inicioISO: p.inicio.toISOString(),
         estado: p.estado,
@@ -214,7 +241,9 @@ export async function buildDashboardKpi(params: GetKpiQuery, role: "RECEP" | "OD
         profesional: `${p.profesional.persona.nombres} ${p.profesional.persona.apellidos}`.trim(),
         consultorio: p.consultorio?.nombre ?? null,
       })),
-      ocupacion, tiempos,
+      atrasadas,  // 👈 nuevo
+      ocupacion,  // aunque no lo mostrarás en “Hoy”, se mantiene disponible
+      tiempos,
       alertas: { sinConfirmar24h, bloqueosActivos, conflictos },
       colas,
     }

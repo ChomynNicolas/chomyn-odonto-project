@@ -1,21 +1,27 @@
-// src/components/dashboard/TiemposAtencion.tsx
+// src/components/dashboard/FlujoAtencion.tsx  (renombrado desde TiemposAtencion)
 "use client";
-import React from "react";
 import type { KpiTiemposDTO, ColaDTO } from "@/app/api/dashboard/kpi/_dto";
+import { Clock, Users } from "lucide-react";
 
-export default function TiemposAtencion({ tiempos, colas }:{ tiempos: KpiTiemposDTO; colas: ColaDTO }) {
+function Mini({ label, value }:{ label:string; value:string|number }) {
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-lg font-medium text-gray-900">Atención</h3>
+    <div className="rounded-lg border p-3">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+export default function FlujoAtencion({ tiempos, colas }:{ tiempos: KpiTiemposDTO; colas: ColaDTO }) {
+  return (
+    <section>
+      <h3 className="mb-3 text-lg font-medium text-gray-900">Flujo de atención</h3>
+
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Atenciones con tiempo</p>
-          <p className="text-2xl font-semibold">{tiempos.atencionesHoy}</p>
-        </div>
-        <div className="rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Promedio (min)</p>
-          <p className="text-2xl font-semibold">{tiempos.promedioMin ?? "—"}</p>
-        </div>
+        <Mini label="Atenciones con tiempo" value={tiempos.atencionesHoy} />
+        <Mini label="Promedio (min)" value={tiempos.promedioMin ?? "—"} />
+        <Mini label="Mediana (min)" value={tiempos.medianaMin ?? "—"} />
+        <Mini label="En sala / En atención" value={`${colas.checkIn.length} / ${colas.enAtencion.length}`} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -24,7 +30,7 @@ export default function TiemposAtencion({ tiempos, colas }:{ tiempos: KpiTiempos
           <ul className="space-y-2">
             {colas.checkIn.map((c) => (
               <li key={c.idCita} className="text-sm text-gray-700 flex justify-between">
-                <span>{new Date(c.hora).toLocaleTimeString()} — {c.paciente}</span>
+                <span>{new Date(c.hora).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})} — {c.paciente}</span>
                 <span className="text-gray-500">{c.consultorio ?? ""}</span>
               </li>
             ))}
@@ -36,7 +42,7 @@ export default function TiemposAtencion({ tiempos, colas }:{ tiempos: KpiTiempos
           <ul className="space-y-2">
             {colas.enAtencion.map((c) => (
               <li key={c.idCita} className="text-sm text-gray-700 flex justify-between">
-                <span>{new Date(c.hora).toLocaleTimeString()} — {c.paciente}</span>
+                <span>{new Date(c.hora).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})} — {c.paciente}</span>
                 <span className="text-gray-500">{c.profesional}</span>
               </li>
             ))}

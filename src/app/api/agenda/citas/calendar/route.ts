@@ -1,70 +1,184 @@
-// src/app/api/agenda/citas/calendar/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { prisma as db } from "@/lib/prisma";
+import { PrismaClient, EstadoCita } from "@prisma/client";
+import { requireSessionWithRoles } from "@/app/api/_lib/auth";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
-const qSchema = z.object({
-  start: z.string().min(1),
-  end: z.string().min(1),
-  prof: z.string().optional(),
-  cons: z.string().optional(),
-  est: z.string().optional(),
-  tip: z.string().optional(),
+const prisma = new PrismaClient();
+
+const asDate = z.preprocess((v) => (typeof v === "string" ? new Date(v) : v), z.date());
+const querySchema = z.object({
+  start: asDate,
+  end: asDate,
+  profesionalId: z.coerce.number().int().positive().optional(),
+  consultorioId: z.coerce.number().int().positive().optional(),
+  estado: z.string().optional(), // comma-separated
+  tipo: z.string().optional(),   // comma-separated
+  soloUrgencias: z.enum(["true", "false"]).optional(),
+  soloPrimeraVez: z.enum(["true", "false"]).optional(),
+  soloPlanActivo: z.enum(["true", "false"]).optional(),
+  busquedaPaciente: z.string().optional(),
 });
 
-function toInts(csv?: string | null) {
-  if (!csv) return undefined;
-  const arr = csv.split(",").map(Number).filter((n) => !Number.isNaN(n));
-  return arr.length ? arr : undefined;
-}
-const fn = (p?: { nombres?: string | null; apellidos?: string | null }) =>
-  [p?.nombres, p?.apellidos].filter(Boolean).join(" ");
-
 export async function GET(req: NextRequest) {
-  const parsed = qSchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
-  if (!parsed.success) return NextResponse.json([], { status: 400 });
+  const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"]);
+  if (!auth.authorized) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  }
 
-  const { start, end, prof, cons, est, tip } = parsed.data;
-  const startDt = new Date(start); const endDt = new Date(end);
-  if (Number.isNaN(+startDt) || Number.isNaN(+endDt)) return NextResponse.json([], { status: 400 });
+  const url = new URL(req.url);
+  const parsed = querySchema.safeParse(Object.fromEntries(url.searchParams.entries()));
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, error: "BAD_REQUEST", details: parsed.error.flatten() }, { status: 400 });
+  }
 
-  const where: any = { inicio: { gte: startDt, lt: endDt } };
-  const profIds = toInts(prof); if (profIds) where.profesionalId = { in: profIds };
-  const consIds = toInts(cons); if (consIds) where.consultorioId = { in: consIds };
-  if (est) where.estado = { in: est.split(",") as any };
-  if (tip) where.tipo = { in: tip.split(",") as any };
+  const {
+    start,
+    end,
+    profesionalId,
+    consultorioId,
+    estado,
+    tipo,
+    soloUrgencias,
+    soloPrimeraVez,
+    soloPlanActivo,
+    busquedaPaciente,
+  } = parsed.data;
 
-  const citas = await db.cita.findMany({
-    where,
-    include: {
-      paciente: { include: { persona: { select: { nombres: true, apellidos: true } } } },
-      profesional: { include: { persona: { select: { nombres: true, apellidos: true } } } },
-      consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
-    },
-    orderBy: [{ inicio: "asc" }],
-  });
+  try {
+    const where: any = {
+      inicio: { lt: end },
+      fin: { gt: start },
+    };
 
-  const events = citas.map((c) => ({
-    id: c.idCita,
-    title: `${fn(c.paciente.persona)} — ${c.motivo ?? c.tipo}`,
-    start: c.inicio.toISOString(),
-    end: c.fin.toISOString(),
-    backgroundColor: c.consultorio?.colorHex ?? undefined,
-    borderColor: c.consultorio?.colorHex ?? undefined,
-    extendedProps: {
-      estado: c.estado,
-      profesionalId: c.profesionalId,
-      profesionalNombre: fn(c.profesional.persona),
-      consultorioId: c.consultorioId,
-      consultorioNombre: c.consultorio?.nombre ?? null,
-      consultorioColorHex: c.consultorio?.colorHex ?? null,
-      urgencia: c.tipo === "URGENCIA",
-      primeraVez: false,
-      planActivo: false,
-    },
-  }));
+    if (profesionalId) where.profesionalId = profesionalId;
+    if (consultorioId) where.consultorioId = consultorioId;
 
-  return NextResponse.json(events, { headers: { "Cache-Control": "no-store" } });
+    if (estado) {
+      const estados = estado.split(",").map((s) => s.trim().toUpperCase());
+      where.estado = { in: estados };
+    }
+
+    if (tipo) {
+      const tipos = tipo.split(",").map((t) => t.trim().toUpperCase());
+      where.tipo = { in: tipos };
+    }
+
+    if (soloUrgencias === "true") {
+      where.tipo = "URGENCIA";
+    }
+
+    if (busquedaPaciente) {
+      const q = busquedaPaciente.trim();
+      where.paciente = {
+        OR: [
+          {
+            persona: {
+              OR: [
+                { nombres: { contains: q, mode: "insensitive" } },
+                { apellidos: { contains: q, mode: "insensitive" } },
+              ],
+            },
+          },
+          // documento es 1:1 opcional → usar `is`
+          {
+            persona: {
+              documento: {
+                is: {
+                  OR: [
+                    { numero: { contains: q } },
+                    { ruc: { contains: q } },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    const rows = await prisma.cita.findMany({
+      where,
+      orderBy: { inicio: "asc" },
+      select: {
+        idCita: true,
+        inicio: true,
+        fin: true,
+        tipo: true,
+        estado: true,
+        motivo: true,
+        profesional: {
+          select: {
+            idProfesional: true,
+            persona: { select: { nombres: true, apellidos: true } },
+          },
+        },
+        paciente: {
+          select: {
+            idPaciente: true,
+            persona: { select: { nombres: true, apellidos: true } },
+            // No existe `antecedentes`: detectamos alergias por relación PatientAllergy
+            PatientAllergy: {
+              where: { isActive: true },
+              select: { idPatientAllergy: true },
+              take: 1,
+            },
+            // No existe `kpis`: aproximamos no-show contando citas NO_SHOW del paciente
+            citas: {
+              where: { estado: EstadoCita.NO_SHOW },
+              select: { idCita: true },
+            },
+          },
+        },
+        consultorio: { select: { idConsultorio: true, nombre: true, colorHex: true } },
+      },
+    });
+
+    const events = rows.map((c) => {
+      const pacienteNombre = `${c.paciente.persona.nombres} ${c.paciente.persona.apellidos}`.trim();
+      const profesionalNombre = `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim();
+      const title = `${pacienteNombre} — ${c.motivo ?? c.tipo}`;
+
+      const tieneAlergias = (c.paciente.PatientAllergy?.length ?? 0) > 0;
+      const noShowCount = c.paciente.citas.length;
+
+      return {
+        id: c.idCita,
+        title,
+        start: c.inicio.toISOString(),
+        end: c.fin.toISOString(),
+        extendedProps: {
+          estado: c.estado,
+          tipo: c.tipo,
+          pacienteId: c.paciente.idPaciente,
+          pacienteNombre,
+          profesionalId: c.profesional.idProfesional,
+          profesionalNombre,
+          consultorioId: c.consultorio?.idConsultorio ?? null,
+          consultorioNombre: c.consultorio?.nombre ?? null,
+          consultorioColorHex: c.consultorio?.colorHex ?? null,
+          urgencia: c.tipo === "URGENCIA",
+          primeraVez: false,    // TODO
+          planActivo: false,    // TODO
+          tieneAlergias,
+          noShowCount,
+          obraSocial: null,     // TODO: modelar seguro/obra social
+          saldoPendiente: false // TODO
+        },
+      };
+    });
+
+    let filtered = events;
+    if (soloPrimeraVez === "true") filtered = filtered.filter((e) => e.extendedProps.primeraVez);
+    if (soloPlanActivo === "true") filtered = filtered.filter((e) => e.extendedProps.planActivo);
+
+    const res = NextResponse.json({ ok: true, data: filtered }, { status: 200 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
+  } catch (e: any) {
+    console.error("GET /api/agenda/citas/calendar error:", e?.code || e?.message);
+    return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 });
+  }
 }
