@@ -44,6 +44,7 @@ interface NuevaCitaSheetProps {
   }
   currentUser?: CurrentUser
   onSuccess?: () => void
+  prefill?: Partial<NuevaCitaForm> & { lockPaciente?: boolean; pacienteDocumento?: number } 
 }
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -54,13 +55,15 @@ function toLocalTimeInputValue(d: Date): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSuccess }: NuevaCitaSheetProps) {
+export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSuccess,prefill }: NuevaCitaSheetProps) {
   const [checking, setChecking] = React.useState(false)
   const [disponibilidad, setDisponibilidad] = React.useState<{
     disponible: boolean
     alternativas: Array<{ inicio: string; fin: string }>
   } | null>(null)
 
+
+  console.log({prefill})
   const {
     register,
     handleSubmit,
@@ -71,17 +74,21 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
     getValues,
     control, 
   } = useForm<NuevaCitaForm>({
-    resolver: zodResolver(nuevaCitaSchema),
-    defaultValues: {
-      pacienteId: undefined, // 👈 opcional pero recomendado para evitar "uncontrolled→controlled"
-      profesionalId: currentUser?.rol === "ODONT" ? (currentUser.profesionalId ?? undefined) : undefined,
-      consultorioId: 1,
-      duracionMinutos: 30,
-      tipo: "CONSULTA",
-      motivo: "Cita",
-      fecha: defaults?.inicio ? toLocalDateInputValue(defaults.inicio) : toLocalDateInputValue(new Date()),
-      horaInicio: defaults?.inicio ? toLocalTimeInputValue(defaults.inicio) : "09:00",
-    },
+  resolver: zodResolver(nuevaCitaSchema),
+  defaultValues: {
+    // 👇 si viene prefill, úsalo; si no, mantené tus defaults previos
+    pacienteId: prefill?.pacienteId ?? undefined,
+    profesionalId:
+      prefill?.profesionalId ??
+      (currentUser?.rol === "ODONT" ? currentUser?.profesionalId ?? undefined : undefined),
+    consultorioId: prefill?.consultorioId ?? 1,
+    duracionMinutos: prefill?.duracionMinutos ?? 30,
+    tipo: prefill?.tipo ?? "CONSULTA",
+    motivo: prefill?.motivo ?? "Cita",
+    notas: prefill?.notas,
+    fecha: defaults?.inicio ? toLocalDateInputValue(defaults.inicio) : toLocalDateInputValue(new Date()),
+    horaInicio: defaults?.inicio ? toLocalTimeInputValue(defaults.inicio) : "09:00",
+  },
   })
 
   const watchedFields = watch(["fecha", "horaInicio", "duracionMinutos", "profesionalId", "consultorioId"])
@@ -172,20 +179,25 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
   <Label>Paciente <span className="text-destructive">*</span></Label>
   <Controller
     name="pacienteId"
-    control={control}  
+    control={control}
     render={({ field }) => (
       <PacienteAsyncSelect
         value={field.value}
         onChange={(id) => field.onChange(id)}
         placeholder="Buscar por nombre o cédula"
-        onCreateNew={() => {
-          // opcional: abrir alta rápida de paciente
-          // p.ej., setOpenAltaRapida(true)
-        }}
+        // ⬇️ NUEVO: inyectamos el texto inicial del input
+        initialQuery={prefill?.pacienteDocumento}
+        // si bloqueas el paciente desde la ficha:
+        disabled={!!prefill?.lockPaciente}
       />
     )}
   />
   {errors.pacienteId && <p className="text-sm text-destructive">{errors.pacienteId.message}</p>}
+  {prefill?.lockPaciente && prefill?.pacienteDocumento && (
+    <p className="text-xs text-muted-foreground">
+      Paciente fijado por documento: <span className="font-medium">{prefill.pacienteDocumento}</span>
+    </p>
+  )}
 </div>
 
           {/* Profesional */}

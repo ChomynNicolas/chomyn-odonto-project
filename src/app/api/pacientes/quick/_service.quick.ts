@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma"
 import { pacienteRepo } from "@/app/api/pacientes/_repo"
 import type { PacienteQuickCreateDTO } from "./_schemas"
-import { splitNombreCompleto, mapGeneroToDB } from "./_dto"
+import { splitNombreCompleto } from "./_dto"
 import { normalizeEmail, normalizePhonePY } from "@/lib/normalize"
 import type { Prisma } from "@prisma/client"
 
@@ -27,7 +27,9 @@ function toDateUTCFromYYYYMMDD(v?: string): Date | null {
   if (!v) return null
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v)
   if (!m) return null
-  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3])
+  const y = Number(m[1]),
+    mo = Number(m[2]),
+    d = Number(m[3])
   return new Date(Date.UTC(y, mo - 1, d, 0, 0, 0, 0))
 }
 
@@ -37,10 +39,10 @@ function isPrismaUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestEr
 
 export async function quickCreatePaciente(
   input: PacienteQuickCreateDTO,
-  actorUserId?: number
+  actorUserId?: number,
 ): Promise<QuickCreateResult> {
   const { nombres, apellidos } = splitNombreCompleto(input.nombreCompleto)
-  const generoDB = mapGeneroToDB(input.genero)
+  const generoDB = input.genero
 
   const phoneNorm = normalizePhonePY(input.telefono)
   if (!phoneNorm) throw new QuickCreateError("VALIDATION_ERROR", "Teléfono inválido o no normalizable", 400)
@@ -64,7 +66,7 @@ export async function quickCreatePaciente(
         nombres,
         apellidos,
         genero: generoDB,
-        fechaNacimiento: toDateUTCFromYYYYMMDD(input.fechaNacimiento),
+        fechaNacimiento: toDateUTCFromYYYYMMDD(input.fechaNacimiento)!,
         direccion: null,
         doc: {
           tipo: input.tipoDocumento,

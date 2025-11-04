@@ -1,119 +1,59 @@
-// src/hooks/usePacientesQuery.ts
-import { useInfiniteQuery, type QueryFunctionContext } from "@tanstack/react-query";
-import type {
-  PacientesQueryParams,
-  PacientesResponse,
-  SortPacientes,
-} from "@/lib/api/pacientes.types";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import type { PacientesResponse, PacienteListFilters, PacienteCreateDTO } from "@/lib/api/pacientes.types"
 
-/** ===== Util: construir URLSearchParams de forma segura ===== */
-function buildSearchParams(params: PacientesQueryParams & { limit?: number; cursor?: number }) {
-  const sp = new URLSearchParams();
+export function usePacientesQuery(filters: PacienteListFilters) {
+  return useQuery({
+    queryKey: ["pacientes", filters],
+    queryFn: async () => {
+      const params = new URLSearchParams()
 
-  // Texto
-  if (params.q?.trim()) sp.set("q", params.q.trim());
+      if (filters.q) params.set("q", filters.q)
+      if (filters.createdFrom) params.set("createdFrom", filters.createdFrom)
+      if (filters.createdTo) params.set("createdTo", filters.createdTo)
+      if (filters.estaActivo !== undefined) params.set("estaActivo", String(filters.estaActivo))
+      if (filters.sort) params.set("sort", filters.sort)
+      if (filters.cursor) params.set("cursor", filters.cursor)
+      if (filters.limit) params.set("limit", String(filters.limit))
 
-  // Booleans
-  if (params.soloActivos !== undefined) sp.set("soloActivos", String(params.soloActivos));
-  if (params.hasEmail !== undefined) sp.set("hasEmail", String(params.hasEmail));
-  if (params.hasPhone !== undefined) sp.set("hasPhone", String(params.hasPhone));
+      const response = await fetch(`/api/pacientes?${params}`)
 
-  // Numbers
-  if (params.limit && params.limit > 0) sp.set("limit", String(params.limit));
-  if (params.cursor) sp.set("cursor", String(params.cursor));
+      if (!response.ok) {
+        throw new Error("Error al cargar pacientes")
+      }
 
-  // Enums/strings
-  if (params.genero) sp.set("genero", params.genero);
-  if (params.createdFrom) sp.set("createdFrom", params.createdFrom); // YYYY-MM-DD
-  if (params.createdTo) sp.set("createdTo", params.createdTo);       // YYYY-MM-DD
-  if (params.sort) sp.set("sort", params.sort as SortPacientes);
-
-  return sp;
+      return response.json() as Promise<PacientesResponse>
+    },
+    staleTime: 30000, // 30 seconds
+  })
 }
 
-/** ===== Fetcher con soporte de cancelación (React Query signal) ===== */
-async function fetchPacientes(
-  ctx: QueryFunctionContext<[string, PacientesQueryParams], number | undefined>
-): Promise<PacientesResponse> {
-  const [, baseParams] = ctx.queryKey;
-  const cursor = ctx.pageParam;
-  const sp = buildSearchParams({ ...baseParams, cursor });
+export function useCreatePacienteMutation() {
+  const queryClient = useQueryClient()
 
-  const res = await fetch(`/api/pacientes?${sp.toString()}`, {
-    cache: "no-store",
-    // @ts-expect-error — React Query inyecta signal en context, los runtimes modernos lo soportan
-    signal: (ctx as any).signal,
-  });
+  return useMutation({
+    mutationFn: async (data: PacienteCreateDTO) => {
+      // Generate idempotency key
+      const idempotencyKey = `create-paciente-${Date.now()}-${Math.random()}`
 
-  if (!res.ok) {
-    // Intenta exponer mensaje del backend
-    let msg = "Error al cargar pacientes";
-    try {
-      const data = await res.json();
-      if (data?.error) msg = data.error;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(msg);
-  }
+      const response = await fetch("/api/pacientes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify(data),
+      })
 
-  return res.json();
-}
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error ?? "Error al crear paciente")
+      }
 
-/** ===== Hook público ===== */
-export function usePacientes(params: PacientesQueryParams & { limit?: number } = {}) {
-  const {
-    q = "",
-    soloActivos = true,
-    limit = 20,
-    genero,
-    hasEmail,
-    hasPhone,
-    createdFrom,
-    createdTo,
-    sort = "createdAt desc",
-  } = params;
-
-  // Usamos un objeto estable en el queryKey para evitar invalidaciones por orden de argumentos.
-  const queryKey: [string, PacientesQueryParams] = [
-    "pacientes",
-    { q, soloActivos, limit, genero, hasEmail, hasPhone, createdFrom, createdTo, sort },
-  ];
-
-  const query = useInfiniteQuery({
-    queryKey,
-    queryFn: (ctx) => fetchPacientes(ctx),
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
-    // Mantiene páginas previas visibles mientras llegan nuevas (lista fluida).
-    keepPreviousData: true,
-    // Este endpoint es dinámico (agenda/estado). Evitamos cachear de más.
-    staleTime: 0,
-    // Reintentos ligeros ante errores transitorios de red.
-    retry: 2,
-  });
-
-  // Flatten de resultados
-  const pages = query.data?.pages ?? [];
-  const items = pages.flatMap((p) => p.items);
-  const hasMore = pages.at(-1)?.hasMore ?? false;
-  // totalCount viene redundante en cada página, nos quedamos con la primera
-  const totalCount = pages[0]?.totalCount ?? 0;
-
-  return {
-    /** Datos */
-    items,
-    totalCount,
-    hasMore,
-    /** Paginación */
-    fetchNextPage: query.fetchNextPage,
-    hasNextPage: query.hasNextPage,
-    isFetchingNextPage: query.isFetchingNextPage,
-    /** Estado */
-    isLoading: query.isLoading,
-    isFetching: query.isFetching,
-    isError: query.isError,
-    error: query.error as Error | null,
-    /** Utilidades */
-    refetch: query.refetch,
-  };
+      return response.json()
+    },
+    onSuccess: () => {
+      // Invalidate all pacientes queries
+      queryClient.invalidateQueries({ queryKey: ["pacientes"] })
+    },
+  })
 }
