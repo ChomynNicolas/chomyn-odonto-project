@@ -1,29 +1,53 @@
 // src/app/api/pacientes/[id]/_schemas.ts
 import { z } from "zod";
-import { GeneroEnum } from "@/app/api/pacientes/_schemas"; // ya definido en el feature padre
 
 export const pathParamsSchema = z.object({
   id: z.string().regex(/^\d+$/).transform((v) => Number(v)),
 });
 
-export const pacienteUpdateBodySchema = z.object({
-  nombreCompleto: z.string().min(3).max(160).optional(),
-  genero: GeneroEnum.optional(),
-  fechaNacimiento: z.coerce.date().nullable().optional(),
-  domicilio: z.string().max(200).nullable().optional(),
+export const patientUpdateBodySchema = z.object({
+  // Personal information
+  firstName: z.string().min(1, "Nombre requerido").max(100).optional(),
+  lastName: z.string().min(1, "Apellido requerido").max(100).optional(),
+  secondLastName: z.string().max(100).optional().nullable(),
 
-  antecedentesMedicos: z.string().max(2000).nullable().optional(),
-  alergias: z.string().max(1000).nullable().optional(),
-  medicacion: z.string().max(1000).nullable().optional(),
-  obraSocial: z.string().max(120).nullable().optional(),
-  responsablePago: z
-    .object({
-      personaId: z.number().int().positive(),
-      relacion: z.enum(["PADRE","MADRE","TUTOR","CONYUGE","FAMILIAR","OTRO"]),
-      esPrincipal: z.boolean().optional(),
+  // Demographics
+  gender: z
+    .enum(["MALE", "FEMALE", "OTHER"], {
+      errorMap: () => ({ message: "Género inválido" }),
     })
     .optional(),
-});
+  dateOfBirth: z.string().datetime().optional().nullable(),
+
+  // Document
+  documentType: z.enum(["CI", "PASSPORT", "RUC", "OTHER"]).optional(),
+  documentNumber: z.string().min(1).max(50).optional(),
+  documentCountry: z.enum(["PY", "AR", "BR", "OTHER"]).optional(),
+  ruc: z.string().max(50).optional().nullable(),
+
+  // Contact
+  email: z.string().email("Email inválido").optional().nullable(),
+  phone: z.string().min(6).max(20).optional().nullable(),
+
+  // Address
+  address: z.string().max(300).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+
+  // Insurance
+  insurance: z.string().max(120).optional().nullable(),
+
+  // Emergency contact
+  emergencyContactName: z.string().max(160).optional().nullable(),
+  emergencyContactPhone: z.string().max(20).optional().nullable(),
+
+  // Status (only ADMIN/RECEP can change)
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+
+  // Concurrency control
+  updatedAt: z.string().datetime({ message: "updatedAt requerido para control de versión" }),
+})
+
+export type PatientUpdateBody = z.infer<typeof patientUpdateBodySchema>
 
 export const deleteQuerySchema = z.object({
   hard: z
@@ -32,4 +56,5 @@ export const deleteQuerySchema = z.object({
     .transform((v) => v === "true"), // default: false
 });
 export type DeleteQuery = z.infer<typeof deleteQuerySchema>;
-export type PacienteUpdateBody = z.infer<typeof pacienteUpdateBodySchema>;
+
+

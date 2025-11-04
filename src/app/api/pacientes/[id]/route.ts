@@ -1,18 +1,14 @@
 // src/app/api/pacientes/[id]/route.ts
 import type { NextRequest } from "next/server"
 import { requireRole } from "@/app/api/pacientes/_rbac"
-import { pathParamsSchema, pacienteUpdateBodySchema, deleteQuerySchema } from "./_schemas"
+import { pathParamsSchema, patientUpdateBodySchema, deleteQuerySchema } from "./_schemas"
 import { getPacienteFicha } from "./_service.get"
 import { updatePaciente } from "./_service.update"
 import { deletePacienteById, DeletePacienteError } from "./_service.delete"
 import { prisma as db } from "@/lib/prisma"
-import z from "zod"
 import { ok, errors, generateETag, checkETag, checkRateLimit, safeLog } from "../_http"
 
-const patchSchema = z.object({
-  accion: z.enum(["INACTIVAR", "ACTIVAR"]),
-  motivo: z.string().max(300).optional(),
-})
+
 
 export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
@@ -79,7 +75,7 @@ export async function PUT(req: NextRequest, ctx: { params: { id: string } }) {
 
   try {
     const { id } = pathParamsSchema.parse(ctx.params)
-    const body = pacienteUpdateBodySchema.parse(await req.json())
+    const body = patientUpdateBodySchema.parse(await req.json())
 
     // Check If-Match header for optimistic locking
     const ifMatch = req.headers.get("If-Match")
@@ -156,41 +152,81 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
   }
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
-  const gate = await requireRole(["ADMIN", "RECEP"])
-  if (!gate.ok) return errors.forbidden()
-
-  const { id } = pathParamsSchema.parse(ctx.params)
-  const idPaciente = Number(id)
-  const body = patchSchema.parse(await req.json())
-
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const updated = await db.$transaction(async (tx) => {
-      const paciente = await tx.paciente.update({
-        where: { idPaciente },
-        data: { estaActivo: body.accion === "ACTIVAR" },
-        include: {
-          persona: {
-            select: {
-              idPersona: true,
-              nombres: true,
-              apellidos: true,
-              genero: true,
-              documento: { select: { tipo: true, numero: true, ruc: true } },
-              contactos: { select: { tipo: true, valorNorm: true, esPrincipal: true, activo: true } },
-            },
-          },
-        },
-      })
-      // AuditLog (cuando actives el modelo)
-      // await tx.auditLog.create({...})
-      return paciente
+    // 1. Authentication & authorization (mock - replace with real auth)
+    const userId = 1 // TODO: Get from session
+    const userRole = "ADMIN" as "ADMIN" | "RECEP" | "ODONT" // TODO: Get from session
+
+    // 2. Parse and validate request
+    const id = Number.parseInt(params.id, 10)
+    if (isNaN(id)) {
+      return Response.json({ ok: false, error: "ID inválido" }, { status: 400 })
+    }
+
+    const body = await req.json()
+    const validatedBody = pacienteUpdateBodySchema.parse(body)
+
+    // 3. Get client IP for audit
+    const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined
+
+    // 4. Update patient
+    const result = await updatePaciente(id, validatedBody, {
+      userId,
+      role: userRole,
+      ip,
     })
 
-    return ok({ item: updated }) // sobre estándar
-  } catch (e: any) {
-    if (e?.name === "ZodError") return errors.validation("Datos inválidos")
-    if (e?.code?.startsWith?.("P")) return errors.db()
-    return errors.internal(e?.message ?? "Error al cambiar estado del paciente")
+    // 5. Return success
+    return Response.json(
+      { ok: true, data: result },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    )
+  } catch (error: any) {
+    console.error("[PATCH /api/pacientes/[id]]", error)
+
+    // Handle Zod validation errors
+    if (error.name === "ZodError") {
+      return Response.json(
+        {
+          ok: false,
+          error: "Datos inválidos",
+          details: error.errors,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Handle custom errors
+    if (error.status) {
+      return Response.json(
+        {
+          ok: false,
+          error: error.message,
+          code: error.code,
+        },
+        { status: error.status },
+      )
+    }
+
+    // Handle Prisma unique constraint violations
+    if (error.code === "P2002") {
+      return Response.json(
+        {
+          ok: false,
+          error: "Ya existe un registro con esos datos",
+          code: "DUPLICATE",
+        },
+        { status: 409 },
+      )
+    }
+
+    // Generic error
+    return Response.json({ ok: false, error: "Error al actualizar paciente" }, { status: 500 })
   }
 }

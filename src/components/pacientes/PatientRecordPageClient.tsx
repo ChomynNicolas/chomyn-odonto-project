@@ -84,7 +84,6 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
         patient={patient}
         userRole={userRole}
         onNewAppointment={() => setOpenNuevaCita(true)}
-        onUploadAttachment={() => toast({ title: "Subir Adjunto", description: "Funcionalidad en desarrollo" })}
         onEditPatient={() => toast({ title: "Editar Paciente", description: "Funcionalidad en desarrollo" })}
         onPrint={handlePrint}
         onExportPDF={handleExportPDF}

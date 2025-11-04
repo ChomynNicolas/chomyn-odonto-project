@@ -67,3 +67,36 @@ export function formatPhoneForWhatsApp(phone: string): string {
   const normalized = normalizePhonePY(phone)
   return normalized.replace(/^\+/, "")
 }
+
+
+/**
+ * Normalization utilities for contact data
+ * Ensures consistent formatting for emails and phone numbers
+ */
+
+
+
+/**
+ * Format phone number for display
+ * Converts +595XXXXXXXXX to (0XXX) XXX-XXX
+ */
+export function formatPhonePY(phone: string | null | undefined): string {
+  if (!phone) return ""
+
+  const normalized = normalizePhonePY(phone)
+  if (!normalized) return phone
+
+  const digits = normalized.replace("+595", "")
+
+  if (digits.length === 9) {
+    // Mobile: (0XXX) XXX-XXX
+    return `(0${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  } else if (digits.length >= 6) {
+    // Landline: (0XX) XXX-XXX or similar
+    const areaCode = digits.slice(0, 2)
+    const rest = digits.slice(2)
+    return `(0${areaCode}) ${rest}`
+  }
+
+  return phone
+}

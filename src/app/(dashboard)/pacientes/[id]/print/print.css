@@ -1,0 +1,53 @@
+/* A4 print-safe layout */
+@media print {
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    background: white !important;
+  }
+  .print-layout {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 20mm;
+    margin: 0 auto;
+    background: white;
+    font-size: 10pt;
+    color: #111827; /* gray-900 */
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  .no-break-inside {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+@media screen {
+  .print-layout {
+    max-width: 210mm;
+    min-height: 297mm;
+    padding: 20mm;
+    margin: 20px auto;
+    background: white;
+    box-shadow: 0 0 10px rgba(0,0,0,.1);
+    color: #111827;
+  }
+}
+
+/* helpers */
+h1, h2 { margin: 0; }
+h1 { font-size: 20pt; font-weight: 700; }
+h2 { font-size: 14pt; font-weight: 600; }
+.muted { color: #6b7280; } /* gray-500 */
+.section { margin-bottom: 18px; }
+.section h2 { padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; } /* gray-200 */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.row { display: flex; justify-content: space-between; align-items: flex-start; }
+.small { font-size: 9pt; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border-bottom: 1px solid #e5e7eb; padding: 6px 4px; text-align: left; font-size: 10pt; }
+.badge { display: inline-block; border: 1px solid #e5e7eb; padding: 2px 6px; border-radius: 999px; font-size: 9pt; }
+.danger-box { border: 2px solid #dc2626; background: #fef2f2; padding: 10px; border-radius: 6px; }

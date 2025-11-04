@@ -1,280 +1,312 @@
-"use client"
+// src/app/pacientes/[id]/print/page.tsx
+import { redirect } from "next/navigation"
+import { headers } from "next/headers"
+import "./print.css"
+import { auth } from "@/auth"
+import { assertCanPrintPatient } from "@/lib/access/patients"
+import { auditPatientPrint } from "@/lib/audit/log"
+import { getPrintablePatientData } from "@/lib/services/patients/getPrintablePatientData"
+import { formatDate, formatGender } from "@/lib/utils/patient-helpers"
 
-import type { PatientRecord } from "@/lib/types/patient"
-import { calculateAge, formatFullName, formatGender, formatDate } from "@/lib/utils/patient-helpers"
-
-// This would be replaced with actual data fetching
-async function getPatientData(id: string): Promise<PatientRecord> {
-  // Mock data fetch - replace with actual API call
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/pacientes/${id}`, {
-    cache: "no-store",
-  })
-  return response.json()
-}
+// ✅ Evitar caché y forzar ejecución server-side (Node, por Prisma)
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+export const fetchCache = "force-no-store"
+export const runtime = "nodejs"
 
 export default async function PatientPrintPage({ params }: { params: { id: string } }) {
-  const patient = await getPatientData(params.id)
-  const age = calculateAge(patient.dateOfBirth)
-  const fullName = formatFullName(patient.firstName, patient.lastName, patient.secondLastName)
+  const patientId = Number(params.id)
+  if (!Number.isFinite(patientId)) {
+    redirect("/pacientes") // id inválido
+  }
 
-  // Get active clinical data
-  const activeDiagnoses = patient.diagnoses?.filter((d) => d.status === "ACTIVE") || []
-  const activeAllergies = patient.allergies || []
-  const activeMedications = patient.medications?.filter((m) => m.status === "ACTIVE") || []
-  const latestVitalSigns = patient.vitalSigns?.sort(
-    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  )[0]
-  const activeTreatmentPlan = patient.treatmentPlans?.find((p) => p.status === "ACTIVE")
+  // 1) Autenticación
+  const session = await auth()
+  if (!session?.user) {
+    redirect("/login")
+  }
+
+  const user = {
+    id: Number(session.user.id),
+    role: (session.user as any).rolNombre || "RECEP",
+  } as const
+
+  // 2) Verificación de acceso y permisos
+  const decision = await assertCanPrintPatient(user, patientId)
+
+  // 3) Obtener DTO imprimible (respetando scope FULL/LIMITED)
+  const dto = await getPrintablePatientData(patientId, { scope: decision.scope })
+
+  // 4) Auditoría (segura, sin romper UX)
+  await auditPatientPrint({
+    actorId: user.id,
+    entityId: patientId,
+    headers: headers(),
+    path: `/pacientes/${patientId}/print`,
+    metadata: { scope: decision.scope }, // NO datos clínicos
+  })
+
+  // 5) Render A4 (sin interactividad)
+  const demo = dto.patient.demographics
+  const fullName = demo.fullName
+  const ageStr =
+    demo.birthDate && typeof demo.age === "number"
+      ? `${formatDate(demo.birthDate)} (${demo.age} años)`
+      : "—"
+  const genderStr = demo.gender ? formatGender(demo.gender as any) : "No especificado"
+
+  const primaryPhone = demo.contacts.primaryPhone?.valueNorm
+  const primaryEmail = demo.contacts.primaryEmail?.valueNorm
+
+  const hasAllergies = dto.allergies.length > 0
+  const hasDiagnoses = dto.diagnoses.length > 0
+  const hasMedications = dto.medications.length > 0
+  const vital = dto.vitalSigns
+  const plan = dto.treatmentPlan
+  const hasAppointments = dto.appointments.length > 0
 
   return (
     <div className="print-layout">
-      <style jsx global>{`
-        @media print {
-          body {
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
-          }
-          .print-layout {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 20mm;
-            margin: 0 auto;
-            background: white;
-            font-size: 10pt;
-          }
-          @page {
-            size: A4;
-            margin: 0;
-          }
-        }
-        @media screen {
-          .print-layout {
-            max-width: 210mm;
-            min-height: 297mm;
-            padding: 20mm;
-            margin: 20px auto;
-            background: white;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-          }
-        }
-      `}</style>
+      
 
       {/* Header */}
-      <header className="mb-6 border-b-2 border-gray-800 pb-4">
-        <div className="flex items-start justify-between">
+      <header className="section" style={{ borderBottom: "2px solid #1f2937", paddingBottom: 12 }}>
+        <div className="row">
           <div>
-            <h1 className="text-2xl font-bold">Clínica Dental</h1>
-            <p className="text-sm text-gray-600">Ficha Clínica del Paciente</p>
+            <h1>Chomyn Odontología</h1>
+            <p className="muted small">Ficha Clínica del Paciente</p>
           </div>
-          <div className="text-right text-sm">
-            <p>Fecha de Impresión:</p>
-            <p className="font-medium">{formatDate(new Date().toISOString(), true)}</p>
+          <div className="small" style={{ textAlign: "right" }}>
+            <div>Fecha de impresión:</div>
+            <div style={{ fontWeight: 600 }}>{formatDate(new Date().toISOString(), true)}</div>
           </div>
         </div>
       </header>
 
-      {/* Patient Information */}
-      <section className="mb-6">
-        <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Información del Paciente</h2>
-        <div className="grid grid-cols-2 gap-4">
+      {/* Datos del Paciente */}
+      <section className="section no-break-inside">
+        <h2>Información del Paciente</h2>
+        <div className="grid-2" style={{ marginTop: 8 }}>
           <div>
-            <p className="text-xs text-gray-600">Nombre Completo</p>
-            <p className="font-semibold">{fullName}</p>
+            <div className="small muted">Nombre Completo</div>
+            <div style={{ fontWeight: 600 }}>{fullName}</div>
           </div>
           <div>
-            <p className="text-xs text-gray-600">Fecha de Nacimiento / Edad</p>
-            <p className="font-semibold">
-              {formatDate(patient.dateOfBirth)} ({age} años)
-            </p>
+            <div className="small muted">Fecha de Nacimiento / Edad</div>
+            <div style={{ fontWeight: 600 }}>{ageStr}</div>
           </div>
           <div>
-            <p className="text-xs text-gray-600">Género</p>
-            <p className="font-semibold">{formatGender(patient.gender)}</p>
+            <div className="small muted">Género</div>
+            <div style={{ fontWeight: 600 }}>{genderStr}</div>
           </div>
           <div>
-            <p className="text-xs text-gray-600">Documento</p>
-            <p className="font-semibold">
-              {patient.documentType}: {patient.documentNumber || "N/A"}
-            </p>
-          </div>
-          {patient.address && (
-            <div className="col-span-2">
-              <p className="text-xs text-gray-600">Dirección</p>
-              <p className="font-semibold">
-                {patient.address}
-                {patient.city && `, ${patient.city}`}
-              </p>
+            <div className="small muted">Documento</div>
+            <div style={{ fontWeight: 600 }}>
+              {demo.document
+                ? `${demo.document.tipo} ${demo.document.numero}${demo.document.paisEmision ? ` (${demo.document.paisEmision})` : ""}`
+                : "—"}
             </div>
-          )}
+          </div>
+          <div className="no-break-inside">
+            <div className="small muted">Dirección</div>
+            <div style={{ fontWeight: 600 }}>
+              {demo.address ?? "—"}
+            </div>
+          </div>
+          <div>
+            <div className="small muted">Teléfono / Email</div>
+            <div className="small">
+              <span style={{ fontWeight: 600 }}>{primaryPhone ?? "—"}</span>
+              {" · "}
+              <span style={{ fontWeight: 600 }}>{primaryEmail ?? "—"}</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Contacts */}
-      {patient.contacts && patient.contacts.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Contactos</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {patient.contacts.slice(0, 4).map((contact) => (
-              <div key={contact.id}>
-                <p className="text-xs text-gray-600">{contact.type}</p>
-                <p className="font-medium">{contact.value}</p>
-              </div>
-            ))}
+      {/* Alergias (sección crítica) */}
+      {hasAllergies && (
+        <section className="section no-break-inside">
+          <h2>⚠ Alergias</h2>
+          <div className="danger-box" style={{ marginTop: 8 }}>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {dto.allergies.map((a) => (
+                <li key={a.id} style={{ fontWeight: 600, marginBottom: 4 }}>
+                  {(a.catalogName || a.label) ?? "Alergia"} — {a.severity}
+                  {a.reaction ? ` (${a.reaction})` : ""}
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
       )}
 
-      {/* Allergies - CRITICAL */}
-      {activeAllergies.length > 0 && (
-        <section className="mb-6 rounded border-2 border-red-600 bg-red-50 p-3">
-          <h2 className="mb-2 text-lg font-bold text-red-800">⚠ ALERGIAS</h2>
-          <ul className="list-inside list-disc space-y-1">
-            {activeAllergies.map((allergy) => (
-              <li key={allergy.id} className="font-semibold">
-                {allergy.allergen} - {allergy.severity}
-                {allergy.reaction && ` (${allergy.reaction})`}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Active Diagnoses */}
-      {activeDiagnoses.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Diagnósticos Activos</h2>
-          <ul className="space-y-2">
-            {activeDiagnoses.map((diagnosis) => (
-              <li key={diagnosis.id} className="flex justify-between">
-                <span>
-                  <strong>{diagnosis.label}</strong> ({diagnosis.code})
-                </span>
-                <span className="text-sm text-gray-600">{formatDate(diagnosis.diagnosedAt)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Active Medications */}
-      {activeMedications.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Medicación Activa</h2>
-          <ul className="space-y-2">
-            {activeMedications.map((medication) => (
-              <li key={medication.id}>
-                <p className="font-semibold">{medication.name}</p>
-                <p className="text-sm text-gray-600">
-                  {medication.dosage && `Dosis: ${medication.dosage}`}
-                  {medication.frequency && ` • Frecuencia: ${medication.frequency}`}
-                  {medication.route && ` • Vía: ${medication.route}`}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Latest Vital Signs */}
-      {latestVitalSigns && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Últimos Signos Vitales</h2>
-          <p className="mb-2 text-xs text-gray-600">Registrado: {formatDate(latestVitalSigns.recordedAt, true)}</p>
-          <div className="grid grid-cols-4 gap-3">
-            {latestVitalSigns.height && (
-              <div>
-                <p className="text-xs text-gray-600">Altura</p>
-                <p className="font-semibold">{latestVitalSigns.height} cm</p>
-              </div>
-            )}
-            {latestVitalSigns.weight && (
-              <div>
-                <p className="text-xs text-gray-600">Peso</p>
-                <p className="font-semibold">{latestVitalSigns.weight} kg</p>
-              </div>
-            )}
-            {latestVitalSigns.systolicBP && (
-              <div>
-                <p className="text-xs text-gray-600">TA</p>
-                <p className="font-semibold">
-                  {latestVitalSigns.systolicBP}/{latestVitalSigns.diastolicBP} mmHg
-                </p>
-              </div>
-            )}
-            {latestVitalSigns.heartRate && (
-              <div>
-                <p className="text-xs text-gray-600">FC</p>
-                <p className="font-semibold">{latestVitalSigns.heartRate} lpm</p>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Active Treatment Plan */}
-      {activeTreatmentPlan && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Plan de Tratamiento Activo</h2>
-          <p className="mb-3 font-semibold">{activeTreatmentPlan.title}</p>
-          <table className="w-full text-sm">
+      {/* Diagnósticos activos */}
+      {hasDiagnoses && (
+        <section className="section no-break-inside">
+          <h2>Diagnósticos Activos</h2>
+          <table className="table" style={{ marginTop: 8 }}>
             <thead>
-              <tr className="border-b">
-                <th className="py-1 text-left">#</th>
-                <th className="py-1 text-left">Procedimiento</th>
-                <th className="py-1 text-left">Diente</th>
-                <th className="py-1 text-left">Estado</th>
+              <tr>
+                <th>Diagnóstico</th>
+                <th>Código</th>
+                <th>Fecha</th>
+                <th className="small">Notas</th>
               </tr>
             </thead>
             <tbody>
-              {activeTreatmentPlan.steps
-                .sort((a, b) => a.order - b.order)
-                .map((step) => (
-                  <tr key={step.id} className="border-b">
-                    <td className="py-1">{step.order}</td>
-                    <td className="py-1">{step.procedure.name}</td>
-                    <td className="py-1">{step.tooth || "-"}</td>
-                    <td className="py-1">{step.status}</td>
-                  </tr>
-                ))}
+              {dto.diagnoses.map((d) => (
+                <tr key={d.id}>
+                  <td><strong>{d.catalogName ?? d.label}</strong></td>
+                  <td>{d.code ?? "—"}</td>
+                  <td>{formatDate(d.notedAt)}</td>
+                  <td className="small">{d.notes ?? "—"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </section>
       )}
 
-      {/* Recent Appointments */}
-      {patient.appointments && patient.appointments.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-lg font-bold border-b border-gray-300 pb-1">Últimas Citas</h2>
-          <table className="w-full text-sm">
+      {/* Medicación activa */}
+      {hasMedications && (
+        <section className="section no-break-inside">
+          <h2>Medicación Activa</h2>
+          <table className="table" style={{ marginTop: 8 }}>
             <thead>
-              <tr className="border-b">
-                <th className="py-1 text-left">Fecha</th>
-                <th className="py-1 text-left">Profesional</th>
-                <th className="py-1 text-left">Estado</th>
+              <tr>
+                <th>Medicamento</th>
+                <th>Dosis</th>
+                <th>Frecuencia</th>
+                <th>Vía</th>
+                <th>Desde</th>
+                <th>Hasta</th>
               </tr>
             </thead>
             <tbody>
-              {patient.appointments
-                .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
-                .slice(0, 5)
-                .map((apt) => (
-                  <tr key={apt.id} className="border-b">
-                    <td className="py-1">{formatDate(apt.scheduledAt, true)}</td>
-                    <td className="py-1">
-                      {apt.professional.firstName} {apt.professional.lastName}
-                    </td>
-                    <td className="py-1">{apt.status}</td>
-                  </tr>
-                ))}
+              {dto.medications.map((m) => (
+                <tr key={m.id}>
+                  <td><strong>{m.catalogName ?? m.label ?? "—"}</strong></td>
+                  <td>{m.dose ?? "—"}</td>
+                  <td>{m.freq ?? "—"}</td>
+                  <td>{m.route ?? "—"}</td>
+                  <td>{m.startAt ? formatDate(m.startAt) : "—"}</td>
+                  <td>{m.endAt ? formatDate(m.endAt) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {/* Signos vitales recientes */}
+      {vital && (
+        <section className="section no-break-inside">
+          <h2>Signos Vitales Recientes</h2>
+          <div className="small muted" style={{ marginTop: 6 }}>
+            Registrado: {formatDate(vital.measuredAt, true)}
+          </div>
+          <div className="grid-4" style={{ marginTop: 8 }}>
+            {"heightCm" in vital && vital.heightCm != null && (
+              <div>
+                <div className="small muted">Altura</div>
+                <div style={{ fontWeight: 600 }}>{vital.heightCm} cm</div>
+              </div>
+            )}
+            {"weightKg" in vital && vital.weightKg != null && (
+              <div>
+                <div className="small muted">Peso</div>
+                <div style={{ fontWeight: 600 }}>{vital.weightKg} kg</div>
+              </div>
+            )}
+            {"bmi" in vital && vital.bmi != null && (
+              <div>
+                <div className="small muted">IMC</div>
+                <div style={{ fontWeight: 600 }}>{vital.bmi}</div>
+              </div>
+            )}
+            {vital.bpSyst != null && vital.bpDiast != null && (
+              <div>
+                <div className="small muted">TA</div>
+                <div style={{ fontWeight: 600 }}>
+                  {vital.bpSyst}/{vital.bpDiast} mmHg
+                </div>
+              </div>
+            )}
+            {vital.heartRate != null && (
+              <div>
+                <div className="small muted">FC</div>
+                <div style={{ fontWeight: 600 }}>{vital.heartRate} lpm</div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Plan de tratamiento activo */}
+      {plan && (
+        <section className="section no-break-inside">
+          <h2>Plan de Tratamiento Activo</h2>
+          <div className="small" style={{ marginTop: 6, fontWeight: 600 }}>{plan.title}</div>
+          {plan.description && (
+            <div className="small muted" style={{ marginTop: 2 }}>{plan.description}</div>
+          )}
+          <table className="table" style={{ marginTop: 8 }}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Procedimiento</th>
+                <th>Diente</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.steps.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.order}</td>
+                  <td>{s.procedureName ?? s.serviceType ?? "—"}</td>
+                  <td>{s.toothNumber ?? "—"}</td>
+                  <td>{s.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {/* Últimas 5 citas */}
+      {hasAppointments && (
+        <section className="section no-break-inside">
+          <h2>Últimas Citas</h2>
+          <table className="table" style={{ marginTop: 8 }}>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Profesional</th>
+                <th>Consultorio</th>
+                <th>Motivo</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dto.appointments.map((c) => (
+                <tr key={c.id}>
+                  <td>{formatDate(c.scheduledAt, true)}</td>
+                  <td>{`${c.professional.firstName} ${c.professional.lastName}`}</td>
+                  <td>{c.consultorioName ?? "—"}</td>
+                  <td>{c.reason ?? "—"}</td>
+                  <td>{c.status}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </section>
       )}
 
       {/* Footer */}
-      <footer className="mt-8 border-t border-gray-300 pt-4 text-center text-xs text-gray-600">
-        <p>Este documento es confidencial y contiene información médica protegida.</p>
-        <p>Generado el {formatDate(new Date().toISOString(), true)}</p>
+      <footer className="section small" style={{ borderTop: "1px solid #e5e7eb", paddingTop: 8, textAlign: "center" }}>
+        <div>Este documento es confidencial y contiene información médica protegida.</div>
+        <div className="muted" style={{ marginTop: 2 }}>Chomyn Odontología • {new Date().getFullYear()}</div>
       </footer>
     </div>
   )

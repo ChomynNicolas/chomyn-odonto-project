@@ -1,6 +1,9 @@
 // Helper functions for patient data formatting and calculations
 
-import type { Gender, AllergySeverity, DiagnosisStatus, ToothCondition } from "@/lib/types/patient"
+import type { AllergySeverity, DiagnosisStatus, ToothCondition } from "@/lib/types/patient"
+
+type GenderUI = "MALE" | "FEMALE" | "OTHER"
+type GeneroDB = "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
 
 /**
  * Calculate age from date of birth
@@ -28,13 +31,18 @@ export function formatFullName(firstName: string, lastName: string, secondLastNa
 /**
  * Format gender for display
  */
-export function formatGender(gender: Gender): string {
-  const genderMap: Record<Gender, string> = {
+export function formatGender(gender: GenderUI | GeneroDB): string {
+  const map: Record<string, string> = {
     MALE: "Masculino",
     FEMALE: "Femenino",
     OTHER: "Otro",
+
+    MASCULINO: "Masculino",
+    FEMENINO: "Femenino",
+    OTRO: "Otro",
+    NO_ESPECIFICADO: "No especificado",
   }
-  return genderMap[gender] || gender
+  return map[gender] ?? String(gender)
 }
 
 /**

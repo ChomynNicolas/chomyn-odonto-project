@@ -15,6 +15,27 @@ model Rol {
   @@map("Rol")
 }
 
+
+model AuditLog {
+  idAuditLog Int      @id @default(autoincrement())
+  actorId    Int
+  action     String   // e.g., "PATIENT_UPDATE", "PATIENT_CREATE", "PATIENT_DELETE"
+  entity     String   // e.g., "Patient", "Appointment", "User"
+  entityId   Int
+  ip         String?
+  metadata   Json?    // Store diff and other contextual data
+  createdAt  DateTime @default(now())
+
+  actor Usuario @relation(fields: [actorId], references: [idUsuario])
+
+  @@index([actorId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+
+
 /// *
 /// * Tabla Usuarios
 model Usuario {
@@ -48,6 +69,7 @@ model Usuario {
 
   @@index([rolId])
   @@map("Usuario")
+  AuditLog AuditLog[]
 }
 
 model Profesional {
