@@ -1,30 +1,24 @@
 // src/app/api/personas/route.ts
-import { NextResponse, type NextRequest } from "next/server"
-import { requireRole } from "@/app/api/pacientes/_rbac"
+import { NextResponse } from "next/server"
+import { PersonaSearchQuerySchema } from "@/lib/schema/personas"
 import { searchPersonas } from "./_service.search"
 
-function jsonError(status: number, code: string, error: string) {
-  return NextResponse.json({ ok: false, code, error }, { status })
-}
-
-export async function GET(req: NextRequest) {
-  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
-  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado")
-
+export async function GET(req: Request) {
   try {
-    const params = {
-      q: req.nextUrl.searchParams.get("q") ?? "",
-      limit: req.nextUrl.searchParams.get("limit") ?? undefined,
-    }
-    const result = await searchPersonas(params)
+    const { searchParams } = new URL(req.url)
+    const q = searchParams.get("q") ?? ""
+    const limit = Number(searchParams.get("limit") ?? "10")
 
-    const res = NextResponse.json({ ok: true, data: result }, { status: 200 })
-    res.headers.set("Cache-Control", "no-store")
-    return res
-  } catch (e: any) {
-    if (e?.name === "ZodError") {
-      return jsonError(400, "VALIDATION_ERROR", e.issues?.[0]?.message ?? "Parámetros inválidos")
+    // Validación Zod server-side
+    const parsed = PersonaSearchQuerySchema.safeParse({ q, limit })
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: "Parámetros inválidos" }, { status: 400 })
     }
-    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al buscar personas")
+
+    const { items, hasMore } = await searchPersonas(parsed.data)
+    return NextResponse.json({ ok: true, data: { items, hasMore } })
+  } catch (error) {
+    console.error("[API] Error searching personas:", error)
+    return NextResponse.json({ ok: false, error: "Error al buscar personas" }, { status: 500 })
   }
 }

@@ -15,15 +15,13 @@ export function usePacientesQuery(filters: PacienteListFilters) {
       if (filters.cursor) params.set("cursor", filters.cursor)
       if (filters.limit) params.set("limit", String(filters.limit))
 
-      const response = await fetch(`/api/pacientes?${params}`)
-
-      if (!response.ok) {
-        throw new Error("Error al cargar pacientes")
-      }
-
-      return response.json() as Promise<PacientesResponse>
+      const response = await fetch(`/api/pacientes?${params}`, { cache: "no-store" })
+      if (!response.ok) throw new Error("Error al cargar pacientes")
+      return (await response.json()) as PacientesResponse
     },
-    staleTime: 30000, // 30 seconds
+    staleTime: 60_000, // 1 min fresco
+    gcTime: 10 * 60_000, // mantiene caché al volver
+    refetchOnWindowFocus: false,
   })
 }
 

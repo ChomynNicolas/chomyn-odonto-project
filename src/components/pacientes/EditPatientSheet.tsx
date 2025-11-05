@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { Loader2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { PatientRecord } from "@/lib/types/patient"
@@ -50,7 +50,6 @@ interface EditPatientSheetProps {
 
 export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: EditPatientSheetProps) {
   const router = useRouter()
-  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -137,8 +136,7 @@ export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: Edi
       }
 
       // Success
-      toast({
-        title: "Paciente actualizado",
+      toast("Paciente actualizado",{
         description: "Los datos del paciente se actualizaron correctamente",
       })
 

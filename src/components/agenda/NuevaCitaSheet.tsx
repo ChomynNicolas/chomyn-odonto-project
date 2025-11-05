@@ -63,7 +63,6 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
   } | null>(null)
 
 
-  console.log({prefill})
   const {
     register,
     handleSubmit,

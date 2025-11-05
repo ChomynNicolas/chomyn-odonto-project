@@ -140,10 +140,13 @@ export function formatRelativeTime(date: string): string {
   const diffHours = Math.floor(diffMins / 60)
   const diffDays = Math.floor(diffHours / 24)
 
+
+  
   if (diffMins < 1) return "Ahora"
   if (diffMins < 60) return `Hace ${diffMins} min`
   if (diffHours < 24) return `Hace ${diffHours}h`
   if (diffDays < 7) return `Hace ${diffDays}d`
+  
 
   return formatDate(date)
 }

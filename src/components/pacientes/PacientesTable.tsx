@@ -13,6 +13,7 @@ import { PatientQuickCreateModal } from "./PatientQuickCreateModal"
 import { formatPhoneForWhatsApp } from "@/lib/normalize"
 import { toast } from "sonner"
 import { formatDateInTZ } from "@/lib/date-utils"
+import Link from "next/link"
 
 export default function PacientesTable() {
   const [filters, setFilters] = useState<PacienteListFilters>({
@@ -20,6 +21,7 @@ export default function PacientesTable() {
     limit: 20,
   })
 
+  const [sessionId, setSessionId] = useState(() => Date.now())
   const [allItems, setAllItems] = useState<any[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [privacyMode, setPrivacyMode] = useState(false)
@@ -29,6 +31,8 @@ export default function PacientesTable() {
   const { data, isLoading, error } = usePacientesQuery(filters)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+
+  const isInitialLoadRef = useRef(true)
 
   // Load privacy mode from localStorage
   useEffect(() => {
@@ -41,23 +45,33 @@ export default function PacientesTable() {
     localStorage.setItem("pacientes-privacy-mode", String(privacyMode))
   }, [privacyMode])
 
-  // Update items when data changes
   useEffect(() => {
-    if (data) {
-      if (filters.cursor) {
-        setAllItems((prev) => [...prev, ...data.items])
-      } else {
-        setAllItems(data.items)
-      }
-      setNextCursor(data.nextCursor)
-    }
-  }, [data, filters.cursor])
-
-  // Reset when filters change (except cursor)
-  useEffect(() => {
+    // Generate new session ID when filters change (excluding cursor)
+    setSessionId(Date.now())
     setAllItems([])
     setNextCursor(null)
+    isInitialLoadRef.current = true
   }, [filters.q, filters.createdFrom, filters.createdTo, filters.estaActivo, filters.sort])
+
+  useEffect(() => {
+    if (!data) return
+
+    // If this is a cursor-based pagination request
+    if (filters.cursor && !isInitialLoadRef.current) {
+      setAllItems((prev) => {
+        // Prevent duplicates by checking if items already exist
+        const existingIds = new Set(prev.map((item) => item.idPaciente))
+        const newItems = data.items.filter((item) => !existingIds.has(item.idPaciente))
+        return [...prev, ...newItems]
+      })
+    } else {
+      // Fresh data load (initial or after filter change)
+      setAllItems(data.items)
+      isInitialLoadRef.current = false
+    }
+
+    setNextCursor(data.nextCursor)
+  }, [data, filters.cursor])
 
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
@@ -106,6 +120,9 @@ export default function PacientesTable() {
     if (phone.length <= 4) return "****"
     return `****${phone.slice(-4)}`
   }
+
+  const shouldShowLoading = isLoading && allItems.length === 0
+  const shouldShowEmpty = !isLoading && allItems.length === 0 && !error
 
   return (
     <div className="space-y-4">
@@ -228,19 +245,20 @@ export default function PacientesTable() {
       )}
 
       {/* Loading State */}
-      {isLoading && allItems.length === 0 && (
+      {shouldShowLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* Table */}
-      {!isLoading && allItems.length === 0 && !error && (
+      {/* Empty State */}
+      {shouldShowEmpty && (
         <div className="text-center py-12 text-muted-foreground">
           <p>No se encontraron pacientes</p>
         </div>
       )}
 
+      {/* Table */}
       {allItems.length > 0 && (
         <div className="rounded-lg border overflow-hidden">
           <div className="overflow-x-auto">
@@ -268,17 +286,16 @@ export default function PacientesTable() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {allItems.map((paciente, index) => (
+                {allItems.map((paciente) => (
                   <tr
-                    key={paciente.idPaciente}
+                    key={`${sessionId}-${paciente.idPaciente}`}
                     className={`hover:bg-muted/50 transition-colors ${
                       paciente.proximaCita?.esHoy ? "border-l-4 border-l-chart-1" : ""
                     }`}
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        // Navigate to patient detail
-                        console.log("Navigate to patient", paciente.idPaciente)
+                        window.location.href = `/pacientes/${paciente.idPaciente}`
                       }
                     }}
                   >
@@ -420,9 +437,11 @@ export default function PacientesTable() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
+                      <Link href={`/pacientes/${paciente.idPaciente}`}>
+                        <Button variant="ghost" size="sm">
+                          Ver
+                        </Button>
+                      </Link>
                     </td>
                   </tr>
                 ))}

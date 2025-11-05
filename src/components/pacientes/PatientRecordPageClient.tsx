@@ -16,11 +16,10 @@ import { PatientHeader } from "@/components/pacientes/PatientHeader"
 import { PatientKPIsCard } from "@/components/pacientes/PatientKpis"
 import { PeriodontogramPreview } from "@/components/pacientes/PeriodontogramPreview"
 import { PersonalDataSection } from "@/components/pacientes/PersonalDataSection"
-import { RecentEventsTimeline } from "@/components/pacientes/RecentEventsTimeline"
 import { ResponsiblePartiesSection } from "@/components/pacientes/ResponsiblePartiesSection"
 import { TreatmentPlanSection } from "@/components/pacientes/TreatmentPlanSection"
 import { VitalSignsSection } from "@/components/pacientes/VitalSignsSection"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { NuevaCitaSheet } from "@/components/agenda/NuevaCitaSheet";
 
 function nextQuarterHour(base = new Date()) {
@@ -33,7 +32,6 @@ function nextQuarterHour(base = new Date()) {
 
 export default function PatientRecordPage({ patientId }: { patientId: string }) {
   const router = useRouter()
-  const { toast } = useToast()
   const { patient, kpis, isLoading, error } = usePatientData(patientId)
   const [openNuevaCita, setOpenNuevaCita] = useState(false);
   const [userRole] = useState<UserRole>("ADMIN")
@@ -44,7 +42,7 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
   // Simula el currentUser mínimo; reemplaza con lo que tengas de auth
   const currentUser = { rol: userRole, profesionalId: undefined } as const;
 
-  console.log({patient})
+  console.log({kpis})
 
 
 
@@ -70,10 +68,7 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
   }
 
   const handleExportPDF = () => {
-    toast({
-      title: "Exportando PDF",
-      description: "La exportación comenzará en breve...",
-    })
+    toast("Exportando PDF", { description: "La exportación comenzará en breve..." })
     // Implement PDF export logic
   }
 
@@ -84,10 +79,10 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
         patient={patient}
         userRole={userRole}
         onNewAppointment={() => setOpenNuevaCita(true)}
-        onEditPatient={() => toast({ title: "Editar Paciente", description: "Funcionalidad en desarrollo" })}
+        onEditPatient={() => toast("Editar Paciente", { description: "Funcionalidad en desarrollo" })}
         onPrint={handlePrint}
         onExportPDF={handleExportPDF}
-        onViewAudit={() => toast({ title: "Auditoría", description: "Funcionalidad en desarrollo" })}
+        onViewAudit={() => toast("Auditoría", { description: "Funcionalidad en desarrollo" })}
       />
 
       {/* Main content */}
@@ -99,72 +94,71 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
             {kpis && <PatientKPIsCard kpis={kpis} />}
 
             {/* Recent events timeline */}
-            {kpis && <RecentEventsTimeline events={kpis.recentEvents} />}
 
             {/* Appointments */}
             <AppointmentsSection
               appointments={patient.appointments || []}
               userRole={userRole}
-              onNewAppointment={() => toast({ title: "Nueva Cita" })}
-              onViewInAgenda={(id) => toast({ title: "Ver en Agenda", description: `Cita ${id}` })}
-              onReschedule={(id) => toast({ title: "Reprogramar", description: `Cita ${id}` })}
+              onNewAppointment={() => toast("Nueva cita")}
+              onViewInAgenda={(id) => toast("Ver en agenda", { description: `Cita ${id}` })}
+              onReschedule={(id) => toast("Reprogramar", { description: `Cita ${id}` })}
             />
 
             {/* Treatment plan */}
             <TreatmentPlanSection
               treatmentPlans={patient.treatmentPlans || []}
               userRole={userRole}
-              onMarkProgress={(id) => toast({ title: "Progreso Marcado", description: `Paso ${id}` })}
+              onMarkProgress={(id) => toast("Progreso marcado", { description: `Paso ${id}` })}
             />
 
             {/* Diagnoses */}
             <DiagnosesSection
               diagnoses={patient.diagnoses || []}
               userRole={userRole}
-              onAddDiagnosis={() => toast({ title: "Agregar Diagnóstico" })}
+              onAddDiagnosis={() => toast("Agregar diagnóstico")}
             />
 
             {/* Allergies */}
             <AllergiesSection
               allergies={patient.allergies || []}
               userRole={userRole}
-              onAddAllergy={() => toast({ title: "Agregar Alergia" })}
+              onAddAllergy={() => toast("Agregar alergia")}
             />
 
             {/* Medications */}
             <MedicationsSection
               medications={patient.medications || []}
               userRole={userRole}
-              onAddMedication={() => toast({ title: "Agregar Medicación" })}
-              onSuspendMedication={(id) => toast({ title: "Medicación Suspendida", description: `ID: ${id}` })}
+              onAddMedication={() => toast("Agregar medicación")}
+              onSuspendMedication={(id) => toast("Medicación suspendida", { description: `ID: ${id}` })}
             />
 
             {/* Vital signs */}
             <VitalSignsSection
               vitalSigns={patient.vitalSigns || []}
               userRole={userRole}
-              onAddVitalSigns={() => toast({ title: "Registrar Signos Vitales" })}
+              onAddVitalSigns={() => toast("Registrar signos vitales")}
             />
 
             {/* Odontogram */}
             <OdontogramPreview
               snapshots={patient.odontogramSnapshots || []}
               userRole={userRole}
-              onAddSnapshot={() => toast({ title: "Registrar Odontograma" })}
+              onAddSnapshot={() => toast("Registrar odontograma")}
             />
 
             {/* Periodontogram */}
             <PeriodontogramPreview
               snapshots={patient.periodontogramSnapshots || []}
               userRole={userRole}
-              onAddSnapshot={() => toast({ title: "Registrar Periodontograma" })}
+              onAddSnapshot={() => toast("Registrar periodontograma")}
             />
 
             {/* Attachments */}
             <AttachmentsGallery
               attachments={patient.attachments || []}
               userRole={userRole}
-              onUpload={() => toast({ title: "Subir Adjunto" })}
+              onUpload={() => toast("Subir adjunto")}
             />
           </div>
 
@@ -173,20 +167,20 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
             <PersonalDataSection
               patient={patient}
               userRole={userRole}
-              onEdit={() => toast({ title: "Editar Datos Personales" })}
+              onEdit={() => toast("Editar datos personales")}
             />
 
             <ContactsSection
               contacts={patient.contacts || []}
               userRole={userRole}
-              onAdd={() => toast({ title: "Agregar Contacto" })}
-              onEdit={(id) => toast({ title: "Editar Contacto", description: `ID: ${id}` })}
+              onAdd={() => toast("Agregar contacto")}
+              onEdit={(id) => toast("Editar contacto", { description: `ID: ${id}` })}
             />
 
             <ResponsiblePartiesSection
               responsibleParties={patient.responsibleParties || []}
               userRole={userRole}
-              onAdd={() => toast({ title: "Agregar Responsable" })}
+              onAdd={() => toast("Agregar responsable")}
             />
           </div>
         </div>
@@ -203,8 +197,8 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
           tipo: "CONSULTA",
         }}
         onSuccess={() => {
-          toast({ title: "Cita creada", description: "Se actualizó la ficha." });
-          router.refresh();
+          toast.success("Cita creada", { description: "Se actualizó la ficha." })
+          router.refresh()
         }}
       />
     </div>
