@@ -101,10 +101,11 @@ export type Diagnosis = {
   code?: string
   label: string
   status: "ACTIVE" | "RESOLVED" | "CHRONIC" | "MONITORING" | "RULED_OUT"
-  diagnosedAt: string                      // <- usamos diagnosedAt
+  diagnosedAt: string // <- usamos diagnosedAt
   resolvedAt?: string
   notes?: string
-  professional?: {                         // <- opcional
+  professional?: {
+    // <- opcional
     id?: number
     firstName: string
     lastName?: string
@@ -113,24 +114,32 @@ export type Diagnosis = {
 
 // Allergy
 export interface Allergy {
-  id: string
-  allergen: string
+  id: string | number
+  allergen?: string
+  label?: string
   severity: AllergySeverity
   reaction?: string
   notes?: string
-  diagnosedAt: string
+  diagnosedAt?: string
+  notedAt?: string
+  isActive?: boolean
 }
 
 // Medication
 export interface Medication {
-  id: string
-  name: string
+  id: string | number
+  name?: string
+  label?: string
   dosage?: string
+  dose?: string
   frequency?: string
+  freq?: string
   route?: string
-  status: MedicationStatus
-  startedAt: string
+  status: MedicationStatus | "ACTIVE" | "INACTIVE"
+  startedAt?: string
+  startAt?: string
   endedAt?: string
+  endAt?: string
   prescribedBy?: {
     firstName: string
     lastName: string
@@ -140,7 +149,7 @@ export interface Medication {
 // Vital signs
 export type VitalSigns = {
   id: number
-  recordedAt: string                     // <- renombramos measuredAt -> recordedAt
+  recordedAt: string // <- renombramos measuredAt -> recordedAt
   height?: number | null
   weight?: number | null
   bmi?: number | null
@@ -149,7 +158,8 @@ export type VitalSigns = {
   heartRate?: number | null
   temperature?: number | null
   notes?: string | null
-  recordedBy?: {                         // <- opcional
+  recordedBy?: {
+    // <- opcional
     id?: number
     firstName: string
     lastName?: string

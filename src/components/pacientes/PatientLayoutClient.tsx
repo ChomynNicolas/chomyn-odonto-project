@@ -1,7 +1,9 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import type { PatientRecord, UserRole } from "@/lib/types/patient"
 import { calculateAge, formatFullName, formatGender, getSeverityColor } from "@/lib/utils/patient-helpers"
@@ -16,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Calendar,
   Upload,
@@ -28,35 +31,26 @@ import {
   AlertTriangle,
   Stethoscope,
   Clock,
-  FileText,
   ClipboardList,
   Activity,
+  Paperclip,
+  LayoutDashboard,
 } from "lucide-react"
 import { EditPatientSheet } from "./EditPatientSheet"
+import { NuevaCitaSheet } from "@/components/agenda/NuevaCitaSheet"
+import { toast } from "sonner"
 
-interface PatientHeaderProps {
+interface PatientLayoutClientProps {
   patient: PatientRecord
-  userRole: UserRole
-  onNewAppointment?: () => void
-  onUploadAttachment?: () => void
-  onEditPatient?: () => void
-  onPrint?: () => void
-  onExportPDF?: () => void
-  onViewAudit?: () => void
+  children: React.ReactNode
 }
 
-export function PatientHeader({
-  patient,
-  userRole,
-  onNewAppointment,
-  onUploadAttachment,
-  onEditPatient,
-  onPrint,
-  onExportPDF,
-  onViewAudit,
-}: PatientHeaderProps) {
+export function PatientLayoutClient({ patient, children }: PatientLayoutClientProps) {
   const [editSheetOpen, setEditSheetOpen] = useState(false)
+  const [openNuevaCita, setOpenNuevaCita] = useState(false)
+  const [userRole] = useState<UserRole>("ADMIN")
   const pathname = usePathname()
+  const router = useRouter()
 
   const permissions = getPermissions(userRole)
   const age = calculateAge(patient.dateOfBirth)
@@ -65,7 +59,6 @@ export function PatientHeader({
 
   const activeAllergies = patient.allergies || []
   const severeAllergies = activeAllergies.filter((a) => a.severity === "SEVERE")
-
   const activeDiagnoses = patient.diagnoses?.filter((d) => d.status === "ACTIVE") || []
   const primaryDiagnosis = activeDiagnoses[0]
 
@@ -74,21 +67,28 @@ export function PatientHeader({
     ?.filter((apt) => new Date(apt.scheduledAt) > now && apt.status !== "CANCELLED")
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())[0]
 
-  const handleEditClick = () => {
-    setEditSheetOpen(true)
-    onEditPatient?.()
+  const handlePrint = () => {
+    router.push(`/pacientes/${patient.id}/print`)
   }
 
-  const handlePrintClick = () => {
-    // In a real implementation, get userId from auth context
-    // For now, we'll call the onPrint callback which should handle navigation
-    onPrint?.()
+  const handleExportPDF = () => {
+    toast("Exportando PDF", { description: "La exportación comenzará en breve..." })
   }
 
-  const isActive = (path: string) => pathname === path
+  const getActiveTab = () => {
+    if (pathname === `/pacientes/${patient.id}`) return "ficha"
+    if (pathname.includes("/historia")) return "historia"
+    if (pathname.includes("/consultas")) return "consultas"
+    if (pathname.includes("/odontograma")) return "odontograma"
+    if (pathname.includes("/adjuntos")) return "adjuntos"
+    return "ficha"
+  }
+
+  const currentUser = { rol: userRole, profesionalId: undefined } as const
 
   return (
-    <>
+    <div className="min-h-screen bg-background">
+      {/* Patient Header */}
       <div className="border-b bg-card">
         <div className="container mx-auto px-4 py-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -168,19 +168,13 @@ export function PatientHeader({
             {/* Right section: Actions */}
             <div className="flex flex-wrap gap-2 lg:flex-nowrap">
               {permissions.canScheduleAppointments && (
-                <Button onClick={onNewAppointment} className="flex-1 lg:flex-none">
+                <Button onClick={() => setOpenNuevaCita(true)} className="flex-1 lg:flex-none">
                   <Calendar className="mr-2 h-4 w-4" />
                   Nueva Cita
                 </Button>
               )}
-              {permissions.canUploadAttachments && (
-                <Button onClick={onUploadAttachment} variant="outline" className="flex-1 lg:flex-none bg-transparent">
-                  <Upload className="mr-2 h-4 w-4" />
-                  Subir Adjunto
-                </Button>
-              )}
               {permissions.canEditDemographics && (
-                <Button onClick={handleEditClick} variant="outline" className="flex-1 lg:flex-none bg-transparent">
+                <Button onClick={() => setEditSheetOpen(true)} variant="outline" className="flex-1 lg:flex-none">
                   <Edit className="mr-2 h-4 w-4" />
                   Editar
                 </Button>
@@ -194,14 +188,23 @@ export function PatientHeader({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  {permissions.canPrint && (
-                    <DropdownMenuItem onClick={handlePrintClick}>
-                      <Printer className="mr-2 h-4 w-4" />
-                      Imprimir Ficha
+                  {permissions.canUploadAttachments && (
+                    <DropdownMenuItem onClick={() => toast("Subir adjunto")}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Subir Adjunto
                     </DropdownMenuItem>
                   )}
+                  {permissions.canPrint && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handlePrint}>
+                        <Printer className="mr-2 h-4 w-4" />
+                        Imprimir Ficha
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   {permissions.canExport && (
-                    <DropdownMenuItem onClick={onExportPDF}>
+                    <DropdownMenuItem onClick={handleExportPDF}>
                       <FileDown className="mr-2 h-4 w-4" />
                       Exportar PDF
                     </DropdownMenuItem>
@@ -209,7 +212,7 @@ export function PatientHeader({
                   {permissions.canViewAudit && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={onViewAudit}>
+                      <DropdownMenuItem onClick={() => toast("Ver auditoría")}>
                         <History className="mr-2 h-4 w-4" />
                         Ver Auditoría
                       </DropdownMenuItem>
@@ -219,64 +222,96 @@ export function PatientHeader({
               </DropdownMenu>
             </div>
           </div>
-
-          {/* Navigation tabs */}
-          <div className="mt-6 flex items-center gap-2 border-t pt-4 overflow-x-auto">
-            <Link href={`/pacientes/${patient.id}`}>
-              <Button
-                variant={isActive(`/pacientes/${patient.id}`) ? "default" : "ghost"}
-                size="sm"
-                className="flex items-center gap-2 whitespace-nowrap"
-              >
-                <FileText className="h-4 w-4" />
-                Ficha
-              </Button>
-            </Link>
-
-            <Link href={`/pacientes/${patient.id}/historia`}>
-              <Button
-                variant={isActive(`/pacientes/${patient.id}/historia`) ? "default" : "ghost"}
-                size="sm"
-                className="flex items-center gap-2 whitespace-nowrap"
-              >
-                <ClipboardList className="h-4 w-4" />
-                Historia Clínica
-              </Button>
-            </Link>
-
-            <Link href={`/pacientes/${patient.id}/consultas`}>
-              <Button
-                variant={isActive(`/pacientes/${patient.id}/consultas`) ? "default" : "ghost"}
-                size="sm"
-                className="flex items-center gap-2 whitespace-nowrap"
-              >
-                <Activity className="h-4 w-4" />
-                Consultas
-              </Button>
-            </Link>
-
-            <Link href={`/pacientes/${patient.id}/odontograma`}>
-              <Button
-                variant={isActive(`/pacientes/${patient.id}/odontograma`) ? "default" : "ghost"}
-                size="sm"
-                className="flex items-center gap-2 whitespace-nowrap"
-              >
-                <Stethoscope className="h-4 w-4" />
-                Odontograma
-              </Button>
-            </Link>
-          </div>
         </div>
       </div>
+
+      <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4">
+          <Tabs value={getActiveTab()} className="w-full">
+            <TabsList className="h-auto w-full justify-start rounded-none border-0 bg-transparent p-0">
+              <Link href={`/pacientes/${patient.id}`} className="flex-shrink-0">
+                <TabsTrigger
+                  value="ficha"
+                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ficha</span>
+                </TabsTrigger>
+              </Link>
+
+              <Link href={`/pacientes/${patient.id}/historia`} className="flex-shrink-0">
+                <TabsTrigger
+                  value="historia"
+                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  <span className="hidden sm:inline">Historia Clínica</span>
+                </TabsTrigger>
+              </Link>
+
+              <Link href={`/pacientes/${patient.id}/consultas`} className="flex-shrink-0">
+                <TabsTrigger
+                  value="consultas"
+                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <Activity className="h-4 w-4" />
+                  <span className="hidden sm:inline">Consultas</span>
+                </TabsTrigger>
+              </Link>
+
+              <Link href={`/pacientes/${patient.id}/odontograma`} className="flex-shrink-0">
+                <TabsTrigger
+                  value="odontograma"
+                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <Stethoscope className="h-4 w-4" />
+                  <span className="hidden sm:inline">Odontograma</span>
+                </TabsTrigger>
+              </Link>
+
+              <Link href={`/pacientes/${patient.id}/adjuntos`} className="flex-shrink-0">
+                <TabsTrigger
+                  value="adjuntos"
+                  className="gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <Paperclip className="h-4 w-4" />
+                  <span className="hidden sm:inline">Adjuntos</span>
+                </TabsTrigger>
+              </Link>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="container mx-auto px-4 py-6">{children}</div>
 
       <EditPatientSheet
         open={editSheetOpen}
         onOpenChange={setEditSheetOpen}
         patient={patient}
         onSuccess={() => {
-          // Additional success handling if needed
+          router.refresh()
+          setEditSheetOpen(false)
         }}
       />
-    </>
+
+      <NuevaCitaSheet
+        open={openNuevaCita}
+        onOpenChange={setOpenNuevaCita}
+        defaults={{ inicio: new Date() }}
+        currentUser={currentUser}
+        prefill={{
+          pacienteId: Number(patient.id),
+          lockPaciente: true,
+          motivo: "Consulta desde ficha",
+          tipo: "CONSULTA",
+        }}
+        onSuccess={() => {
+          toast.success("Cita creada", { description: "Se actualizó la ficha." })
+          router.refresh()
+        }}
+      />
+    </div>
   )
 }

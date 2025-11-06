@@ -67,25 +67,29 @@ export function MedicationsSection({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">{medication.name}</h4>
+                      <h4 className="font-semibold">{medication.name || medication.label}</h4>
                       <Badge variant={getStatusVariant(medication.status)}>{getStatusLabel(medication.status)}</Badge>
                     </div>
                     <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                      {medication.dosage && <p>Dosis: {medication.dosage}</p>}
-                      {medication.frequency && <p>Frecuencia: {medication.frequency}</p>}
+                      {(medication.dosage || medication.dose) && <p>Dosis: {medication.dosage || medication.dose}</p>}
+                      {(medication.frequency || medication.freq) && (
+                        <p>Frecuencia: {medication.frequency || medication.freq}</p>
+                      )}
                       {medication.route && <p>Vía: {medication.route}</p>}
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Inicio: {formatDate(medication.startedAt)}
+                      Inicio: {formatDate(medication.startedAt || medication.startAt || new Date().toISOString())}
                       {medication.prescribedBy &&
                         ` • Prescrito por: ${medication.prescribedBy.firstName} ${medication.prescribedBy.lastName}`}
                     </p>
-                    {medication.endedAt && (
-                      <p className="text-xs text-muted-foreground">Fin: {formatDate(medication.endedAt)}</p>
+                    {(medication.endedAt || medication.endAt) && (
+                      <p className="text-xs text-muted-foreground">
+                        Fin: {formatDate(medication.endedAt || medication.endAt || "")}
+                      </p>
                     )}
                   </div>
                   {permissions.canEditClinicalData && medication.status === "ACTIVE" && (
-                    <Button size="sm" variant="outline" onClick={() => onSuspendMedication?.(medication.id)}>
+                    <Button size="sm" variant="outline" onClick={() => onSuspendMedication?.(String(medication.id))}>
                       Suspender
                     </Button>
                   )}

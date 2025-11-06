@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { listPacientes, createPaciente } from "./_repo"
-import { PacienteCreateDTOSchema } from "@/lib/api/pacientes.types"
+import { ok } from "assert";
+import { errors } from "../_http";
+import { requireRole } from "./_rbac";
+import { PacienteCreateBodySchema } from "./_schemas";
 
 // In-memory idempotency cache (in production, use Redis)
 const idempotencyCache = new Map<string, { response: any; timestamp: number }>()
@@ -45,61 +48,58 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Check idempotency key
+    const gate = await requireRole(["ADMIN", "RECEP"])
+    if (!gate.ok) {
+      return errors.forbidden(gate.error)
+    }
+
     const idempotencyKey = request.headers.get("Idempotency-Key")
 
     if (idempotencyKey) {
       cleanExpiredIdempotencyKeys()
       const cached = idempotencyCache.get(idempotencyKey)
       if (cached) {
+        console.log("[v0] Returning cached response for idempotency key:", idempotencyKey)
         return NextResponse.json(cached.response, {
+          status: 201,
           headers: { "Idempotency-Key": idempotencyKey },
         })
       }
     }
 
     const body = await request.json()
-    const validation = PacienteCreateDTOSchema.safeParse(body)
+    const validation = PacienteCreateBodySchema.safeParse(body)
 
     if (!validation.success) {
-      return NextResponse.json(
-        {
-          error: "Datos inválidos",
-          fieldErrors: validation.error.flatten().fieldErrors,
-        },
-        { status: 400 },
-      )
+      return errors.validation("Datos inválidos", validation.error.flatten().fieldErrors)
     }
 
     const data = validation.data
 
-    // Convert date string to Date if provided
-    const createData = {
-      ...data,
-      fechaNacimiento: data.fechaNacimiento ? new Date(data.fechaNacimiento) : undefined,
-    }
+    console.log("[v0] Creating patient:", data.nombreCompleto)
+    const result = await createPaciente(data, gate.userId || 1)
 
-    const result = await createPaciente(createData)
-
-    // Cache response if idempotency key provided
+    const response = { data: result }
     if (idempotencyKey) {
       idempotencyCache.set(idempotencyKey, {
-        response: result,
+        response,
         timestamp: Date.now(),
       })
     }
 
-    return NextResponse.json(result, {
-      status: 201,
-      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
-    })
+    console.log("[v0] Patient created successfully:", result.idPaciente)
+    return ok(result, undefined, 201)
   } catch (error) {
-    console.error("[API] Error creating paciente:", error)
+    console.error("[v0] Error creating patient:", error)
 
-    if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json({ error: "Error al crear paciente", details: String(error) }, { status: 500 })
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
+      return errors.conflict("Ya existe un paciente con este documento")
     }
 
-    return NextResponse.json({ error: "Error al crear paciente" }, { status: 500 })
+    if (process.env.NODE_ENV !== "production") {
+      return errors.internal("Error al crear paciente", String(error))
+    }
+
+    return errors.internal("Error al crear paciente")
   }
 }

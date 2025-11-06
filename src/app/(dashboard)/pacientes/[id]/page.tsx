@@ -1,8 +1,15 @@
-import PatientRecordPageClient from "@/components/pacientes/PatientRecordPageClient";
-import React from "react";
 
-export default function Page({ params }: { params: Promise<{ id: string }> }) {
-  // En Server Components, params es objeto normal (no Promise)
-  const { id } = React.use(params) 
-  return <PatientRecordPageClient patientId={id} />;
+import { PatientFichaView } from "@/components/pacientes/PatientFichaView"
+import { notFound } from "next/navigation"
+import { getPatientById } from '@/lib/api/patient-api';
+
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const patient = await getPatientById(id)
+
+  if (!patient) {
+    notFound()
+  }
+
+  return <PatientFichaView patient={patient} />
 }

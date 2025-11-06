@@ -56,7 +56,7 @@ export function AllergiesSection({ allergies, userRole, onAddAllergy }: Allergie
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       {allergy.severity === "SEVERE" && <AlertTriangle className="h-5 w-5 text-red-600" />}
-                      <h4 className="font-semibold">{allergy.allergen}</h4>
+                      <h4 className="font-semibold">{allergy.allergen || allergy.label}</h4>
                       <Badge className={getSeverityColor(allergy.severity)}>{getSeverityLabel(allergy.severity)}</Badge>
                     </div>
                     {allergy.reaction && (
@@ -64,7 +64,7 @@ export function AllergiesSection({ allergies, userRole, onAddAllergy }: Allergie
                     )}
                     {allergy.notes && <p className="mt-2 text-sm">{allergy.notes}</p>}
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Diagnosticado: {formatDate(allergy.diagnosedAt)}
+                      Diagnosticado: {formatDate(allergy.diagnosedAt || allergy.notedAt || new Date().toISOString())}
                     </p>
                   </div>
                 </div>

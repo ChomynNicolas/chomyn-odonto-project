@@ -100,3 +100,98 @@ export function formatPhonePY(phone: string | null | undefined): string {
 
   return phone
 }
+
+
+export function normalizarTelefono(telefono: string): string {
+  let clean = telefono.replace(/[\s\-()]/g, "")
+
+  if (clean.startsWith("0")) {
+    clean = clean.substring(1)
+  }
+
+  if (!clean.startsWith("+595")) {
+    if (!clean.startsWith("595")) {
+      clean = "595" + clean
+    }
+    clean = "+" + clean
+  }
+
+  return clean
+}
+
+export function normalizarEmail(email: string): string {
+  const trimmed = email.trim()
+  const [localPart, domain] = trimmed.split("@")
+  if (!domain) return trimmed.toLowerCase()
+  return `${localPart}@${domain.toLowerCase()}`
+}
+
+export function validarTelefonoPY(telefono: string): boolean {
+  const normalized = normalizarTelefono(telefono)
+  return /^\+595[0-9]{7,9}$/.test(normalized)
+}
+
+export function esMovilPY(telefono: string): boolean {
+  const normalized = normalizarTelefono(telefono)
+  const prefijosMoviles = [
+    "961",
+    "971",
+    "972",
+    "973",
+    "974",
+    "975",
+    "976",
+    "981",
+    "982",
+    "983",
+    "984",
+    "985",
+    "986",
+    "991",
+    "992",
+    "994",
+    "995",
+  ]
+
+  for (const prefijo of prefijosMoviles) {
+    if (normalized.startsWith(`+595${prefijo}`)) {
+      return true
+    }
+  }
+  return false
+}
+
+export function validarDocumento(numero: string, tipo: string): boolean {
+  const clean = numero.replace(/[.\-\s]/g, "")
+
+  switch (tipo) {
+    case "CI":
+    case "DNI":
+      return /^[0-9]{6,8}$/.test(clean)
+
+    case "RUC":
+      if (!/^[0-9]{2}[0-9]{6}[0-9]$/.test(clean)) {
+        return false
+      }
+      return true
+
+    case "PASAPORTE":
+      return /^[A-Z0-9]{6,12}$/i.test(clean)
+
+    default:
+      return false
+  }
+}
+
+export function calcularEdad(fechaNacimiento: Date): number {
+  const hoy = new Date()
+  let edad = hoy.getFullYear() - fechaNacimiento.getFullYear()
+  const mes = hoy.getMonth() - fechaNacimiento.getMonth()
+
+  if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
+    edad--
+  }
+
+  return edad
+}
+

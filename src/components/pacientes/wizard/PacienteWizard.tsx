@@ -9,11 +9,11 @@ import { WizardHeader } from "./WizardHeader"
 import { WizardFooter } from "./WizardFooter"
 import { Step1Identificacion } from "./steps/Step1Identificacion"
 import { Step2Contacto } from "./steps/Step2Contacto"
-import { Step3Clinicos } from "./steps/Step3Clinicos"
 import { Step4Responsable } from "./steps/Step4Responsable"
 import { Step5Adjuntos } from "./steps/Step5Adjuntos"
 import { toast } from "sonner"
 import { PacienteCreateDTOClient, PacienteCreateSchemaClient } from "@/lib/schema/paciente.schema"
+import { Step3Clinicos } from "./steps/Step3Clinicos"
 
 const STEPS = [
   { id: 1, name: "Identificación", required: true },
@@ -35,7 +35,8 @@ export function PacienteWizard() {
     mode: "onBlur",
     reValidateMode: "onChange",
     defaultValues: {
-      nombreCompleto: "",
+      nombres: "",
+      apellidos: "",
       genero: undefined,
       fechaNacimiento: undefined,
       tipoDocumento: "CI",
@@ -55,16 +56,15 @@ export function PacienteWizard() {
       antecedentes: "",
       observaciones: "",
       responsablePago: undefined,
+      adjuntos: [],
     },
   })
 
   const handleNext = async () => {
-    // Validar campos del paso actual
     const fieldsToValidate = getFieldsForStep(currentStep)
     const isValid = await form.trigger(fieldsToValidate)
 
     if (!isValid) {
-      // Scroll al primer error
       const firstError = Object.keys(form.formState.errors)[0]
       if (firstError) {
         const element = document.getElementById(firstError)
@@ -86,7 +86,6 @@ export function PacienteWizard() {
     setIsSubmitting(true)
 
     try {
-      // Validar campos obligatorios (pasos 1 y 2)
       const requiredFields = [...getFieldsForStep(1), ...getFieldsForStep(2)]
       const isValid = await form.trigger(requiredFields)
 
@@ -103,35 +102,46 @@ export function PacienteWizard() {
 
       const values = form.getValues()
 
-      console.log("[v0] Guardando paciente:", values, "Intent:", intent)
-
-      const idempotencyKey = `paciente-create-${Date.now()}-${Math.random().toString(36).substring(7)}`
-
-      const apiData = {
-        nombreCompleto: values.nombreCompleto,
-        genero: values.genero,
-        fechaNacimiento: values.fechaNacimiento,
+      const payload = {
+        nombreCompleto: `${values.nombres} ${values.apellidos}`.trim(),
+        genero: values.genero === "MASCULINO" ? "M" : values.genero === "FEMENINO" ? "F" : "X",
+        fechaNacimiento: values.fechaNacimiento?.toISOString(),
         tipoDocumento: values.tipoDocumento,
-        dni: values.numeroDocumento,
+        numeroDocumento: values.numeroDocumento,
         ruc: values.ruc,
         paisEmision: values.paisEmision,
-        domicilio: values.direccion,
+        direccion: values.direccion,
         ciudad: values.ciudad,
         pais: values.pais,
         telefono: values.telefono,
         email: values.email,
         preferenciasContacto: {
-          whatsapp: values.preferenciasContacto?.includes("whatsapp"),
-          sms: values.preferenciasContacto?.includes("sms"),
-          llamada: values.preferenciasContacto?.includes("llamada"),
-          email: values.preferenciasContacto?.includes("email"),
+          whatsapp: values.preferenciasContacto?.includes("WHATSAPP"),
+          sms: values.preferenciasContacto?.includes("SMS"),
+          llamada: values.preferenciasContacto?.includes("LLAMADA"),
+          email: values.preferenciasContacto?.includes("EMAIL"),
+        },
+        preferenciasRecordatorio: {
+          whatsapp: values.preferenciasRecordatorio?.includes("WHATSAPP"),
+          sms: values.preferenciasRecordatorio?.includes("SMS"),
+          email: values.preferenciasRecordatorio?.includes("EMAIL"),
+        },
+        preferenciasCobranza: {
+          whatsapp: values.preferenciasCobranza?.includes("WHATSAPP"),
+          sms: values.preferenciasCobranza?.includes("SMS"),
+          email: values.preferenciasCobranza?.includes("EMAIL"),
         },
         alergias: values.alergias,
         medicacion: values.medicacion,
-        antecedentesMedicos: values.antecedentes,
+        antecedentes: values.antecedentes,
         observaciones: values.observaciones,
         responsablePago: values.responsablePago,
+        adjuntos: values.adjuntos,
       }
+
+      console.log("[v0] Guardando paciente:", payload, "Intent:", intent)
+
+      const idempotencyKey = `paciente-create-${Date.now()}-${Math.random().toString(36).substring(7)}`
 
       const response = await fetch("/api/pacientes", {
         method: "POST",
@@ -139,7 +149,7 @@ export function PacienteWizard() {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify(apiData),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
@@ -150,10 +160,17 @@ export function PacienteWizard() {
       const result = await response.json()
       const pacienteId = result.data.idPaciente
 
-      console.log("[v0] Patient created successfully:", pacienteId)
+      console.log("[v0] Paciente creado exitosamente:", pacienteId)
+
+      if (values.adjuntos && values.adjuntos.length > 0) {
+        uploadAdjuntosPostCreate(pacienteId, values.adjuntos).catch((err) => {
+          console.error("[v0] Error uploading adjuntos:", err)
+          toast.warning("Paciente creado, pero algunos adjuntos no se pudieron subir")
+        })
+      }
 
       toast.success("Paciente creado correctamente", {
-        description: `${values.nombreCompleto} (ID ${pacienteId})`,
+        description: `${values.nombres} ${values.apellidos} (ID ${pacienteId})`,
       })
 
       switch (intent) {
@@ -164,7 +181,6 @@ export function PacienteWizard() {
           router.push(`/agenda?pacienteId=${pacienteId}`)
           break
         case "continue":
-          // Reset form and stay
           form.reset()
           setCurrentStep(1)
           toast.info("Formulario listo para nuevo paciente")
@@ -212,7 +228,6 @@ export function PacienteWizard() {
           onNext={handleNext}
           onSave={handleSave}
           onCancel={() => {
-            // TODO: Implementar confirmación si hay cambios
             router.push("/pacientes")
           }}
         />
@@ -225,7 +240,8 @@ function getFieldsForStep(step: number): (keyof PacienteCreateDTOClient)[] {
   switch (step) {
     case 1:
       return [
-        "nombreCompleto",
+        "nombres",
+        "apellidos",
         "genero",
         "fechaNacimiento",
         "tipoDocumento",
@@ -238,12 +254,31 @@ function getFieldsForStep(step: number): (keyof PacienteCreateDTOClient)[] {
     case 2:
       return ["telefono", "email", "preferenciasContacto"]
     case 3:
-      return [] // Todos opcionales
+      return []
     case 4:
-      return [] // Opcional
+      return []
     case 5:
-      return [] // Opcional
+      return []
     default:
       return []
+  }
+}
+
+async function uploadAdjuntosPostCreate(pacienteId: number, adjuntos: any[]) {
+  for (const adjunto of adjuntos) {
+    if (adjunto._cloud) {
+      await fetch(`/api/pacientes/${pacienteId}/adjuntos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicId: adjunto._cloud.publicId,
+          secureUrl: adjunto._cloud.secureUrl,
+          tipo: adjunto.tipoAdj || "OTHER",
+          nombre: adjunto.nombre,
+          bytes: adjunto._cloud.bytes,
+          format: adjunto._cloud.format,
+        }),
+      })
+    }
   }
 }

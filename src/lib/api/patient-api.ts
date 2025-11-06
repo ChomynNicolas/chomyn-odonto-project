@@ -1,8 +1,9 @@
 // API client for patient data
 
 import type { PatientRecord, PatientKPIs, AuditEntry } from "@/lib/types/patient"
-import { mapFichaToPatientRecord } from "../mappers/patient";
-import { PacienteFichaCompletaDTO } from "@/app/api/pacientes/[id]/_dto";
+import { mapFichaToPatientRecord } from "../mappers/patient"
+import type { PacienteFichaCompletaDTO } from "@/app/api/pacientes/[id]/_dto"
+import { getPacienteFicha } from "@/app/api/pacientes/[id]/_service.get";
 
 interface FetchOptions extends RequestInit {
   etag?: string
@@ -92,7 +93,6 @@ export function calculatePatientKPIs(patient: PatientRecord): PatientKPIs {
   };
 }
 
-
 /**
  * Update patient data
  */
@@ -139,4 +139,29 @@ export async function fetchAuditLog(patientId: string): Promise<AuditEntry[]> {
   }
 
   return response.json()
+}
+
+/**
+ * Get patient by ID (for server components - bypasses HTTP)
+ */
+export async function getPatientById(id: string): Promise<PatientRecord | null> {
+  try {
+    const numericId = Number.parseInt(id, 10)
+    if (isNaN(numericId)) {
+      console.error(`[v0] Invalid patient ID: ${id}`)
+      return null
+    }
+
+    const ficha = await getPacienteFicha(numericId)
+    if (!ficha) {
+      return null
+    }
+
+    // Map to PatientRecord format
+    const normalized = mapFichaToPatientRecord(ficha)
+    return normalized
+  } catch (error) {
+    console.error(`[v0] Error fetching patient ${id}:`, error)
+    return null
+  }
 }

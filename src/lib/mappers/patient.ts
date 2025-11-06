@@ -1,7 +1,13 @@
 // src/lib/mappers/patient.ts
 import type { PacienteFichaCompletaDTO, CitaLite } from "@/app/api/pacientes/[id]/_dto"
-import type { OdontogramSnapshot, PatientRecord, PeriodontogramSnapshot, ToothCondition, ToothRecord, VitalSigns } from "@/lib/types/patient"
-
+import type {
+  OdontogramSnapshot,
+  PatientRecord,
+  PeriodontogramSnapshot,
+  ToothCondition,
+  ToothRecord,
+  VitalSigns,
+} from "@/lib/types/patient"
 
 function mapPeriodontogramFromDTO(dto: PacienteFichaCompletaDTO): PeriodontogramSnapshot[] {
   const p = dto.periodontograma?.ultimo
@@ -11,22 +17,31 @@ function mapPeriodontogramFromDTO(dto: PacienteFichaCompletaDTO): Periodontogram
     toothNumber: String(m.toothNumber),
     site: m.site, // "B" | "MB" | "DB" | ...
     probingDepth: m.probingDepthMm ?? undefined, // UI espera probingDepth
-    recession: undefined,                         // si no tienes ese dato
+    recession: undefined, // si no tienes ese dato
     bleeding: m.bleeding ? m.bleeding !== "NONE" : undefined, // string -> boolean
-    plaque: m.plaque ?? undefined,                // ya es boolean/null
+    plaque: m.plaque ?? undefined, // ya es boolean/null
   }))
 
-  return [{
-    id: String(p.id),
-    recordedAt: p.takenAt, // takenAt -> recordedAt
-    measurements,
-    notes: undefined,
-  }]
+  return [
+    {
+      id: String(p.id),
+      recordedAt: p.takenAt, // takenAt -> recordedAt
+      measurements,
+      notes: undefined,
+    },
+  ]
 }
 
 // prioridad clínica para colapsar múltiples condiciones por diente
 const CONDITION_PRIORITY: ToothCondition[] = [
-  "MISSING", "IMPLANT", "ROOT_CANAL", "FRACTURED", "CROWN", "CARIES", "FILLED", "INTACT",
+  "MISSING",
+  "IMPLANT",
+  "ROOT_CANAL",
+  "FRACTURED",
+  "CROWN",
+  "CARIES",
+  "FILLED",
+  "INTACT",
 ]
 
 function pickCondition(conds: string[]): ToothCondition {
@@ -42,7 +57,7 @@ function mapOdontogramFromDTO(dto: PacienteFichaCompletaDTO): OdontogramSnapshot
 
   // Agrupar por diente
   const grouped = new Map<number, { conditions: string[]; surfaces: string[]; notes: string[] }>()
-  for (const e of (u.entries ?? [])) {
+  for (const e of u.entries ?? []) {
     const tn = Number(e.toothNumber)
     if (!grouped.has(tn)) grouped.set(tn, { conditions: [], surfaces: [], notes: [] })
     const g = grouped.get(tn)!
@@ -76,15 +91,15 @@ function splitApellidos(raw?: string | null): { lastName: string; secondLastName
 }
 
 const splitNombre = (nombreApellido?: string) => {
-  if (!nombreApellido) return undefined;
-  const [first, ...rest] = nombreApellido.trim().split(/\s+/);
-  return { firstName: first ?? "", lastName: rest.join(" ") || undefined };
-};
+  if (!nombreApellido) return undefined
+  const [first, ...rest] = nombreApellido.trim().split(/\s+/)
+  return { firstName: first ?? "", lastName: rest.join(" ") || undefined }
+}
 
 function mapVital(v: any): VitalSigns {
   return {
     id: v.id,
-    recordedAt: v.measuredAt,                 // <- renombrado
+    recordedAt: v.measuredAt, // <- renombrado
     height: v.heightCm ?? null,
     weight: v.weightKg ?? null,
     bmi: v.bmi ?? null,
@@ -95,23 +110,25 @@ function mapVital(v: any): VitalSigns {
     notes: v.notes ?? null,
     // si el backend aún no manda createdBy, quedará undefined (UI ya es defensiva)
     recordedBy: v.createdBy?.nombreApellido ? splitNombre(v.createdBy.nombreApellido) : undefined,
-  };
+  }
 }
 
 export function mapVitalsFromDTO(dto: PacienteFichaCompletaDTO): VitalSigns[] {
-  const arr: VitalSigns[] = [];
-  const ultimo = dto.clinico.vitales.ultimo ? mapVital({
-    ...dto.clinico.vitales.ultimo,
-    createdBy: dto.clinico.vitales.ultimo.createdBy, // si lo agregas en backend
-  }) : null;
+  const arr: VitalSigns[] = []
+  const ultimo = dto.clinico.vitales.ultimo
+    ? mapVital({
+        ...dto.clinico.vitales.ultimo,
+        createdBy: dto.clinico.vitales.ultimo.createdBy, // si lo agregas en backend
+      })
+    : null
 
-  if (ultimo) arr.push(ultimo);
+  if (ultimo) arr.push(ultimo)
 
   for (const v of dto.clinico.vitales.historial ?? []) {
-    arr.push(mapVital(v));
+    arr.push(mapVital(v))
   }
 
-  return arr;
+  return arr
 }
 
 function citaLiteToAppointment(c: CitaLite) {
@@ -151,56 +168,65 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
 
   const allergies = dto.clinico.alergias.map((x) => ({
     id: x.id,
+    allergen: x.label,
     label: x.label,
-    severity: x.severity,
+    severity: x.severity as any,
     reaction: x.reaction ?? undefined,
     isActive: x.isActive,
+    diagnosedAt: x.notedAt,
     notedAt: x.notedAt,
   }))
 
   const medications = dto.clinico.medicacion.map((m) => ({
     id: m.id,
+    name: m.label,
     label: m.label,
+    dosage: m.dose ?? undefined,
     dose: m.dose ?? undefined,
+    frequency: m.freq ?? undefined,
     freq: m.freq ?? undefined,
     route: m.route ?? undefined,
+    startedAt: m.startAt ?? undefined,
     startAt: m.startAt ?? undefined,
+    endedAt: m.endAt ?? undefined,
     endAt: m.endAt ?? undefined,
     status: m.isActive ? "ACTIVE" : "INACTIVE",
   }))
 
   const diagnoses = dto.clinico.diagnosticos.map((d) => ({
-  id: d.id,
-  code: d.code ?? undefined,
-  label: d.label,
-  status: d.status,            // ACTIVE | RESOLVED | ...
-  diagnosedAt: d.notedAt,      // <- renombramos aquí
-  resolvedAt: d.resolvedAt ?? undefined,
-  notes: d.notes ?? undefined,
-  professional: undefined,     // <- por ahora no disponible en tu DTO
-}))
+    id: d.id,
+    code: d.code ?? undefined,
+    label: d.label,
+    status: d.status, // ACTIVE | RESOLVED | ...
+    diagnosedAt: d.notedAt, // <- renombramos aquí
+    resolvedAt: d.resolvedAt ?? undefined,
+    notes: d.notes ?? undefined,
+    professional: undefined, // <- por ahora no disponible en tu DTO
+  }))
 
   // vitales: opcional – compactamos “último” primero
-  const vitalSigns = mapVitalsFromDTO(dto);
+  const vitalSigns = mapVitalsFromDTO(dto)
 
   const treatmentPlans = [
     ...(dto.planes.activo
-      ? [{
-          id: dto.planes.activo.id,
-          title: dto.planes.activo.titulo,
-          description: dto.planes.activo.descripcion ?? undefined,
-          isActive: true,
-          createdAt: dto.planes.activo.createdAt,
-          steps: dto.planes.activo.pasos.map((s) => ({
-            id: s.id,
-            order: s.order,
-            serviceType: s.serviceType ?? undefined,
-            toothNumber: s.toothNumber ?? undefined,
-            status: s.status,
-            estimatedCostCents: s.estimatedCostCents ?? undefined,
-            notes: s.notes ?? undefined,
-          })),
-        }]
+      ? [
+          {
+            id: dto.planes.activo.id,
+            title: dto.planes.activo.titulo,
+            description: dto.planes.activo.descripcion ?? undefined,
+            isActive: true,
+            createdAt: dto.planes.activo.createdAt,
+            steps: dto.planes.activo.pasos.map((s) => ({
+              id: s.id,
+              order: s.order,
+              serviceType: s.serviceType ?? undefined,
+              toothNumber: s.toothNumber ?? undefined,
+              status: s.status,
+              estimatedCostCents: s.estimatedCostCents ?? undefined,
+              notes: s.notes ?? undefined,
+            })),
+          },
+        ]
       : []),
     // historial (sin duplicar el activo)
     ...dto.planes.historial
@@ -213,7 +239,6 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
         steps: [] as any[],
       })),
   ]
-
 
   return {
     // Demográficos base
@@ -255,7 +280,7 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     diagnoses,
     vitalSigns,
     treatmentPlans,
-    odontogramSnapshots: mapOdontogramFromDTO(dto), 
+    odontogramSnapshots: mapOdontogramFromDTO(dto),
     periodontogramSnapshots: mapPeriodontogramFromDTO(dto),
 
     // Adjuntos y Citas

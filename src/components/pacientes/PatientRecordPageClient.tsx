@@ -1,50 +1,40 @@
 "use client"
 
-import { useState,useMemo } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { usePatientData } from "@/lib/hooks/use-patient-data"
 import type { UserRole } from "@/lib/types/patient"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AllergiesSection } from "@/components/pacientes/AllergiesSection"
-import { AppointmentsSection } from "@/components/pacientes/AppointmentsSection"
-import { AttachmentsGallery } from "@/components/pacientes/AttachmentsGallery"
-import { ContactsSection } from "@/components/pacientes/ContactsSection"
-import { DiagnosesSection } from "@/components/pacientes/DiagnosesSection"
-import { MedicationsSection } from "@/components/pacientes/MedicationsSection"
-import { OdontogramPreview } from "@/components/pacientes/OdontogramPreview"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PatientHeader } from "@/components/pacientes/PatientHeader"
 import { PatientKPIsCard } from "@/components/pacientes/PatientKpis"
-import { PeriodontogramPreview } from "@/components/pacientes/PeriodontogramPreview"
-import { PersonalDataSection } from "@/components/pacientes/PersonalDataSection"
-import { ResponsiblePartiesSection } from "@/components/pacientes/ResponsiblePartiesSection"
-import { TreatmentPlanSection } from "@/components/pacientes/TreatmentPlanSection"
-import { VitalSignsSection } from "@/components/pacientes/VitalSignsSection"
+import { NuevaCitaSheet } from "@/components/agenda/NuevaCitaSheet"
 import { toast } from "sonner"
-import { NuevaCitaSheet } from "@/components/agenda/NuevaCitaSheet";
+import { PersonalInfoTab } from "@/components/pacientes/tabs/PersonalInfoTab"
+import { ClinicalInfoTab } from "@/components/pacientes/tabs/ClinicalInfoTab"
+import { AppointmentsTab } from "@/components/pacientes/tabs/AppointmentsTab"
+import { AttachmentsTab } from "@/components/pacientes/tabs/AttachmentsTab"
+import { FileText, Activity, Calendar, Paperclip } from "lucide-react"
 
 function nextQuarterHour(base = new Date()) {
-  const d = new Date(base);
-  d.setSeconds(0, 0);
-  const m = d.getMinutes();
-  d.setMinutes(m + (15 - (m % 15 || 15)));
-  return d;
+  const d = new Date(base)
+  d.setSeconds(0, 0)
+  const m = d.getMinutes()
+  d.setMinutes(m + (15 - (m % 15 || 15)))
+  return d
 }
 
 export default function PatientRecordPage({ patientId }: { patientId: string }) {
   const router = useRouter()
   const { patient, kpis, isLoading, error } = usePatientData(patientId)
-  const [openNuevaCita, setOpenNuevaCita] = useState(false);
+  const [openNuevaCita, setOpenNuevaCita] = useState(false)
   const [userRole] = useState<UserRole>("ADMIN")
+  const [activeTab, setActiveTab] = useState("personal")
 
-  // Sugerir hora inicio: próximo cuarto de hora
-  const defaultInicio = useMemo(() => nextQuarterHour(new Date()), []);
+  const defaultInicio = useMemo(() => nextQuarterHour(new Date()), [])
+  const currentUser = { rol: userRole, profesionalId: undefined } as const
 
-  // Simula el currentUser mínimo; reemplaza con lo que tengas de auth
-  const currentUser = { rol: userRole, profesionalId: undefined } as const;
-
-  console.log({kpis})
-
-
+  console.log({ kpis })
 
   if (isLoading) {
     return <PatientRecordSkeleton />
@@ -79,7 +69,7 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
         patient={patient}
         userRole={userRole}
         onNewAppointment={() => setOpenNuevaCita(true)}
-        onEditPatient={() => toast("Editar Paciente", { description: "Funcionalidad en desarrollo" })}
+        onEditPatient={() => {}}
         onPrint={handlePrint}
         onExportPDF={handleExportPDF}
         onViewAudit={() => toast("Auditoría", { description: "Funcionalidad en desarrollo" })}
@@ -87,104 +77,58 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
 
       {/* Main content */}
       <div className="container mx-auto px-4 py-6">
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          {/* Main column */}
-          <div className="space-y-6">
-            {/* KPIs */}
-            {kpis && <PatientKPIsCard kpis={kpis} />}
+        {/* KPIs */}
+        {kpis && <PatientKPIsCard kpis={kpis} />}
 
-            {/* Recent events timeline */}
+        <div className="mt-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+              <TabsTrigger value="personal" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Información Personal</span>
+                <span className="sm:hidden">Personal</span>
+              </TabsTrigger>
+              <TabsTrigger value="clinical" className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                <span className="hidden sm:inline">Información Clínica</span>
+                <span className="sm:hidden">Clínica</span>
+              </TabsTrigger>
+              <TabsTrigger value="appointments" className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                <span className="hidden sm:inline">Citas y Tratamientos</span>
+                <span className="sm:hidden">Citas</span>
+              </TabsTrigger>
+              <TabsTrigger value="attachments" className="flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                <span className="hidden sm:inline">Adjuntos</span>
+                <span className="sm:hidden">Archivos</span>
+              </TabsTrigger>
+            </TabsList>
 
-            {/* Appointments */}
-            <AppointmentsSection
-              appointments={patient.appointments || []}
-              userRole={userRole}
-              onNewAppointment={() => toast("Nueva cita")}
-              onViewInAgenda={(id) => toast("Ver en agenda", { description: `Cita ${id}` })}
-              onReschedule={(id) => toast("Reprogramar", { description: `Cita ${id}` })}
-            />
+            <TabsContent value="personal" className="mt-6">
+              <PersonalInfoTab patient={patient} userRole={userRole} onUpdate={() => router.refresh()} />
+            </TabsContent>
 
-            {/* Treatment plan */}
-            <TreatmentPlanSection
-              treatmentPlans={patient.treatmentPlans || []}
-              userRole={userRole}
-              onMarkProgress={(id) => toast("Progreso marcado", { description: `Paso ${id}` })}
-            />
+            <TabsContent value="clinical" className="mt-6">
+              <ClinicalInfoTab patient={patient} userRole={userRole} onUpdate={() => router.refresh()} />
+            </TabsContent>
 
-            {/* Diagnoses */}
-            <DiagnosesSection
-              diagnoses={patient.diagnoses || []}
-              userRole={userRole}
-              onAddDiagnosis={() => toast("Agregar diagnóstico")}
-            />
+            <TabsContent value="appointments" className="mt-6">
+              <AppointmentsTab
+                patient={patient}
+                userRole={userRole}
+                onNewAppointment={() => setOpenNuevaCita(true)}
+                onUpdate={() => router.refresh()}
+              />
+            </TabsContent>
 
-            {/* Allergies */}
-            <AllergiesSection
-              allergies={patient.allergies || []}
-              userRole={userRole}
-              onAddAllergy={() => toast("Agregar alergia")}
-            />
-
-            {/* Medications */}
-            <MedicationsSection
-              medications={patient.medications || []}
-              userRole={userRole}
-              onAddMedication={() => toast("Agregar medicación")}
-              onSuspendMedication={(id) => toast("Medicación suspendida", { description: `ID: ${id}` })}
-            />
-
-            {/* Vital signs */}
-            <VitalSignsSection
-              vitalSigns={patient.vitalSigns || []}
-              userRole={userRole}
-              onAddVitalSigns={() => toast("Registrar signos vitales")}
-            />
-
-            {/* Odontogram */}
-            <OdontogramPreview
-              snapshots={patient.odontogramSnapshots || []}
-              userRole={userRole}
-              onAddSnapshot={() => toast("Registrar odontograma")}
-            />
-
-            {/* Periodontogram */}
-            <PeriodontogramPreview
-              snapshots={patient.periodontogramSnapshots || []}
-              userRole={userRole}
-              onAddSnapshot={() => toast("Registrar periodontograma")}
-            />
-
-            {/* Attachments */}
-            <AttachmentsGallery
-              attachments={patient.attachments || []}
-              userRole={userRole}
-              onUpload={() => toast("Subir adjunto")}
-            />
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <PersonalDataSection
-              patient={patient}
-              userRole={userRole}
-              onEdit={() => toast("Editar datos personales")}
-            />
-
-            <ContactsSection
-              contacts={patient.contacts || []}
-              userRole={userRole}
-              onAdd={() => toast("Agregar contacto")}
-              onEdit={(id) => toast("Editar contacto", { description: `ID: ${id}` })}
-            />
-
-            <ResponsiblePartiesSection
-              responsibleParties={patient.responsibleParties || []}
-              userRole={userRole}
-              onAdd={() => toast("Agregar responsable")}
-            />
-          </div>
+            <TabsContent value="attachments" className="mt-6">
+              <AttachmentsTab patient={patient} userRole={userRole} onUpdate={() => router.refresh()} />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
+
       <NuevaCitaSheet
         open={openNuevaCita}
         onOpenChange={setOpenNuevaCita}
@@ -192,7 +136,7 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
         currentUser={currentUser}
         prefill={{
           pacienteId: Number(patient.id),
-          lockPaciente: true,           // 👈 bloquear selector de paciente
+          lockPaciente: true,
           motivo: "Consulta desde ficha",
           tipo: "CONSULTA",
         }}
@@ -220,19 +164,12 @@ function PatientRecordSkeleton() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-6">
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-6">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-64 w-full" />
-            <Skeleton className="h-96 w-full" />
-          </div>
-          <div className="space-y-6">
-            <Skeleton className="h-64 w-full" />
-            <Skeleton className="h-48 w-full" />
-          </div>
+        <Skeleton className="h-32 w-full" />
+        <div className="mt-6 space-y-6">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-96 w-full" />
         </div>
       </div>
-      
     </div>
   )
 }

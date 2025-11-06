@@ -1,85 +1,167 @@
-// src/app/api/pacientes/_service.create.ts
-import type { PacienteCreateBody } from "./_schemas";
-import { pacienteRepo } from "./_repo";
-import { prisma } from "@/lib/prisma";
-import { normalizeEmail, normalizePhonePY } from "@/lib/normalize";
-import { splitNombreCompleto, mapGeneroToDB } from "./_dto";
+import type { PacienteCreateBody } from "./_schemas"
+import { pacienteRepo } from "./_repo"
+import { prisma } from "@/lib/prisma"
+import { normalizarTelefono, normalizarEmail, esMovilPY } from "@/lib/normalize"
+import { mapGeneroToDB, splitNombreCompleto } from "./_dto"
 
-/**
- * Crea paciente + persona + documento + contactos (+ responsablePago opcional).
- * Devuelve: idPaciente + item UI (consistente con la lista y la vista detalle).
- */
-export async function createPaciente(body: PacienteCreateBody, actorUserId?: number) {
-  const { nombres, apellidos } = splitNombreCompleto(body.nombreCompleto);
-  const generoDB = body.genero ? mapGeneroToDB(body.genero) : null;
+export async function createPaciente(body: PacienteCreateBody, actorUserId: number) {
+  const { nombres, apellidos } = splitNombreCompleto(body.nombreCompleto)
 
-  const preferRecordatorio =
-    !!(body.preferenciasContacto?.whatsapp || body.preferenciasContacto?.sms || body.preferenciasContacto?.llamada);
+  const generoDB = body.genero ? mapGeneroToDB(body.genero) : "NO_ESPECIFICADO"
 
-  const createdId = await prisma.$transaction(async (tx) => {
-    // Persona + Documento
+  const preferRecordatorio = !!(
+    body.preferenciasRecordatorio?.whatsapp ||
+    body.preferenciasRecordatorio?.sms ||
+    body.preferenciasRecordatorio?.email
+  )
+  const preferCobranza = !!(
+    body.preferenciasCobranza?.whatsapp ||
+    body.preferenciasCobranza?.email ||
+    body.preferenciasCobranza?.sms
+  )
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Create Persona + Documento
     const persona = await pacienteRepo.createPersonaConDocumento(tx, {
       nombres,
       apellidos,
       genero: generoDB,
-      fechaNacimiento: body.fechaNacimiento ?? null,
-      direccion: body.domicilio ?? null,
+      fechaNacimiento: body.fechaNacimiento ? new Date(body.fechaNacimiento) : null,
+      direccion: body.direccion ?? null,
       doc: {
         tipo: body.tipoDocumento ?? "CI",
-        numero: body.dni.trim(),
+        numero: body.numeroDocumento.trim(),
         ruc: body.ruc || null,
+        paisEmision: body.paisEmision || "PY",
       },
-    });
+    })
 
-    // Contacto teléfono
+    // 2. Create PersonaContacto (telefono)
+    const telefonoNorm = normalizarTelefono(body.telefono)
+    const esMovil = esMovilPY(telefonoNorm)
+
     await pacienteRepo.createContactoTelefono(tx, {
       personaId: persona.idPersona,
       valorRaw: body.telefono,
-      valorNorm: normalizePhonePY(body.telefono),
-      prefer: { recordatorio: preferRecordatorio, cobranza: !body.email },
-    });
+      valorNorm: telefonoNorm,
+      whatsappCapaz: esMovil,
+      smsCapaz: esMovil,
+      prefer: {
+        recordatorio: preferRecordatorio,
+        cobranza: preferCobranza || !body.email, // Default to phone if no email
+      },
+    })
 
-    // Contacto email (opcional)
+    // 3. Create PersonaContacto (email) if provided
     if (body.email) {
-      const norm = normalizeEmail(body.email);
+      const norm = normalizarEmail(body.email)
       if (norm) {
         await pacienteRepo.createContactoEmail(tx, {
           personaId: persona.idPersona,
           valorRaw: body.email,
           valorNorm: norm,
-          prefer: { recordatorio: !!body.preferenciasContacto?.email, cobranza: true },
-        });
+          prefer: {
+            recordatorio: !!body.preferenciasRecordatorio?.email,
+            cobranza: true, // Email is always preferred for billing
+          },
+        })
       }
     }
 
-    // Paciente + notas clínicas mínimas en JSON (obra social, alergias, etc.)
+    // 4. Create Paciente with ciudad/pais in notas JSON
+    const notasJson: any = {}
+    if (body.ciudad) notasJson.ciudad = body.ciudad
+    if (body.pais) notasJson.pais = body.pais
+    if (body.observaciones) notasJson.observaciones = body.observaciones
+
     const paciente = await pacienteRepo.createPaciente(tx, {
       personaId: persona.idPersona,
-      notasJson: {
-        antecedentesMedicos: body.antecedentesMedicos || null,
-        alergias: body.alergias || null,
-        medicacion: body.medicacion || null,
-        responsablePago: body.responsablePago || null,
-        obraSocial: body.obraSocial || null,
-      },
-    });
+      notasJson,
+    })
 
-    // Responsable de pago (si se provee personaId ya existente)
+    // 5. Create ClinicalHistoryEntry for antecedentes
+    if (body.antecedentes) {
+      await tx.clinicalHistoryEntry.create({
+        data: {
+          pacienteId: paciente.idPaciente,
+          title: "Antecedentes iniciales",
+          notes: body.antecedentes,
+          createdByUserId: actorUserId,
+        },
+      })
+    }
+
+    // 6. Create PatientAllergy records
+    if (body.alergias) {
+      const alergiasList = body.alergias
+        .split(/[,;]/)
+        .map((a) => a.trim())
+        .filter(Boolean)
+      for (const alergia of alergiasList) {
+        await tx.patientAllergy.create({
+          data: {
+            pacienteId: paciente.idPaciente,
+            label: alergia,
+            severity: "MODERATE",
+            isActive: true,
+            createdByUserId: actorUserId,
+          },
+        })
+      }
+    }
+
+    // 7. Create PatientMedication records
+    if (body.medicacion) {
+      const medicacionList = body.medicacion
+        .split(/[,;]/)
+        .map((m) => m.trim())
+        .filter(Boolean)
+      for (const medicamento of medicacionList) {
+        await tx.patientMedication.create({
+          data: {
+            pacienteId: paciente.idPaciente,
+            label: medicamento,
+            isActive: true,
+            createdByUserId: actorUserId,
+          },
+        })
+      }
+    }
+
+    // 8. Link PacienteResponsable if provided
     if (body.responsablePago?.personaId) {
       await pacienteRepo.linkResponsablePago(tx, {
         pacienteId: paciente.idPaciente,
         personaId: body.responsablePago.personaId,
         relacion: body.responsablePago.relacion,
         esPrincipal: body.responsablePago.esPrincipal ?? true,
-      });
+      })
     }
 
-    // TODO: AuditLog (cuando habilites)
-    // await tx.auditLog.create({ ... actorUserId, ... })
+    // 9. Create AuditLog entry
+    await tx.auditLog.create({
+      data: {
+        action: "PATIENT_CREATE",
+        entity: "Patient",
+        entityId: paciente.idPaciente.toString(),
+        actorId: actorUserId,
+        metadata: JSON.stringify({
+          nombreCompleto: body.nombreCompleto,
+          documento: body.numeroDocumento,
+          telefono: body.telefono,
+          email: body.email,
+        }),
+      },
+    })
 
-    return paciente.idPaciente;
-  });
+    return { idPaciente: paciente.idPaciente, personaId: persona.idPersona }
+  })
 
-  const item = await pacienteRepo.getPacienteUI(createdId);
-  return { idPaciente: createdId, item };
+  const item = await pacienteRepo.getPacienteUI(result.idPaciente)
+
+  return {
+    idPaciente: result.idPaciente,
+    personaId: result.personaId,
+    item,
+  }
 }
