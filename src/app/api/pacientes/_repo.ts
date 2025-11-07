@@ -111,6 +111,8 @@ export const pacienteRepo = {
       personaId: number;
       valorRaw: string;
       valorNorm: string;
+      whatsappCapaz?: boolean; 
+      smsCapaz?: boolean;    
       prefer: { recordatorio?: boolean; cobranza?: boolean };
     }
   ) =>
@@ -121,8 +123,8 @@ export const pacienteRepo = {
         valorRaw: data.valorRaw,
         valorNorm: data.valorNorm,
         label: "Móvil",
-        whatsappCapaz: true,
-        smsCapaz: true,
+        whatsappCapaz: data.whatsappCapaz ?? true, // ✅ usa lo que viene, default true
+        smsCapaz: data.smsCapaz ?? true,
         esPrincipal: true,
         esPreferidoRecordatorio: !!data.prefer.recordatorio,
         esPreferidoCobranza: !!data.prefer.cobranza,

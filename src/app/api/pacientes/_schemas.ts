@@ -2,7 +2,10 @@
 import { z } from "zod"
 
 export const GeneroEnum = z.enum(["MALE", "FEMALE", "OTHER", "NO_ESPECIFICADO"])
-export const TipoDocumentoEnum = z.enum(["CI", "PASSPORT", "RUC", "DNI", "OTHER"])
+
+// ✅ Alineado con Prisma enum: CI | DNI | PASAPORTE | RUC | OTRO
+export const TipoDocumentoEnum = z.enum(["CI", "DNI", "PASAPORTE", "RUC", "OTRO"])
+
 export const RelacionPacienteEnum = z.enum([
   "PADRE",
   "MADRE",
@@ -27,15 +30,28 @@ export const ResponsablePagoSchema = z.object({
   esPrincipal: z.boolean().default(true),
 })
 
+// ✅ Nuevo: esquema de vitales (todo opcional)
+export const VitalsSchema = z.object({
+  measuredAt: z.string().datetime().optional(),
+  heightCm: z.number().int().min(50).max(250).optional(),
+  weightKg: z.number().min(10).max(300).optional(),
+  bmi: z.number().min(5).max(80).optional(),
+  bpSyst: z.number().int().min(60).max(250).optional(),
+  bpDiast: z.number().int().min(30).max(160).optional(),
+  heartRate: z.number().int().min(30).max(220).optional(),
+  notes: z.string().max(200).optional(),
+})
+
 export const PacienteCreateBodySchema = z.object({
   nombreCompleto: z.string().min(1).max(200),
-  genero: z.enum(["M", "F", "X"]).optional(), // Accept M/F/X from client
-  fechaNacimiento: z.string().optional(), // ISO date string
+  // El cliente envía "M" | "F" | "X", se mapea en el servicio a enum DB
+  genero: z.enum(["M", "F", "X"]).optional(),
+  fechaNacimiento: z.string().optional(), // ISO
   tipoDocumento: TipoDocumentoEnum.default("CI"),
-  numeroDocumento: z.string().min(1).max(50), // Renamed from dni
+  numeroDocumento: z.string().min(1).max(50),
   ruc: z.string().max(50).optional(),
   paisEmision: z.string().length(2).default("PY"),
-  direccion: z.string().max(300).optional(), // Renamed from domicilio
+  direccion: z.string().max(300).optional(),
   ciudad: z.string().max(100).optional(),
   pais: z.string().length(2).default("PY"),
   telefono: z.string().min(1).max(50),
@@ -43,37 +59,15 @@ export const PacienteCreateBodySchema = z.object({
   preferenciasContacto: PreferenciasContactoSchema.optional(),
   preferenciasRecordatorio: PreferenciasContactoSchema.optional(),
   preferenciasCobranza: PreferenciasContactoSchema.optional(),
+  // compatibles con tu UI actual (texto libre, separado por coma/; o salto de línea)
   alergias: z.string().max(1000).optional(),
   medicacion: z.string().max(1000).optional(),
-  antecedentes: z.string().max(2000).optional(), // Renamed from antecedentesMedicos
+  antecedentes: z.string().max(2000).optional(),
   observaciones: z.string().max(2000).optional(),
   responsablePago: ResponsablePagoSchema.optional(),
-  adjuntos: z.array(z.any()).optional(), // Added adjuntos support
+  adjuntos: z.array(z.any()).optional(),
+  // ✅ Nuevo: vitales opcionales
+  vitals: VitalsSchema.optional(),
 })
 
 export type PacienteCreateBody = z.infer<typeof PacienteCreateBodySchema>
-
-export const pacientesListQuerySchema = z.object({
-  q: z.string().trim().min(1).max(120).optional(),
-  limit: z.coerce.number().int().positive().max(100).default(20),
-  cursor: z.string().optional(),
-  soloActivos: z
-    .union([z.literal("true"), z.literal("false")])
-    .optional()
-    .transform((v) => v !== "false"),
-  genero: GeneroEnum.optional(),
-  hasEmail: z
-    .union([z.literal("true"), z.literal("false")])
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
-  hasPhone: z
-    .union([z.literal("true"), z.literal("false")])
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
-  createdFrom: z.string().optional(),
-  createdTo: z.string().optional(),
-  sort: z.enum(["createdAt desc", "createdAt asc", "nombre asc", "nombre desc"]).default("createdAt desc"),
-  obraSocial: z.string().trim().min(1).max(120).optional(),
-})
-
-export type PacientesListQuery = z.infer<typeof pacientesListQuerySchema>

@@ -34,30 +34,29 @@ export function PacienteWizard() {
     resolver: zodResolver(PacienteCreateSchemaClient),
     mode: "onBlur",
     reValidateMode: "onChange",
-    defaultValues: {
-      nombres: "",
-      apellidos: "",
-      genero: undefined,
-      fechaNacimiento: undefined,
-      tipoDocumento: "CI",
-      numeroDocumento: "",
-      ruc: "",
-      paisEmision: "PY",
-      direccion: "",
-      ciudad: "",
-      pais: "PY",
-      telefono: "",
-      email: "",
-      preferenciasContacto: [],
-      preferenciasRecordatorio: [],
-      preferenciasCobranza: [],
-      alergias: "",
-      medicacion: "",
-      antecedentes: "",
-      observaciones: "",
-      responsablePago: undefined,
-      adjuntos: [],
-    },
+    efaultValues: {
+  nombreCompleto: "",
+  genero: undefined,
+  fechaNacimiento: undefined,
+  tipoDocumento: "CI",
+  numeroDocumento: "",
+  ruc: "",
+  paisEmision: "PY",
+  direccion: "",
+  ciudad: "",
+  pais: "PY",
+  telefono: "",
+  email: "",
+  preferenciasContacto: [],
+  preferenciasRecordatorio: [],
+  preferenciasCobranza: [],
+  alergias: "",
+  medicacion: "",
+  antecedentes: "",
+  observaciones: "",
+  responsablePago: undefined,
+  adjuntos: [],
+}
   })
 
   const handleNext = async () => {
@@ -239,18 +238,18 @@ export function PacienteWizard() {
 function getFieldsForStep(step: number): (keyof PacienteCreateDTOClient)[] {
   switch (step) {
     case 1:
-      return [
-        "nombres",
-        "apellidos",
-        "genero",
-        "fechaNacimiento",
-        "tipoDocumento",
-        "numeroDocumento",
-        "paisEmision",
-        "direccion",
-        "ciudad",
-        "pais",
-      ]
+      return  [
+  "nombreCompleto",
+  "genero",
+  "fechaNacimiento",
+  "tipoDocumento",
+  "numeroDocumento",
+  "paisEmision",
+  "direccion",
+  "ciudad",
+  "pais",
+]
+
     case 2:
       return ["telefono", "email", "preferenciasContacto"]
     case 3:

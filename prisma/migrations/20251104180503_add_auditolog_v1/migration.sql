@@ -342,3 +342,75 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION refresh_kpi_materialized_views() IS
 'Refresca todas las vistas materializadas de KPIs. Ejecutar diariamente (batch nocturno) o manualmente desde UI.';
+
+
+-- Migración para agregar sistema de consentimientos
+-- CreateEnum
+CREATE TYPE "TipoConsentimiento" AS ENUM (
+  'CONSENTIMIENTO_MENOR_ATENCION',
+  'TRATAMIENTO_ESPECIFICO',
+  'ANESTESIA',
+  'CIRUGIA',
+  'RADIOGRAFIA',
+  'DATOS_PERSONALES',
+  'OTRO'
+);
+
+-- CreateTable
+CREATE TABLE "Consentimiento" (
+    "idConsentimiento" SERIAL NOT NULL,
+    "Paciente_idPaciente" INTEGER NOT NULL,
+    "Persona_idPersona_responsable" INTEGER NOT NULL,
+    "Cita_idCita" INTEGER,
+    "tipo" "TipoConsentimiento" NOT NULL,
+    "firmado_en" TIMESTAMP(3) NOT NULL,
+    "vigente_hasta" TIMESTAMP(3) NOT NULL,
+    "registrado_en" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "public_id" TEXT NOT NULL,
+    "secure_url" TEXT NOT NULL,
+    "format" TEXT,
+    "bytes" INTEGER NOT NULL,
+    "width" INTEGER,
+    "height" INTEGER,
+    "hash" TEXT,
+    "provider" TEXT NOT NULL DEFAULT 'CLOUDINARY',
+    "observaciones" TEXT,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "activo" BOOLEAN NOT NULL DEFAULT true,
+    "Usuario_idUsuario_registradoPor" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Consentimiento_pkey" PRIMARY KEY ("idConsentimiento")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Consentimiento_public_id_key" ON "Consentimiento"("public_id");
+
+-- CreateIndex
+CREATE INDEX "Consentimiento_Paciente_idPaciente_tipo_activo_idx" ON "Consentimiento"("Paciente_idPaciente", "tipo", "activo");
+
+-- CreateIndex
+CREATE INDEX "Consentimiento_Paciente_idPaciente_Persona_idPersona_respo_idx" ON "Consentimiento"("Paciente_idPaciente", "Persona_idPersona_responsable", "tipo", "activo");
+
+-- CreateIndex
+CREATE INDEX "Consentimiento_vigente_hasta_idx" ON "Consentimiento"("vigente_hasta");
+
+-- CreateIndex
+CREATE INDEX "Consentimiento_Cita_idCita_idx" ON "Consentimiento"("Cita_idCita");
+
+-- AddForeignKey
+ALTER TABLE "Consentimiento" ADD CONSTRAINT "Consentimiento_Paciente_idPaciente_fkey" FOREIGN KEY ("Paciente_idPaciente") REFERENCES "Paciente"("idPaciente") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Consentimiento" ADD CONSTRAINT "Consentimiento_Persona_idPersona_responsable_fkey" FOREIGN KEY ("Persona_idPersona_responsable") REFERENCES "Persona"("idPersona") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Consentimiento" ADD CONSTRAINT "Consentimiento_Cita_idCita_fkey" FOREIGN KEY ("Cita_idCita") REFERENCES "Cita"("idCita") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Consentimiento" ADD CONSTRAINT "Consentimiento_Usuario_idUsuario_registradoPor_fkey" FOREIGN KEY ("Usuario_idUsuario_registradoPor") REFERENCES "Usuario"("idUsuario") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- CreateComment
+COMMENT ON TABLE "Consentimiento" IS 'Registro de consentimientos informados para pacientes, especialmente menores de edad';
+

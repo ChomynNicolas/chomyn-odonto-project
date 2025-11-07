@@ -20,6 +20,12 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
     body.preferenciasCobranza?.sms
   )
 
+  const toList = (s?: string) =>
+    (s ?? "")
+      .split(/[,;\n]/g)
+      .map((x) => x.trim())
+      .filter(Boolean)
+
   const result = await prisma.$transaction(async (tx) => {
     // 1. Create Persona + Documento
     const persona = await pacienteRepo.createPersonaConDocumento(tx, {
@@ -38,17 +44,16 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
 
     // 2. Create PersonaContacto (telefono)
     const telefonoNorm = normalizarTelefono(body.telefono)
-    const esMovil = esMovilPY(telefonoNorm)
-
+    const movil = esMovilPY(telefonoNorm)
     await pacienteRepo.createContactoTelefono(tx, {
       personaId: persona.idPersona,
       valorRaw: body.telefono,
       valorNorm: telefonoNorm,
-      whatsappCapaz: esMovil,
-      smsCapaz: esMovil,
+      whatsappCapaz: movil,  // ✅ ahora respetado por repo
+      smsCapaz: movil,       // ✅ ahora respetado por repo
       prefer: {
         recordatorio: preferRecordatorio,
-        cobranza: preferCobranza || !body.email, // Default to phone if no email
+        cobranza: preferCobranza || !body.email, // si no hay email, cobranza por teléfono
       },
     })
 
@@ -92,40 +97,28 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
     }
 
     // 6. Create PatientAllergy records
-    if (body.alergias) {
-      const alergiasList = body.alergias
-        .split(/[,;]/)
-        .map((a) => a.trim())
-        .filter(Boolean)
-      for (const alergia of alergiasList) {
-        await tx.patientAllergy.create({
-          data: {
-            pacienteId: paciente.idPaciente,
-            label: alergia,
-            severity: "MODERATE",
-            isActive: true,
-            createdByUserId: actorUserId,
-          },
-        })
-      }
+    for (const alergia of toList(body.alergias)) {
+      await tx.patientAllergy.create({
+        data: {
+          pacienteId: paciente.idPaciente,
+          label: alergia,
+          severity: "MODERATE", // default
+          isActive: true,
+          createdByUserId: actorUserId,
+        },
+      })
     }
 
-    // 7. Create PatientMedication records
-    if (body.medicacion) {
-      const medicacionList = body.medicacion
-        .split(/[,;]/)
-        .map((m) => m.trim())
-        .filter(Boolean)
-      for (const medicamento of medicacionList) {
-        await tx.patientMedication.create({
-          data: {
-            pacienteId: paciente.idPaciente,
-            label: medicamento,
-            isActive: true,
-            createdByUserId: actorUserId,
-          },
-        })
-      }
+    // 7) Medicación (lista libre → PatientMedication)
+    for (const medicamento of toList(body.medicacion)) {
+      await tx.patientMedication.create({
+        data: {
+          pacienteId: paciente.idPaciente,
+          label: medicamento,
+          isActive: true,
+          createdByUserId: actorUserId,
+        },
+      })
     }
 
     // 8. Link PacienteResponsable if provided
@@ -135,6 +128,23 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
         personaId: body.responsablePago.personaId,
         relacion: body.responsablePago.relacion,
         esPrincipal: body.responsablePago.esPrincipal ?? true,
+      })
+    }
+
+    if (body.vitals) {
+      await tx.patientVitals.create({
+        data: {
+          pacienteId: paciente.idPaciente,
+          measuredAt: body.vitals.measuredAt ? new Date(body.vitals.measuredAt) : new Date(),
+          heightCm: body.vitals.heightCm ?? null,
+          weightKg: body.vitals.weightKg ?? null,
+          bmi: body.vitals.bmi ?? null,
+          bpSyst: body.vitals.bpSyst ?? null,
+          bpDiast: body.vitals.bpDiast ?? null,
+          heartRate: body.vitals.heartRate ?? null,
+          notes: body.vitals.notes ?? null,
+          createdByUserId: actorUserId,
+        },
       })
     }
 

@@ -66,6 +66,7 @@ model Usuario {
   OdontogramSnapshot     OdontogramSnapshot[]
   PeriodontogramSnapshot PeriodontogramSnapshot[]
   Adjunto                Adjunto[]                @relation("AdjuntoUploadedBy")
+  consentimientosRegistrados Consentimiento[]
 
   @@index([rolId])
   @@map("Usuario")
@@ -107,9 +108,11 @@ model Persona {
   profesionales       Profesional?
   paciente            Paciente?
   PacienteResponsable PacienteResponsable[]
+  consentimientosResponsable Consentimiento[] @relation("ConsentimientoResponsable")
 
   @@index([nombres, apellidos])
   @@map("Persona")
+  consentimientos Consentimiento[]
 }
 
 model Documento {
@@ -250,6 +253,7 @@ model Paciente {
   OdontogramSnapshot     OdontogramSnapshot[]
   PeriodontogramSnapshot PeriodontogramSnapshot[]
   Adjunto                Adjunto[]
+  consentimientos        Consentimiento[]
 
   @@map("Paciente")
 }
@@ -343,6 +347,7 @@ model Cita {
   canceladoPor        Usuario?              @relation("CitaCanceladaPor", fields: [cancelledByUserId], references: [idUsuario])
   CitaEstadoHistorial CitaEstadoHistorial[]
   Consulta            Consulta[]
+  consentimientos      Consentimiento[]
 
   // Índices
   @@index([profesionalId, inicio])
@@ -935,4 +940,74 @@ model PeriodontogramMeasure {
   @@unique([snapshotId, toothNumber, site])
   @@index([toothNumber])
   @@map("PeriodontogramMeasure")
+}
+
+
+// ==========================
+// Enum
+// ==========================
+enum TipoConsentimiento {
+  CONSENTIMIENTO_MENOR_ATENCION
+  TRATAMIENTO_ESPECIFICO
+  ANESTESIA
+  CIRUGIA
+  RADIOGRAFIA
+  DATOS_PERSONALES
+  OTRO
+
+  @@map("TipoConsentimiento")
+}
+
+// ==========================
+// Modelo
+// ==========================
+model Consentimiento {
+  // PK
+  idConsentimiento Int      @id @default(autoincrement()) @map("idConsentimiento")
+
+  // FKs
+  Paciente_idPaciente              Int  @map("Paciente_idPaciente")
+  Persona_idPersona_responsable    Int  @map("Persona_idPersona_responsable")
+  Cita_idCita                      Int? @map("Cita_idCita")
+  Usuario_idUsuario_registradoPor  Int  @map("Usuario_idUsuario_registradoPor")
+
+  // Relaciones
+  paciente      Paciente  @relation(fields: [Paciente_idPaciente], references: [idPaciente], onDelete: Cascade, onUpdate: Cascade)
+  responsable   Persona   @relation(fields: [Persona_idPersona_responsable], references: [idPersona], onDelete: Restrict, onUpdate: Cascade)
+  cita          Cita?     @relation(fields: [Cita_idCita], references: [idCita], onDelete: SetNull, onUpdate: Cascade)
+  registradoPor Usuario   @relation(fields: [Usuario_idUsuario_registradoPor], references: [idUsuario], onDelete: Restrict, onUpdate: Cascade)
+
+  // Datos del consentimiento
+  tipo          TipoConsentimiento @map("tipo")
+  firmado_en    DateTime           @map("firmado_en")
+  vigente_hasta DateTime           @map("vigente_hasta")
+  registrado_en DateTime           @default(now()) @map("registrado_en")
+
+  // Metadata del archivo (Cloudinary u otro)
+  public_id   String  @unique @map("public_id")
+  secure_url  String  @map("secure_url")
+  format      String? @map("format")
+  bytes       Int     @map("bytes")
+  width       Int?    @map("width")
+  height      Int?    @map("height")
+  hash        String? @map("hash")
+  provider    String  @default("CLOUDINARY") @map("provider")
+
+  // Otros
+  observaciones String? @map("observaciones")
+  version       Int     @default(1) @map("version")
+  activo        Boolean @default(true) @map("activo")
+
+  // Timestamps
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt      @map("updated_at")
+
+  // Índices para consultas comunes
+  @@index([Paciente_idPaciente, tipo, activo], map: "Consentimiento_Paciente_idPaciente_tipo_activo_idx")
+  @@index([Paciente_idPaciente, Persona_idPersona_responsable, tipo, activo], map: "Consentimiento_Paciente_idPaciente_Persona_idPersona_respo_idx")
+  @@index([vigente_hasta], map: "Consentimiento_vigente_hasta_idx")
+  @@index([Cita_idCita], map: "Consentimiento_Cita_idCita_idx")
+
+  @@map("Consentimiento")
+  personas Persona[] @relation("ConsentimientoResponsable")
 }
