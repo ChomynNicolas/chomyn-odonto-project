@@ -1,6 +1,8 @@
 // src/app/api/pacientes/_repo.ts
 import { prisma } from "@/lib/prisma";
 import type { Prisma, EstadoCita } from "@prisma/client";
+import type { PacienteListFilters } from "@/lib/api/pacientes.types"
+import { getStartOfDayInTZ, getEndOfDayInTZ, isTodayInTZ } from "@/lib/date-utils"
 
 /** ==========================
  * Tipos de entrada/vista
@@ -67,45 +69,6 @@ export type PacienteListItemDTO = {
   activePlansCount: number;
 };
 
-/** ==========================
- * Helpers internos
- * ========================== */
-function computeAgeFrom(dateStr?: string | null): number | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
-  return age;
-}
-
-type NotasParsed = {
-  antecedentesMedicos?: unknown;
-  alergias?: unknown[] | string | null;
-  medicacion?: unknown[] | string | null;
-  obraSocial?: string | null;
-  [k: string]: unknown;
-};
-
-function safeParseNotas(notas: string | null | undefined): NotasParsed {
-  if (!notas) return {};
-  try {
-    const obj = JSON.parse(notas) as NotasParsed;
-    return obj ?? {};
-  } catch {
-    return {};
-  }
-}
-
-const FUTURE_WHITELIST: EstadoCita[] = [
-  "SCHEDULED",
-  "CONFIRMED",
-  "CHECKED_IN",
-  "IN_PROGRESS",
-];
-const PAST_EXCLUDE: EstadoCita[] = ["CANCELLED", "NO_SHOW"];
 
 /** ==========================
  * Repositorio
@@ -243,185 +206,271 @@ export const pacienteRepo = {
         },
       },
     }),
+};
 
-  /** ========================================================
-   * LISTA ENRIQUECIDA (sin N+1) — B1 completo
-   * ======================================================== */
-  listPacientes: async (args: PacienteListInput) => {
-    const { where, orderBy, limit, cursorId } = args;
 
-    // 1) Base + totalCount
-    const [itemsRaw, totalCount] = await Promise.all([
-      prisma.paciente.findMany({
-        where,
-        include: {
-          persona: {
-            select: {
-              idPersona: true,
-              nombres: true,
-              apellidos: true,
-              genero: true,
-              fechaNacimiento: true,
-              documento: { select: { tipo: true, numero: true, ruc: true } },
-              contactos: {
-                select: {
-                  tipo: true,
-                  valorNorm: true,
-                  esPrincipal: true,
-                  activo: true,
-                  whatsappCapaz: true,
-                  esPreferidoRecordatorio: true,
-                  esPreferidoCobranza: true,
-                },
-              },
+
+
+
+
+export async function listPacientes(filters: PacienteListFilters) {
+  const { q, createdFrom, createdTo, estaActivo, sort = "createdAt_desc", cursor, limit = 20 } = filters
+
+  // Build where clause
+  const where: Prisma.PacienteWhereInput = {
+    ...(estaActivo !== undefined && { estaActivo }),
+  }
+
+  // Date filters with TZ normalization
+  if (createdFrom || createdTo) {
+    where.createdAt = {}
+    if (createdFrom) {
+      where.createdAt.gte = getStartOfDayInTZ(createdFrom)
+    }
+    if (createdTo) {
+      where.createdAt.lte = getEndOfDayInTZ(createdTo)
+    }
+  }
+
+  // Search query
+  if (q && q.trim()) {
+    const searchTerm = q.trim()
+    where.OR = [
+      {
+        persona: {
+          OR: [
+            { nombres: { contains: searchTerm, mode: "insensitive" } },
+            { apellidos: { contains: searchTerm, mode: "insensitive" } },
+          ],
+        },
+      },
+      {
+        persona: {
+          documento: {
+            numero: { contains: searchTerm, mode: "insensitive" },
+          },
+        },
+      },
+      {
+        persona: {
+          contactos: {
+            some: {
+              valorNorm: { contains: searchTerm, mode: "insensitive" },
             },
           },
         },
-        orderBy,
-        take: limit + 1,
-        ...(cursorId ? { skip: 1, cursor: { idPaciente: cursorId } } : {}),
-      }),
-      prisma.paciente.count({ where }),
-    ]);
-
-    // Cursor
-    let nextCursor: number | null = null;
-    const itemsPage = [...itemsRaw];
-    if (itemsPage.length > limit) {
-      const next = itemsPage.pop()!;
-      nextCursor = next.idPaciente;
-    }
-
-    const pageIds = itemsPage.map((p) => p.idPaciente);
-    if (pageIds.length === 0) {
-      return { items: [] as PacienteListItemDTO[], nextCursor, hasMore: nextCursor !== null, totalCount };
-    }
-
-    const now = new Date();
-
-    // 2) ÚLTIMA VISITA
-    const lastMaxByPaciente = await prisma.cita.groupBy({
-      by: ["pacienteId"],
-      where: {
-        pacienteId: { in: pageIds },
-        inicio: { lt: now },
-        estado: { notIn: PAST_EXCLUDE },
       },
-      _max: { inicio: true },
-    });
-    const lastMaxMap = new Map<number, Date>();
-    for (const row of lastMaxByPaciente) {
-      const d = row._max.inicio;
-      if (d) lastMaxMap.set(row.pacienteId, d);
-    }
+    ]
+  }
 
-    let lastDetailMap = new Map<number, { at: Date; profesionalId: number | null }>();
-    if (lastMaxMap.size > 0) {
-      const orPairs = Array.from(lastMaxMap.entries()).map(([pacienteId, inicio]) => ({ pacienteId, inicio }));
-      const lastRows = await prisma.cita.findMany({
-        where: { OR: orPairs },
-        select: { pacienteId: true, inicio: true, profesionalId: true },
-      });
-      lastDetailMap = new Map(lastRows.map(r => [r.pacienteId, { at: r.inicio, profesionalId: r.profesionalId ?? null }]));
-    }
-
-    // 3) PRÓXIMA CITA
-    const nextRows = await prisma.cita.findMany({
-      where: {
-        pacienteId: { in: pageIds },
-        inicio: { gte: now },
-        estado: { in: FUTURE_WHITELIST },
-      },
-      orderBy: [{ pacienteId: "asc" }, { inicio: "asc" }],
-      select: { pacienteId: true, inicio: true, profesionalId: true, consultorioId: true, estado: true },
-    });
-    const nextByPaciente = new Map<number, { at: Date; profesionalId: number | null; consultorioId: number | null; estado: EstadoCita }>();
-    for (const row of nextRows) {
-      if (!nextByPaciente.has(row.pacienteId)) {
-        nextByPaciente.set(row.pacienteId, {
-          at: row.inicio,
-          profesionalId: row.profesionalId ?? null,
-          consultorioId: row.consultorioId ?? null,
-          estado: row.estado,
-        });
+  // Cursor pagination setup
+  let cursorObj: Prisma.PacienteWhereUniqueInput | undefined
+  if (cursor) {
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, "base64").toString())
+      if (sort.startsWith("createdAt")) {
+        cursorObj = { idPaciente: parsed.idPaciente }
+      } else if (sort.startsWith("nombre")) {
+        cursorObj = { idPaciente: parsed.idPaciente }
       }
+    } catch {
+      // Invalid cursor, ignore
+    }
+  }
+
+  // Order by
+  let orderBy: Prisma.PacienteOrderByWithRelationInput[]
+  if (sort === "createdAt_asc") {
+    orderBy = [{ createdAt: "asc" }, { idPaciente: "asc" }]
+  } else if (sort === "createdAt_desc") {
+    orderBy = [{ createdAt: "desc" }, { idPaciente: "desc" }]
+  } else if (sort === "nombre_asc") {
+    orderBy = [{ persona: { apellidos: "asc" } }, { persona: { nombres: "asc" } }, { idPaciente: "asc" }]
+  } else {
+    orderBy = [{ persona: { apellidos: "desc" } }, { persona: { nombres: "desc" } }, { idPaciente: "desc" }]
+  }
+
+  // Fetch data
+  const items = await prisma.paciente.findMany({
+    where,
+    orderBy,
+    take: limit + 1,
+    ...(cursorObj && { skip: 1, cursor: cursorObj }),
+    include: {
+      persona: {
+        include: {
+          documento: true,
+          contactos: {
+            where: { activo: true },
+            orderBy: [{ esPrincipal: "desc" }, { createdAt: "asc" }],
+          },
+        },
+      },
+      citas: {
+        where: {
+          inicio: { gte: new Date() },
+          estado: { in: ["SCHEDULED", "CONFIRMED"] },
+        },
+        orderBy: { inicio: "asc" },
+        take: 1,
+        include: {
+          profesional: {
+            include: {
+              persona: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const hasMore = items.length > limit
+  const resultItems = hasMore ? items.slice(0, limit) : items
+
+  // Map to DTOs
+  const dtos: PacienteListItemDTO[] = resultItems.map((p) => {
+    const edad = p.persona.fechaNacimiento
+      ? Math.floor((Date.now() - new Date(p.persona.fechaNacimiento).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : null
+
+    const contactoPrincipal = p.persona.contactos[0]
+      ? {
+          tipo: p.persona.contactos[0].tipo,
+          valor: p.persona.contactos[0].valorRaw,
+          whatsappCapaz: p.persona.contactos[0].whatsappCapaz ?? undefined,
+        }
+      : null
+
+    const proximaCita = p.citas[0]
+      ? {
+          idCita: p.citas[0].idCita,
+          inicio: p.citas[0].inicio.toISOString(),
+          tipo: p.citas[0].tipo,
+          profesional: `${p.citas[0].profesional.persona.nombres} ${p.citas[0].profesional.persona.apellidos}`,
+          esHoy: isTodayInTZ(p.citas[0].inicio),
+        }
+      : null
+
+    return {
+      idPaciente: p.idPaciente,
+      personaId: p.personaId,
+      nombres: p.persona.nombres,
+      apellidos: p.persona.apellidos,
+      nombreCompleto: `${p.persona.nombres} ${p.persona.apellidos}`,
+      fechaNacimiento: p.persona.fechaNacimiento?.toISOString() ?? null,
+      edad,
+      genero: p.persona.genero,
+      documento: p.persona.documento
+        ? {
+            tipo: p.persona.documento.tipo,
+            numero: p.persona.documento.numero,
+          }
+        : null,
+      contactoPrincipal,
+      estaActivo: p.estaActivo,
+      createdAt: p.createdAt.toISOString(),
+      proximaCita,
+    }
+  })
+
+  // Generate next cursor
+  let nextCursor: string | null = null
+  if (hasMore) {
+    const lastItem = resultItems[resultItems.length - 1]
+    const cursorData = {
+      idPaciente: lastItem.idPaciente,
+      createdAt: lastItem.createdAt.toISOString(),
+      apellidos: lastItem.persona.apellidos,
+      nombres: lastItem.persona.nombres,
+    }
+    nextCursor = Buffer.from(JSON.stringify(cursorData)).toString("base64")
+  }
+
+  return {
+    items: dtos,
+    nextCursor,
+    hasMore,
+  }
+}
+
+export async function createPaciente(data: {
+  nombres: string
+  apellidos: string
+  fechaNacimiento?: Date
+  genero?: string
+  direccion?: string
+  documento?: {
+    tipo: string
+    numero: string
+    paisEmision?: string
+  }
+  telefono?: string
+  email?: string
+  notas?: string
+}) {
+  return await prisma.$transaction(async (tx) => {
+    // Create Persona
+    const persona = await tx.persona.create({
+      data: {
+        nombres: data.nombres,
+        apellidos: data.apellidos,
+        fechaNacimiento: data.fechaNacimiento,
+        genero: data.genero as any,
+        direccion: data.direccion,
+      },
+    })
+
+    // Create Documento if provided
+    if (data.documento) {
+      await tx.documento.create({
+        data: {
+          personaId: persona.idPersona,
+          tipo: data.documento.tipo as any,
+          numero: data.documento.numero,
+          paisEmision: data.documento.paisEmision ?? "PY",
+        },
+      })
     }
 
-    // 4) PLANES ACTIVOS
-    const plansGroup = await prisma.treatmentPlan.groupBy({
-      by: ["pacienteId"],
-      where: { pacienteId: { in: pageIds }, isActive: true },
-      _count: { _all: true },
-    });
-    const plansCountMap = new Map<number, number>(plansGroup.map(g => [g.pacienteId, g._count._all]));
-
-    // 5) RESPONSABLE PRINCIPAL
-    const responsables = await prisma.pacienteResponsable.findMany({
-      where: { pacienteId: { in: pageIds }, esPrincipal: true },
-      select: { pacienteId: true },
-    });
-    const hasMainPayer = new Set<number>(responsables.map(r => r.pacienteId));
-
-    // 6) DTO final
-    const items: PacienteListItemDTO[] = itemsPage.map((p) => {
-      const persona = p.persona!;
-      const doc = persona.documento ?? null;
-
-      const edad = persona.fechaNacimiento ? computeAgeFrom(persona.fechaNacimiento.toISOString()) : null;
-      const parsed = safeParseNotas(p.notas ?? null);
-
-      const obraSocial = typeof parsed.obraSocial === "string" ? parsed.obraSocial : null;
-      const hasAlergias =
-        Array.isArray(parsed.alergias) ? parsed.alergias.length > 0
-        : typeof parsed.alergias === "string" ? parsed.alergias.trim().length > 0
-        : false;
-      const hasMedicacion =
-        Array.isArray(parsed.medicacion) ? parsed.medicacion.length > 0
-        : typeof parsed.medicacion === "string" ? parsed.medicacion.trim().length > 0
-        : false;
-
-      const last = lastDetailMap.get(p.idPaciente) ?? null;
-      const next = nextByPaciente.get(p.idPaciente) ?? null;
-
-      return {
-        idPaciente: p.idPaciente,
-        estaActivo: p.estaActivo,
-        persona: {
-          idPersona: persona.idPersona,
-          nombres: persona.nombres,
-          apellidos: persona.apellidos,
-          genero: (persona.genero as any) ?? null,
-          fechaNacimiento: persona.fechaNacimiento?.toISOString() ?? null,
+    // Create contacts
+    if (data.telefono) {
+      const { normalizePhonePY } = await import("@/lib/normalize")
+      await tx.personaContacto.create({
+        data: {
+          personaId: persona.idPersona,
+          tipo: "PHONE",
+          valorRaw: data.telefono,
+          valorNorm: normalizePhonePY(data.telefono),
+          esPrincipal: true,
+          whatsappCapaz: true,
         },
-        documento: {
-          tipo: (doc?.tipo as any) ?? null,
-          numero: doc?.numero ?? null,
-          ruc: doc?.ruc ?? null,
-        },
-        contactos: (persona.contactos ?? []).map((c) => ({
-          tipo: c.tipo as any,
-          valorNorm: c.valorNorm,
-          esPrincipal: c.esPrincipal,
-          activo: c.activo,
-          whatsappCapaz: (c as any).whatsappCapaz ?? null,
-          esPreferidoRecordatorio: (c as any).esPreferidoRecordatorio ?? false,
-          esPreferidoCobranza: (c as any).esPreferidoCobranza ?? false,
-        })),
-        edad,
-        hasAlergias,
-        hasMedicacion,
-        obraSocial,
-        hasResponsablePrincipal: hasMainPayer.has(p.idPaciente),
-        lastVisitAt: last ? last.at.toISOString() : null,
-        lastVisitProfesionalId: last ? last.profesionalId : null,
-        nextAppointmentAt: next ? next.at.toISOString() : null,
-        nextAppointmentEstado: (next?.estado as any) ?? null,
-        nextAppointmentProfesionalId: next ? next.profesionalId : null,
-        nextAppointmentConsultorioId: next ? next.consultorioId : null,
-        activePlansCount: plansCountMap.get(p.idPaciente) ?? 0,
-      };
-    });
+      })
+    }
 
-    return { items, nextCursor, hasMore: nextCursor !== null, totalCount };
-  },
-};
+    if (data.email) {
+      const { normalizeEmail } = await import("@/lib/normalize")
+      await tx.personaContacto.create({
+        data: {
+          personaId: persona.idPersona,
+          tipo: "EMAIL",
+          valorRaw: data.email,
+          valorNorm: normalizeEmail(data.email),
+          esPrincipal: !data.telefono,
+        },
+      })
+    }
+
+    // Create Paciente
+    const paciente = await tx.paciente.create({
+      data: {
+        personaId: persona.idPersona,
+        notas: data.notas,
+      },
+    })
+
+    return {
+      idPaciente: paciente.idPaciente,
+      personaId: persona.idPersona,
+    }
+  })
+}

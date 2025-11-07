@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     if (e?.name === "ZodError") return jsonError(400, "VALIDATION_ERROR", "Datos inválidos", e.issues)
     if (e instanceof QuickCreateError) return jsonError(e.status, e.code, e.message)
-    if (e?.code === "P2002") return jsonError(409, "UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto")
+    if (e?.code === "P2002")
+      return jsonError(409, "UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto")
     return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al crear paciente")
   }
 }

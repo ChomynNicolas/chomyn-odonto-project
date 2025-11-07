@@ -4,6 +4,9 @@
   - You are about to drop the `ConsultaAdjunto` table. If the table is not empty, all the data it contains will be lost.
 
 */
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- CreateEnum
 CREATE TYPE "AdjuntoTipo" AS ENUM ('XRAY', 'INTRAORAL_PHOTO', 'EXTRAORAL_PHOTO', 'IMAGE', 'DOCUMENT', 'PDF', 'LAB_REPORT', 'OTHER');
 
@@ -399,3 +402,23 @@ ALTER TABLE "PeriodontogramSnapshot" ADD CONSTRAINT "PeriodontogramSnapshot_Cons
 
 -- AddForeignKey
 ALTER TABLE "PeriodontogramMeasure" ADD CONSTRAINT "PeriodontogramMeasure_PeriodontogramSnapshot_id_fkey" FOREIGN KEY ("PeriodontogramSnapshot_id") REFERENCES "PeriodontogramSnapshot"("idPeriodontogramSnapshot") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Database indexes for optimal performance
+
+-- Index for patient listing by creation date
+CREATE INDEX IF NOT EXISTS "idx_paciente_created_at" ON "Paciente"("created_at");
+
+-- Index for active patients with creation date
+CREATE INDEX IF NOT EXISTS "idx_paciente_active_created" ON "Paciente"("esta_activo", "created_at");
+
+-- Index for person name sorting
+CREATE INDEX IF NOT EXISTS "idx_persona_apellidos_nombres" ON "Persona"("apellidos", "nombres");
+
+-- Index for contact search with normalized value (case-insensitive)
+CREATE INDEX IF NOT EXISTS "idx_persona_contacto_valor_norm_trgm"
+  ON "PersonaContacto" USING gin ((lower("valor_norm")) gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS "idx_cita_paciente_upcoming"
+  ON "Cita" ("Paciente_idPaciente", "inicio")
+  WHERE "estado" IN ('SCHEDULED','CONFIRMED');
+

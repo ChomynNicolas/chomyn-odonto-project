@@ -1,337 +1,252 @@
-"use client";
-
-import type React from "react";
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Edit3 } from "lucide-react";
+"use client"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { toast } from "sonner"
+import { Loader2, Info } from "lucide-react"
+import { useState } from "react"
+import { pacienteQuickCreateSchema, type PacienteQuickCreateDTO } from "@/app/api/pacientes/quick/_schemas"
+import { useQueryClient } from "@tanstack/react-query"
 
 interface PatientQuickCreateModalProps {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (id: string) => void;
-  qForList: string;
-  soloActivos: boolean;
-  limit: number;
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
-export default function PatientQuickCreateModal({
-  open,
-  onClose,
-  onCreated,
-  qForList,
-  soloActivos,
-  limit,
-}: PatientQuickCreateModalProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [createdPatientId, setCreatedPatientId] = useState<string | null>(null);
+export function PatientQuickCreateModal({ open, onOpenChange }: PatientQuickCreateModalProps) {
+  const [isPending, setIsPending] = useState(false)
+  const queryClient = useQueryClient()
 
-  const [nombreCompleto, setNombreCompleto] = useState("");
-  const [genero, setGenero] = useState<string>("NO_ESPECIFICADO");
-  const [telefono, setTelefono] = useState("");
-  const [tipoDocumento, setTipoDocumento] = useState<string>("CI");
-  const [dni, setDni] = useState("");
-  const [email, setEmail] = useState("");
-  const [fechaNacimiento, setFechaNacimiento] = useState("");
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<PacienteQuickCreateDTO>({
+    resolver: zodResolver(pacienteQuickCreateSchema),
+    defaultValues: {
+      nombreCompleto: "",
+      tipoDocumento: "CI",
+      dni: "",
+      telefono: "",
+      email: "",
+      fechaNacimiento: "",
+      genero: "" as any,
+    },
+  })
 
-  const queryClient = useQueryClient();
-  const router = useRouter();
-
-  const calculateAge = (birthDate: string): number | null => {
-    if (!birthDate) return null;
-    const today = new Date();
-    const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    return age;
-  };
-
-  const age = calculateAge(fechaNacimiento);
-
-  const makeIdempotencyKey = () => {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-      return crypto.randomUUID();
-    }
-    // Fallback (muy raro en navegadores modernos)
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    // Nota: el backend valida UUID; si se requiere estricto, elimina el fallback.
-  };
-
-  const extractBackendError = (data: any): string => {
-    if (!data) return "Error al crear paciente";
-    if (data.code === "VALIDATION_ERROR" && Array.isArray(data.details) && data.details.length > 0) {
-      // Muestra el primer mensaje claro de Zod
-      const first = data.details[0];
-      return first?.message || "Datos inválidos";
-    }
-    if (typeof data.error === "string" && data.error.trim() !== "") return data.error;
-    return "Error al crear paciente";
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
+  const onSubmit = async (data: PacienteQuickCreateDTO) => {
+    setIsPending(true)
 
     try {
-      const idemKey = makeIdempotencyKey();
+      const idempotencyKey = crypto.randomUUID()
 
       const response = await fetch("/api/pacientes/quick", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "application/json",
-          "Idempotency-Key": idemKey,
+          "Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify({
-          nombreCompleto,
-          genero,
-          tipoDocumento,
-          dni,
-          telefono,
-          email: email || undefined,
-          fechaNacimiento: fechaNacimiento || undefined,
-        }),
-      });
+        body: JSON.stringify(data),
+      })
 
-      const data = await response.json();
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(extractBackendError(data));
+        throw new Error(result.error || "Error al crear paciente")
       }
 
-      // Invalidate queries para refrescar la lista
-      await queryClient.invalidateQueries({
-        queryKey: ["pacientes", qForList, soloActivos, limit],
-      });
+      await queryClient.invalidateQueries({ queryKey: ["pacientes"] })
 
-      const patientId = String(data.data.idPaciente);
-      setCreatedPatientId(patientId);
-      onCreated(patientId);
-    } catch (err) {
-      console.error("Error creating patient:", err);
-      setError(err instanceof Error ? err.message : "Error al crear el paciente");
+      toast.success("Paciente creado exitosamente", {
+        description: `${data.nombreCompleto} ha sido registrado. Podrás completar sus datos más tarde.`,
+      })
+
+      reset()
+      onOpenChange(false)
+    } catch (error: any) {
+      toast.error("Error al crear paciente", {
+        description: error.message || "Ocurrió un error inesperado",
+      })
     } finally {
-      setIsSubmitting(false);
+      setIsPending(false)
     }
-  };
-
-  const handleEditFullDetails = () => {
-    if (createdPatientId) {
-      router.push(`/pacientes/${createdPatientId}/editar`);
-      handleClose();
-    }
-  };
-
-  const handleClose = () => {
-    if (!isSubmitting) {
-      setError(null);
-      setCreatedPatientId(null);
-      // Reset form
-      setNombreCompleto("");
-      setGenero("NO_ESPECIFICADO");
-      setTelefono("");
-      setTipoDocumento("CI");
-      setDni("");
-      setEmail("");
-      setFechaNacimiento("");
-      onClose();
-    }
-  };
+  }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg" aria-busy={isSubmitting}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">Alta rápida de paciente</DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">
-            Crea un nuevo paciente con información básica. Podrás completar los detalles después.
+          <DialogTitle>Alta Rápida de Paciente</DialogTitle>
+          <DialogDescription className="flex items-start gap-2 text-sm">
+            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <span>Registra los datos esenciales del paciente. Podrás completar información adicional más tarde.</span>
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
-          <Alert variant="destructive" role="alert">
-            <AlertCircle className="h-4 w-4" aria-hidden="true" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {createdPatientId && !error ? (
-          <div className="space-y-4 py-6">
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center dark:border-green-900/30 dark:bg-green-950/20">
-              <div className="mb-2 text-sm font-medium text-green-900 dark:text-green-100">
-                ✓ Paciente creado exitosamente
-              </div>
-              <p className="text-xs text-green-700 dark:text-green-300">
-                El paciente ha sido registrado con información básica
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label htmlFor="nombreCompleto">
+              Nombre Completo <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="nombreCompleto"
+              placeholder="Ej: Juan Carlos Pérez"
+              {...register("nombreCompleto")}
+              aria-invalid={!!errors.nombreCompleto}
+              aria-describedby={errors.nombreCompleto ? "nombreCompleto-error" : undefined}
+              autoFocus
+            />
+            {errors.nombreCompleto && (
+              <p id="nombreCompleto-error" className="text-sm text-destructive">
+                {errors.nombreCompleto.message}
               </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-[120px_1fr] gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="tipoDocumento">
+                Tipo <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="tipoDocumento"
+                {...register("tipoDocumento")}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                aria-invalid={!!errors.tipoDocumento}
+              >
+                <option value="CI">CI</option>
+                <option value="DNI">DNI</option>
+                <option value="PASAPORTE">Pasaporte</option>
+                <option value="RUC">RUC</option>
+                <option value="OTRO">Otro</option>
+              </select>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button type="button" variant="outline" onClick={handleClose} className="flex-1 bg-transparent">
-                Cerrar
-              </Button>
-              <Button type="button" onClick={handleEditFullDetails} className="flex-1 gap-2">
-                <Edit3 className="h-4 w-4" aria-hidden="true" />
-                Completar datos
-              </Button>
+            <div className="space-y-2">
+              <Label htmlFor="dni">
+                Número de Documento <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="dni"
+                placeholder="Ej: 1234567"
+                {...register("dni")}
+                aria-invalid={!!errors.dni}
+                aria-describedby={errors.dni ? "dni-error" : undefined}
+              />
+              {errors.dni && (
+                <p id="dni-error" className="text-sm text-destructive">
+                  {errors.dni.message}
+                </p>
+              )}
             </div>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} aria-disabled={isSubmitting}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="nombreCompleto" className="text-sm font-medium">
-                  Nombre completo <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="nombreCompleto"
-                  name="nombreCompleto"
-                  value={nombreCompleto}
-                  onChange={(e) => setNombreCompleto(e.target.value)}
-                  placeholder="Ej: Juan Carlos González"
-                  required
-                  disabled={isSubmitting}
-                  autoFocus
-                  className="text-sm"
-                />
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="genero" className="text-sm font-medium">
-                    Género
-                  </Label>
-                  <Select value={genero} onValueChange={setGenero} disabled={isSubmitting}>
-                    <SelectTrigger id="genero" className="text-sm" aria-label="Género">
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MASCULINO">Masculino</SelectItem>
-                      <SelectItem value="FEMENINO">Femenino</SelectItem>
-                      <SelectItem value="OTRO">Otro</SelectItem>
-                      <SelectItem value="NO_ESPECIFICADO">No especificado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="fechaNacimiento" className="text-sm font-medium">
-                    Fecha de nacimiento
-                  </Label>
-                  <Input
-                    id="fechaNacimiento"
-                    name="fechaNacimiento"
-                    type="date"
-                    value={fechaNacimiento}
-                    onChange={(e) => setFechaNacimiento(e.target.value)}
-                    disabled={isSubmitting}
-                    max={new Date().toISOString().split("T")[0]}
-                    className="text-sm"
-                  />
-                  {age !== null && <p className="text-xs text-muted-foreground">{age} años</p>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tipoDocumento" className="text-sm font-medium">
-                    Tipo de documento <span className="text-destructive">*</span>
-                  </Label>
-                  <Select value={tipoDocumento} onValueChange={setTipoDocumento} disabled={isSubmitting}>
-                    <SelectTrigger id="tipoDocumento" className="text-sm" aria-label="Tipo de documento">
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CI">CI</SelectItem>
-                      <SelectItem value="DNI">DNI</SelectItem>
-                      <SelectItem value="PASAPORTE">Pasaporte</SelectItem>
-                      <SelectItem value="RUC">RUC</SelectItem>
-                      <SelectItem value="OTRO">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dni" className="text-sm font-medium">
-                    Número <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="dni"
-                    name="dni"
-                    value={dni}
-                    onChange={(e) => setDni(e.target.value)}
-                    placeholder="12345678"
-                    required
-                    disabled={isSubmitting}
-                    className="text-sm"
-                    inputMode="numeric"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="telefono" className="text-sm font-medium">
-                  Teléfono <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="telefono"
-                  name="telefono"
-                  type="tel"
-                  value={telefono}
-                  onChange={(e) => setTelefono(e.target.value)}
-                  placeholder="+595 981 123456"
-                  required
-                  disabled={isSubmitting}
-                  className="text-sm"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email (opcional)
-                </Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ejemplo@correo.com"
-                  disabled={isSubmitting}
-                  className="text-sm"
-                  autoComplete="email"
-                />
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fechaNacimiento">
+                Fecha de Nacimiento <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="fechaNacimiento"
+                type="date"
+                {...register("fechaNacimiento")}
+                aria-invalid={!!errors.fechaNacimiento}
+                aria-describedby={errors.fechaNacimiento ? "fechaNacimiento-error" : undefined}
+                max={new Date().toISOString().split("T")[0]}
+              />
+              {errors.fechaNacimiento && (
+                <p id="fechaNacimiento-error" className="text-sm text-destructive">
+                  {errors.fechaNacimiento.message}
+                </p>
+              )}
             </div>
 
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
-                {isSubmitting ? "Creando..." : "Crear paciente"}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
+            <div className="space-y-2">
+              <Label htmlFor="genero">
+                Género <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="genero"
+                {...register("genero")}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                aria-invalid={!!errors.genero}
+                aria-describedby={errors.genero ? "genero-error" : undefined}
+              >
+                <option value="">Seleccionar...</option>
+                <option value="MASCULINO">Masculino</option>
+                <option value="FEMENINO">Femenino</option>
+                <option value="OTRO">Otro</option>
+                <option value="NO_ESPECIFICADO">Prefiero no especificar</option>
+              </select>
+              {errors.genero && (
+                <p id="genero-error" className="text-sm text-destructive">
+                  {errors.genero.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="telefono">
+              Teléfono <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="telefono"
+              type="tel"
+              placeholder="+595 XXX XXX XXX"
+              {...register("telefono")}
+              aria-invalid={!!errors.telefono}
+              aria-describedby={errors.telefono ? "telefono-error" : undefined}
+            />
+            {errors.telefono && (
+              <p id="telefono-error" className="text-sm text-destructive">
+                {errors.telefono.message}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-muted-foreground">
+              Email <span className="text-xs">(opcional)</span>
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="ejemplo@correo.com"
+              {...register("email")}
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? "email-error" : undefined}
+            />
+            {errors.email && (
+              <p id="email-error" className="text-sm text-destructive">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                reset()
+                onOpenChange(false)
+              }}
+              disabled={isPending}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Crear Paciente
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

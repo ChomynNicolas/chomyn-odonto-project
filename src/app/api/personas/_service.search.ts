@@ -22,24 +22,32 @@ export async function searchPersonas(params: unknown): Promise<PersonasSearchRes
   if (docMode) {
     // Prioriza búsqueda por documento/ruc (matches exactos o startsWith)
     rows = await db.persona.findMany({
-      where: {
-        OR: [
-          { documento: { is: { numero: q } } },
-          { documento: { is: { numero: { startsWith: q } } } },
-          { documento: { is: { ruc: q } } },
-          { documento: { is: { ruc: { startsWith: q } } } },
-        ],
-      },
-      include: {
-        documento: { select: { tipo: true, numero: true, ruc: true } },
-        contactos: {
-          where: { activo: true },
-          select: { tipo: true, valorNorm: true, valorRaw: true, activo: true, esPrincipal: true },
-        },
-      },
-      orderBy: [{ idPersona: "desc" }],
-      take,
-    })
+  where: {
+    // si tu modelo tiene estaActivo en Persona, filtra acá:
+    // estaActivo: true,
+    OR: [
+      { nombres: { contains: q, mode: "insensitive" } },
+      { apellidos: { contains: q, mode: "insensitive" } },
+      ...(tokens.length >= 2
+        ? [{
+            AND: [
+              { nombres: { contains: tokens[0], mode: "insensitive" } },
+              { apellidos: { contains: tokens.slice(1).join(" "), mode: "insensitive" } },
+            ],
+          }]
+        : []),
+    ],
+  },
+  include: {
+    documento: { select: { tipo: true, numero: true, ruc: true } },
+    contactos: {
+      where: { activo: true },
+      select: { tipo: true, valorNorm: true, valorRaw: true, activo: true, esPrincipal: true },
+    },
+  },
+  orderBy: [{ nombres: "asc" }, { apellidos: "asc" }, { idPersona: "desc" }],
+  take,
+})
   } else {
     // Texto: nombres/apellidos (case-insensitive)
     const tokens = q.split(/\s+/).filter(Boolean)
