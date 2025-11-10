@@ -1,35 +1,30 @@
-import { NextResponse, type NextRequest } from "next/server"
-import { requireSessionWithRoles } from "@/app/api/_lib/auth"
-import { paramsSchema } from "./_schemas"
+// src/app/api/agenda/citas/[id]/route.ts
+import type { NextRequest } from "next/server"
+import { auth } from "@/auth"
+import { ok, errors } from "../../../_http"               // ⬅️ usa servicio Prisma
+import { getCitaConsentimientoStatus } from "./_dto"
+import { z } from "zod"
 import { getCitaDetail } from "./_service"
 
-export const revalidate = 0
-export const dynamic = "force-dynamic"
+const Params = z.object({ id: z.coerce.number().int().positive() })
 
-export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"])
-  if (!auth.authorized) {
-    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status })
-  }
-
-  const parsed = paramsSchema.safeParse(await context.params)
-  if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: "BAD_REQUEST", details: parsed.error.flatten?.() }, { status: 400 })
-  }
-
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const rol = (auth.session.user as any)?.rolNombre ?? (auth.session.user as any)?.rol ?? "RECEP"
-    const dto = await getCitaDetail(parsed.data.id, rol)
+    const parsed = Params.safeParse(await ctx.params)         // Next 15: await params
+    if (!parsed.success) return errors.validation("ID de cita inválido")
+    const { id } = parsed.data
 
-    if (!dto) {
-      return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 })
-    }
+    const session = await auth()
+    if (!session?.user?.id) return errors.forbidden("No autenticado")
+    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
-    const res = NextResponse.json({ ok: true, data: dto }, { status: 200 })
-    res.headers.set("Cache-Control", "no-store")
-    return res
+    const dto = await getCitaDetail(id, rol)
+    if (!dto) return errors.notFound("Cita no encontrada")
+
+    const consentimientoStatus = await getCitaConsentimientoStatus(id)
+    return ok({ ...dto, consentimientoStatus })
   } catch (e: any) {
-    console.error("GET /api/agenda/citas/[id] error:", e?.message)
-    return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
+    console.error("[GET /api/agenda/citas/[id]]", e)
+    return errors.internal(e?.message ?? "Error al obtener cita")
   }
 }

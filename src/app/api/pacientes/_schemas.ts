@@ -42,11 +42,31 @@ export const VitalsSchema = z.object({
   notes: z.string().max(200).optional(),
 })
 
+// === Nuevos tipos de entrada normalizados ===
+export const AllergyInputSchema = z.object({
+  id: z.number().int().optional(),             // id de AllergyCatalog (opcional)
+  label: z.string().max(120).optional(),       // libre si no hay catálogo
+  severity: z.enum(["MILD","MODERATE","SEVERE"]).default("MODERATE").optional(),
+  reaction: z.string().max(255).optional(),
+  notedAt: z.string().datetime().optional(),
+  isActive: z.boolean().optional(),
+})
+
+export const MedicationInputSchema = z.object({
+  id: z.number().int().optional(),             // id de MedicationCatalog (opcional)
+  label: z.string().max(255).optional(),       // libre si no hay catálogo
+  dose: z.string().max(120).optional(),
+  freq: z.string().max(120).optional(),
+  route: z.string().max(120).optional(),
+  startAt: z.string().datetime().optional(),
+  endAt: z.string().datetime().optional(),
+  isActive: z.boolean().optional(),
+})
+
 export const PacienteCreateBodySchema = z.object({
   nombreCompleto: z.string().min(1).max(200),
-  // El cliente envía "M" | "F" | "X", se mapea en el servicio a enum DB
-  genero: z.enum(["M", "F", "X"]).optional(),
-  fechaNacimiento: z.string().optional(), // ISO
+  genero: z.enum(["M","F","X"]).optional(),
+  fechaNacimiento: z.string().optional(),
   tipoDocumento: TipoDocumentoEnum.default("CI"),
   numeroDocumento: z.string().min(1).max(50),
   ruc: z.string().max(50).optional(),
@@ -56,17 +76,39 @@ export const PacienteCreateBodySchema = z.object({
   pais: z.string().length(2).default("PY"),
   telefono: z.string().min(1).max(50),
   email: z.string().email().optional(),
-  preferenciasContacto: PreferenciasContactoSchema.optional(),
-  preferenciasRecordatorio: PreferenciasContactoSchema.optional(),
-  preferenciasCobranza: PreferenciasContactoSchema.optional(),
-  // compatibles con tu UI actual (texto libre, separado por coma/; o salto de línea)
-  alergias: z.string().max(1000).optional(),
-  medicacion: z.string().max(1000).optional(),
+
+  preferenciasContacto: z.object({
+    whatsapp: z.boolean().optional(),
+    sms: z.boolean().optional(),
+    llamada: z.boolean().optional(),
+    email: z.boolean().optional(),
+  }).optional(),
+  preferenciasRecordatorio: z.object({
+    whatsapp: z.boolean().optional(),
+    sms: z.boolean().optional(),
+    llamada: z.boolean().optional(),
+    email: z.boolean().optional(),
+  }).optional(),
+  preferenciasCobranza: z.object({
+    whatsapp: z.boolean().optional(),
+    sms: z.boolean().optional(),
+    llamada: z.boolean().optional(),
+    email: z.boolean().optional(),
+  }).optional(),
+
+  // --- Retro-compatibilidad: string o array ---
+  alergias: z.union([z.string().max(1000), z.array(AllergyInputSchema)]).optional(),
+  medicacion: z.union([z.string().max(1000), z.array(MedicationInputSchema)]).optional(),
+
   antecedentes: z.string().max(2000).optional(),
   observaciones: z.string().max(2000).optional(),
-  responsablePago: ResponsablePagoSchema.optional(),
+  responsablePago: z.object({
+    personaId: z.number().int().positive(),
+    relacion: z.enum(["PADRE","MADRE","TUTOR","CONYUGE","HIJO","FAMILIAR","EMPRESA","OTRO"]),
+    esPrincipal: z.boolean().default(true),
+  }).optional(),
   adjuntos: z.array(z.any()).optional(),
-  // ✅ Nuevo: vitales opcionales
+
   vitals: VitalsSchema.optional(),
 })
 

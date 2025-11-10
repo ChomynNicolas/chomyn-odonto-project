@@ -43,6 +43,8 @@ export interface PatientIdentification {
   address?: string
   city?: string
   country?: Country
+  emergencyContactName?: string
+  emergencyContactPhone?: string
   createdAt: string
   updatedAt: string
 }

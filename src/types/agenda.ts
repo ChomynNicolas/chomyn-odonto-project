@@ -25,7 +25,7 @@ export type RolUsuario = "ADMIN" | "ODONT" | "RECEP"
 
 export interface CurrentUser {
   idUsuario: number
-  rol: RolUsuario
+  role: RolUsuario
   profesionalId?: number | null
   nombre?: string
 }
@@ -155,6 +155,21 @@ export interface CitaDetalleDTO {
     startAt: string | null
     completeAt: string | null
     cancelledAt: string | null  
+  }
+
+  // Estado de consentimiento (si el paciente es menor)
+  consentimientoStatus?: {
+    esMenorAlInicio: boolean
+    requiereConsentimiento: boolean
+    consentimientoVigente: boolean
+    consentimientoResumen?: {
+      firmadoEn: string // ISO
+      vigenteHasta: string // ISO
+      responsableNombre: string
+      responsableTipoVinculo: string
+    }
+    bloqueaInicio: boolean
+    mensajeBloqueo?: string
   }
 }
 

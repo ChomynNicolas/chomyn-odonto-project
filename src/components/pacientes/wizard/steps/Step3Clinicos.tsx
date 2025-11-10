@@ -1,6 +1,8 @@
 "use client"
 
 import type { UseFormReturn } from "react-hook-form"
+import { useEffect, useMemo, useState } from "react"
+import { useFieldArray } from "react-hook-form"
 import {
   FormControl,
   FormDescription,
@@ -9,17 +11,16 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
-import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
-import { AlertCircle, Pill, FileText, StickyNote, Activity } from "lucide-react"
-import { useMemo, useState, useEffect } from "react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AlertCircle, Pill, FileText, StickyNote, Activity, X, Plus } from "lucide-react"
 import type { PacienteCreateDTOClient } from "@/lib/schema/paciente.schema"
 
-// ======= Catálogos rápidos (offline) =======
+// ======= Catálogos rápidos (offline, opcional) =======
 const COMMON_ALLERGENS = [
   "Penicilina",
   "Amoxicilina",
@@ -44,70 +45,49 @@ const COMMON_MEDICATIONS = [
   "Amoxicilina 500 mg",
 ] as const
 
-// ======= Utils para lista en textarea (compatible con backend actual) =======
-function parseList(s?: string) {
-  if (!s) return [] as string[]
-  return s
-    .split(/[,;\n]/g)
-    .map((t) => t.trim())
-    .filter(Boolean)
-}
-function joinList(list: string[]) {
-  return Array.from(new Set(list)).join(", ")
-}
-function toggleToken(current: string, token: string) {
-  const list = parseList(current)
-  const has = list.some((x) => x.toLowerCase() === token.toLowerCase())
-  const next = has ? list.filter((x) => x.toLowerCase() !== token.toLowerCase()) : [...list, token]
-  return joinList(next)
-}
-
-type Vitals = {
-  enabled: boolean
-  heightCm?: number | null
-  weightKg?: number | null
-  bmi?: number | null
-  bpSyst?: number | null
-  bpDiast?: number | null
-  heartRate?: number | null
-  notes?: string | null
-}
-
 interface Step3ClinicosProps {
   form: UseFormReturn<PacienteCreateDTOClient>
 }
 
 export function Step3Clinicos({ form }: Step3ClinicosProps) {
-  // ========= Estado local para Vitales (aún no se envía al endpoint) =========
-  const [vitals, setVitals] = useState<Vitals>({ enabled: false })
+  // ====== useFieldArray: alergias
+  const {
+    fields: allergyFields,
+    append: appendAllergy,
+    remove: removeAllergy,
+    update: updateAllergy,
+  } = useFieldArray({ control: form.control, name: "alergias" })
 
-  // BMI auto (si hay altura y peso)
-  useEffect(() => {
-    if (!vitals.enabled) return
-    const h = (vitals.heightCm ?? 0) / 100
-    const w = vitals.weightKg ?? 0
-    const bmi = h > 0 && w > 0 ? Number((w / (h * h)).toFixed(1)) : null
-    setVitals((v) => ({ ...v, bmi }))
-  }, [vitals.enabled, vitals.heightCm, vitals.weightKg])
+  // ====== useFieldArray: medicación
+  const {
+    fields: medFields,
+    append: appendMed,
+    remove: removeMed,
+    update: updateMed,
+  } = useFieldArray({ control: form.control, name: "medicacion" })
 
-  // Sugerencia: si activan vitales, añade una línea de ayuda en observaciones (no bloqueante)
+  // ====== VITALS: activar y calcular BMI dentro del form
+  const [vitalsEnabled, setVitalsEnabled] = useState<boolean>(false)
+  const vHeight = form.watch("vitals?.heightCm")
+  const vWeight = form.watch("vitals?.weightKg")
+
   useEffect(() => {
-    if (!vitals.enabled) return
-    const hint = "Se registrarán signos vitales iniciales en la primera consulta."
-    const obs = form.getValues("observaciones") ?? ""
-    if (!obs.includes(hint)) {
-      form.setValue("observaciones", obs ? `${obs}\n${hint}` : hint, {
-        shouldDirty: true,
-        shouldValidate: false,
-      })
+    if (!vitalsEnabled) return
+    const h = (vHeight ?? 0) / 100
+    const w = vWeight ?? 0
+    const bmi = h > 0 && w > 0 ? Number((w / (h * h)).toFixed(1)) : undefined
+    form.setValue("vitals.bmi", bmi, { shouldDirty: false, shouldValidate: false })
+  }, [vitalsEnabled, vHeight, vWeight, form])
+
+  // Inicializa measuredAt al activar
+  useEffect(() => {
+    if (vitalsEnabled && !form.getValues("vitals?.measuredAt")) {
+      form.setValue("vitals", { measuredAt: new Date().toISOString() }, { shouldDirty: true })
     }
-  }, [vitals.enabled, form])
+  }, [vitalsEnabled, form])
 
-  const alergiasValue = form.watch("alergias") ?? ""
-  const medicacionValue = form.watch("medicacion") ?? ""
-
-  const alergiasCount = useMemo(() => parseList(alergiasValue).length, [alergiasValue])
-  const medicacionCount = useMemo(() => parseList(medicacionValue).length, [medicacionValue])
+  const alergiasCount = allergyFields.length
+  const medicacionCount = medFields.length
 
   return (
     <div className="space-y-6">
@@ -126,81 +106,79 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
             Alergias
           </CardTitle>
           <CardDescription>
-            Seleccione con los atajos o escriba manualmente (separado por comas/; o Enter). Por defecto la severidad se
-            registra como <strong>MODERATE</strong> en backend.
+            Agrega desde catálogo rápido o escribe manualmente. Por defecto la severidad es <strong>MODERATE</strong>.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
+          {/* Chips rápidos */}
           <div className="flex flex-wrap gap-2">
-            {COMMON_ALLERGENS.map((tag) => {
-              const selected = parseList(alergiasValue).some((x) => x.toLowerCase() === tag.toLowerCase())
-              return (
-                <Button
-                  key={tag}
-                  type="button"
-                  variant={selected ? "secondary" : "outline"}
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => form.setValue("alergias", toggleToken(alergiasValue, tag), { shouldDirty: true })}
-                >
-                  {tag}
-                </Button>
-              )
-            })}
+            {COMMON_ALLERGENS.map((tag) => (
+              <Button
+                key={tag}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() =>
+                  appendAllergy({ label: tag, severity: "MODERATE", isActive: true })
+                }
+              >
+                {tag}
+              </Button>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-full"
+              onClick={() => appendAllergy({ label: "", severity: "MODERATE", isActive: true })}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Agregar alergia
+            </Button>
           </div>
 
-          <FormField
-            control={form.control}
-            name="alergias"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="alergias">Alergias conocidas</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    id="alergias"
-                    placeholder="Ej: Penicilina, látex, anestesia local…"
-                    className="min-h-[100px] resize-none"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                        // ctrl/cmd+enter para insertar nueva línea sin enviar
-                        return
-                      }
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        const next = field.value ? field.value.trim() + ", " : ""
-                        field.onChange(next)
-                      }
-                    }}
-                    maxLength={500}
+          {/* Lista editable */}
+          <div className="space-y-3">
+            {allergyFields.map((field, idx) => (
+              <div key={field.id} className="grid gap-2 md:grid-cols-12 items-end">
+                <div className="md:col-span-5">
+                  <FormLabel>Alérgeno</FormLabel>
+                  <Input
+                    placeholder="Ej: Penicilina"
+                    value={form.watch(`alergias.${idx}.label`) ?? ""}
+                    onChange={(e) => form.setValue(`alergias.${idx}.label`, e.target.value, { shouldDirty: true })}
                   />
-                </FormControl>
-                <FormDescription>
-                  {field.value?.length || 0}/500 caracteres • {alergiasCount} ítem(s)
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => form.setValue("alergias", "", { shouldDirty: true })}
-            >
-              Limpiar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                form.setValue("alergias", joinList(parseList(alergiasValue)), { shouldDirty: true, shouldValidate: true })
-              }
-            >
-              Normalizar lista
-            </Button>
+                </div>
+                <div className="md:col-span-3">
+                  <FormLabel>Severidad</FormLabel>
+                  <Select
+                    value={form.watch(`alergias.${idx}.severity`) ?? "MODERATE"}
+                    onValueChange={(v) => updateAllergy(idx, { ...field, severity: v as any })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Severidad" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MILD">MILD</SelectItem>
+                      <SelectItem value="MODERATE">MODERATE</SelectItem>
+                      <SelectItem value="SEVERE">SEVERE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="md:col-span-3">
+                  <FormLabel>Reacción</FormLabel>
+                  <Input
+                    placeholder="Ej: urticaria, anafilaxia…"
+                    value={form.watch(`alergias.${idx}.reaction`) ?? ""}
+                    onChange={(e) => form.setValue(`alergias.${idx}.reaction`, e.target.value, { shouldDirty: true })}
+                  />
+                </div>
+                <div className="md:col-span-1 flex justify-end">
+                  <Button type="button" variant="ghost" onClick={() => removeAllergy(idx)} aria-label="Eliminar">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="text-xs text-muted-foreground">{alergiasCount} alergia(s)</div>
           </div>
         </CardContent>
       </Card>
@@ -212,82 +190,76 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
             <Pill className="h-5 w-5 text-primary" />
             Medicación Actual
           </CardTitle>
-          <CardDescription>
-            Use atajos y/o escriba manualmente (nombre + dosis/frecuencia si aplica). Se crearán registros iniciales
-            <em>isActive = true</em>.
-          </CardDescription>
+          <CardDescription>Agrega desde catálogo rápido o manualmente.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            {COMMON_MEDICATIONS.map((tag) => {
-              const selected = parseList(medicacionValue).some((x) => x.toLowerCase() === tag.toLowerCase())
-              return (
-                <Button
-                  key={tag}
-                  type="button"
-                  variant={selected ? "secondary" : "outline"}
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => form.setValue("medicacion", toggleToken(medicacionValue, tag), { shouldDirty: true })}
-                >
-                  {tag}
-                </Button>
-              )
-            })}
+            {COMMON_MEDICATIONS.map((tag) => (
+              <Button
+                key={tag}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => appendMed({ label: tag, isActive: true })}
+              >
+                {tag}
+              </Button>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-full"
+              onClick={() => appendMed({ label: "", isActive: true })}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Agregar medicación
+            </Button>
           </div>
 
-          <FormField
-            control={form.control}
-            name="medicacion"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="medicacion">Medicamentos actuales</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    id="medicacion"
-                    placeholder="Ej: Aspirina 100 mg (1 vez/día), Losartán 50 mg…"
-                    className="min-h-[100px] resize-none"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) return
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        const next = field.value ? field.value.trim() + ", " : ""
-                        field.onChange(next)
-                      }
-                    }}
-                    maxLength={500}
+          <div className="space-y-3">
+            {medFields.map((field, idx) => (
+              <div key={field.id} className="grid gap-2 md:grid-cols-12 items-end">
+                <div className="md:col-span-4">
+                  <FormLabel>Medicamento</FormLabel>
+                  <Input
+                    placeholder="Ej: Losartán 50 mg"
+                    value={form.watch(`medicacion.${idx}.label`) ?? ""}
+                    onChange={(e) => form.setValue(`medicacion.${idx}.label`, e.target.value, { shouldDirty: true })}
                   />
-                </FormControl>
-                <FormDescription>
-                  {field.value?.length || 0}/500 caracteres • {medicacionCount} ítem(s)
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => form.setValue("medicacion", "", { shouldDirty: true })}
-            >
-              Limpiar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                form.setValue("medicacion", joinList(parseList(medicacionValue)), {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
-              }
-            >
-              Normalizar lista
-            </Button>
+                </div>
+                <div className="md:col-span-2">
+                  <FormLabel>Dosis</FormLabel>
+                  <Input
+                    placeholder="Ej: 50 mg"
+                    value={form.watch(`medicacion.${idx}.dose`) ?? ""}
+                    onChange={(e) => form.setValue(`medicacion.${idx}.dose`, e.target.value, { shouldDirty: true })}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <FormLabel>Frecuencia</FormLabel>
+                  <Input
+                    placeholder="Ej: 1 vez/día"
+                    value={form.watch(`medicacion.${idx}.freq`) ?? ""}
+                    onChange={(e) => form.setValue(`medicacion.${idx}.freq`, e.target.value, { shouldDirty: true })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <FormLabel>Vía</FormLabel>
+                  <Input
+                    placeholder="Ej: VO"
+                    value={form.watch(`medicacion.${idx}.route`) ?? ""}
+                    onChange={(e) => form.setValue(`medicacion.${idx}.route`, e.target.value, { shouldDirty: true })}
+                  />
+                </div>
+                <div className="md:col-span-1 flex justify-end">
+                  <Button type="button" variant="ghost" onClick={() => removeMed(idx)} aria-label="Eliminar">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="text-xs text-muted-foreground">{medicacionCount} medicación(es)</div>
           </div>
         </CardContent>
       </Card>
@@ -309,13 +281,7 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
               <FormItem>
                 <FormLabel htmlFor="antecedentes">Antecedentes médicos</FormLabel>
                 <FormControl>
-                  <Textarea
-                    {...field}
-                    id="antecedentes"
-                    placeholder="Ej: Diabetes tipo 2, HTA, cirugía cardíaca (2020)…"
-                    className="min-h-[120px] resize-none"
-                    maxLength={1000}
-                  />
+                  <Textarea id="antecedentes" className="min-h-[120px] resize-none" maxLength={1000} {...field} />
                 </FormControl>
                 <FormDescription>{field.value?.length || 0}/1000 caracteres</FormDescription>
                 <FormMessage />
@@ -342,13 +308,7 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
               <FormItem>
                 <FormLabel htmlFor="observaciones">Observaciones generales</FormLabel>
                 <FormControl>
-                  <Textarea
-                    {...field}
-                    id="observaciones"
-                    placeholder="Cualquier información adicional relevante…"
-                    className="min-h-[100px] resize-none"
-                    maxLength={500}
-                  />
+                  <Textarea id="observaciones" className="min-h-[100px] resize-none" maxLength={500} {...field} />
                 </FormControl>
                 <FormDescription>{field.value?.length || 0}/500 caracteres</FormDescription>
                 <FormMessage />
@@ -358,16 +318,14 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
         </CardContent>
       </Card>
 
-      {/* ======= Signos vitales (opcional, UX local) ======= */}
+      {/* ======= Signos vitales ======= */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Activity className="h-5 w-5 text-primary" />
             Vitales iniciales (opcional)
           </CardTitle>
-          <CardDescription>
-            Puedes registrar una línea base (no bloquea el alta). Cuando habilites en backend, enviaremos estos datos.
-          </CardDescription>
+          <CardDescription>Si los habilitas, se guardan en la primera consulta.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -375,10 +333,16 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
               <FormLabel>Registrar vitales</FormLabel>
               <FormDescription>Altura, peso, IMC, PA y FC</FormDescription>
             </div>
-            <Switch checked={vitals.enabled} onCheckedChange={(v) => setVitals((s) => ({ ...s, enabled: v }))} />
+            <Button
+              type="button"
+              variant={vitalsEnabled ? "secondary" : "outline"}
+              onClick={() => setVitalsEnabled((v) => !v)}
+            >
+              {vitalsEnabled ? "Desactivar" : "Activar"}
+            </Button>
           </div>
 
-          {vitals.enabled && (
+          {vitalsEnabled && (
             <>
               <Separator />
               <div className="grid gap-4 md:grid-cols-3">
@@ -386,14 +350,15 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
                   <FormLabel htmlFor="heightCm">Altura (cm)</FormLabel>
                   <Input
                     id="heightCm"
-                    inputMode="numeric"
                     type="number"
                     min={50}
                     max={250}
                     step="1"
-                    value={vitals.heightCm ?? ""}
+                    value={form.watch("vitals.heightCm") ?? ""}
                     onChange={(e) =>
-                      setVitals((v) => ({ ...v, heightCm: e.target.value ? Number(e.target.value) : null }))
+                      form.setValue("vitals.heightCm", e.target.value ? Number(e.target.value) : undefined, {
+                        shouldDirty: true,
+                      })
                     }
                   />
                 </div>
@@ -401,20 +366,21 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
                   <FormLabel htmlFor="weightKg">Peso (kg)</FormLabel>
                   <Input
                     id="weightKg"
-                    inputMode="decimal"
                     type="number"
                     min={10}
                     max={300}
                     step="0.1"
-                    value={vitals.weightKg ?? ""}
+                    value={form.watch("vitals.weightKg") ?? ""}
                     onChange={(e) =>
-                      setVitals((v) => ({ ...v, weightKg: e.target.value ? Number(e.target.value) : null }))
+                      form.setValue("vitals.weightKg", e.target.value ? Number(e.target.value) : undefined, {
+                        shouldDirty: true,
+                      })
                     }
                   />
                 </div>
                 <div className="space-y-2">
                   <FormLabel>IMC</FormLabel>
-                  <Input readOnly value={vitals.bmi ?? ""} placeholder="—" />
+                  <Input readOnly value={form.watch("vitals.bmi") ?? ""} placeholder="—" />
                 </div>
               </div>
 
@@ -427,9 +393,11 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
                     min={60}
                     max={250}
                     step="1"
-                    value={vitals.bpSyst ?? ""}
+                    value={form.watch("vitals.bpSyst") ?? ""}
                     onChange={(e) =>
-                      setVitals((v) => ({ ...v, bpSyst: e.target.value ? Number(e.target.value) : null }))
+                      form.setValue("vitals.bpSyst", e.target.value ? Number(e.target.value) : undefined, {
+                        shouldDirty: true,
+                      })
                     }
                   />
                 </div>
@@ -441,9 +409,11 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
                     min={30}
                     max={160}
                     step="1"
-                    value={vitals.bpDiast ?? ""}
+                    value={form.watch("vitals.bpDiast") ?? ""}
                     onChange={(e) =>
-                      setVitals((v) => ({ ...v, bpDiast: e.target.value ? Number(e.target.value) : null }))
+                      form.setValue("vitals.bpDiast", e.target.value ? Number(e.target.value) : undefined, {
+                        shouldDirty: true,
+                      })
                     }
                   />
                 </div>
@@ -455,9 +425,11 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
                     min={30}
                     max={220}
                     step="1"
-                    value={vitals.heartRate ?? ""}
+                    value={form.watch("vitals.heartRate") ?? ""}
                     onChange={(e) =>
-                      setVitals((v) => ({ ...v, heartRate: e.target.value ? Number(e.target.value) : null }))
+                      form.setValue("vitals.heartRate", e.target.value ? Number(e.target.value) : undefined, {
+                        shouldDirty: true,
+                      })
                     }
                   />
                 </div>
@@ -468,14 +440,9 @@ export function Step3Clinicos({ form }: Step3ClinicosProps) {
                 <Input
                   id="vitalNotes"
                   placeholder="Ej: medición sentado, brazalete adulto…"
-                  value={vitals.notes ?? ""}
-                  onChange={(e) => setVitals((v) => ({ ...v, notes: e.target.value || null }))}
+                  value={form.watch("vitals.notes") ?? ""}
+                  onChange={(e) => form.setValue("vitals.notes", e.target.value || undefined, { shouldDirty: true })}
                 />
-              </div>
-
-              <div className="text-xs text-muted-foreground">
-                * Por ahora no se envía al endpoint. Cuando actualices el DTO del servidor para incluir{" "}
-                <code>vitals</code>, te paso el patch del handler para persistir en <code>PatientVitals</code>.
               </div>
             </>
           )}

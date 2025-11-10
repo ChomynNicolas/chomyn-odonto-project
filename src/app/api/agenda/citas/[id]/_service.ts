@@ -137,6 +137,9 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
     paciente: {
       id: cita.paciente.idPaciente,
       nombre: `${cita.paciente.persona.nombres} ${cita.paciente.persona.apellidos}`.trim(),
+      fechaNacimiento: cita.paciente.persona.fechaNacimiento
+        ? cita.paciente.persona.fechaNacimiento.toISOString()
+        : "",
       documento: cita.paciente.persona.documento
         ? `${cita.paciente.persona.documento.tipo} ${cita.paciente.persona.documento.numero}`
         : null,

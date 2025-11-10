@@ -34,7 +34,7 @@ export function PacienteWizard() {
     resolver: zodResolver(PacienteCreateSchemaClient),
     mode: "onBlur",
     reValidateMode: "onChange",
-    efaultValues: {
+    defaultValues: {
   nombreCompleto: "",
   genero: undefined,
   fechaNacimiento: undefined,
@@ -50,8 +50,8 @@ export function PacienteWizard() {
   preferenciasContacto: [],
   preferenciasRecordatorio: [],
   preferenciasCobranza: [],
-  alergias: "",
-  medicacion: "",
+  alergias: [],         // ← arrays, no string
+  medicacion: [],
   antecedentes: "",
   observaciones: "",
   responsablePago: undefined,
@@ -102,8 +102,8 @@ export function PacienteWizard() {
       const values = form.getValues()
 
       const payload = {
-        nombreCompleto: `${values.nombres} ${values.apellidos}`.trim(),
-        genero: values.genero === "MASCULINO" ? "M" : values.genero === "FEMENINO" ? "F" : "X",
+        nombreCompleto: values.nombreCompleto.trim(),
+        genero: values.genero,
         fechaNacimiento: values.fechaNacimiento?.toISOString(),
         tipoDocumento: values.tipoDocumento,
         numeroDocumento: values.numeroDocumento,
@@ -130,12 +130,16 @@ export function PacienteWizard() {
           sms: values.preferenciasCobranza?.includes("SMS"),
           email: values.preferenciasCobranza?.includes("EMAIL"),
         },
-        alergias: values.alergias,
-        medicacion: values.medicacion,
-        antecedentes: values.antecedentes,
-        observaciones: values.observaciones,
-        responsablePago: values.responsablePago,
-        adjuntos: values.adjuntos,
+        alergias: values.alergias?.length ? values.alergias : undefined,
+  medicacion: values.medicacion?.length ? values.medicacion : undefined,
+
+  antecedentes: values.antecedentes?.trim() || undefined,
+  observaciones: values.observaciones?.trim() || undefined,
+
+  responsablePago: values.responsablePago,
+  adjuntos: values.adjuntos,
+
+  vitals: values.vitals,
       }
 
       console.log("[v0] Guardando paciente:", payload, "Intent:", intent)
@@ -169,7 +173,7 @@ export function PacienteWizard() {
       }
 
       toast.success("Paciente creado correctamente", {
-        description: `${values.nombres} ${values.apellidos} (ID ${pacienteId})`,
+        description: `${values.nombreCompleto} (ID ${pacienteId})`,
       })
 
       switch (intent) {

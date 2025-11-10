@@ -414,3 +414,4 @@ ALTER TABLE "Consentimiento" ADD CONSTRAINT "Consentimiento_Usuario_idUsuario_re
 -- CreateComment
 COMMENT ON TABLE "Consentimiento" IS 'Registro de consentimientos informados para pacientes, especialmente menores de edad';
 
+

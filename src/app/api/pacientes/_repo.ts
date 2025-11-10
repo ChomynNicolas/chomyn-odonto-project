@@ -105,34 +105,64 @@ export const pacienteRepo = {
     });
   },
 
-  createContactoTelefono: (
+  createContactoTelefono: async (
     tx: Prisma.TransactionClient,
     data: {
       personaId: number;
       valorRaw: string;
       valorNorm: string;
-      whatsappCapaz?: boolean; 
-      smsCapaz?: boolean;    
+      whatsappCapaz?: boolean;
+      smsCapaz?: boolean;
       prefer: { recordatorio?: boolean; cobranza?: boolean };
     }
-  ) =>
-    tx.personaContacto.create({
-      data: {
+  ) => {
+    // 1) Degradar cualquier PHONE principal previo (si es distinto número)
+    await tx.personaContacto.updateMany({
+      where: {
+        personaId: data.personaId,
+        tipo: "PHONE",
+        esPrincipal: true,
+        NOT: { valorNorm: data.valorNorm },
+      },
+      data: { esPrincipal: false },
+    });
+
+    // 2) Upsert del número (idempotente)
+    return tx.personaContacto.upsert({
+      where: {
+        personaId_tipo_valorNorm: {
+          personaId: data.personaId,
+          tipo: "PHONE",
+          valorNorm: data.valorNorm,
+        },
+      },
+      update: {
+        label: "Móvil",
+        whatsappCapaz: data.whatsappCapaz ?? true,
+        smsCapaz: data.smsCapaz ?? true,
+        esPrincipal: true, // único principal
+        esPreferidoRecordatorio: !!data.prefer.recordatorio,
+        esPreferidoCobranza: !!data.prefer.cobranza,
+        activo: true,
+      },
+      create: {
         personaId: data.personaId,
         tipo: "PHONE",
         valorRaw: data.valorRaw,
         valorNorm: data.valorNorm,
         label: "Móvil",
-        whatsappCapaz: data.whatsappCapaz ?? true, // ✅ usa lo que viene, default true
+        whatsappCapaz: data.whatsappCapaz ?? true,
         smsCapaz: data.smsCapaz ?? true,
         esPrincipal: true,
         esPreferidoRecordatorio: !!data.prefer.recordatorio,
         esPreferidoCobranza: !!data.prefer.cobranza,
         activo: true,
       },
-    }),
+    });
+  },
 
-  createContactoEmail: (
+
+  createContactoEmail: async (
     tx: Prisma.TransactionClient,
     data: {
       personaId: number;
@@ -140,20 +170,60 @@ export const pacienteRepo = {
       valorNorm: string;
       prefer: { recordatorio?: boolean; cobranza?: boolean };
     }
-  ) =>
-    tx.personaContacto.create({
-      data: {
+  ) => {
+    // 1) Degradar cualquier contacto previo que sea preferido para recordatorio/cobranza
+    // si el email va a ser preferido (para evitar conflictos con índices únicos parciales)
+    if (data.prefer.recordatorio) {
+      await tx.personaContacto.updateMany({
+        where: {
+          personaId: data.personaId,
+          esPreferidoRecordatorio: true,
+          NOT: { tipo: "EMAIL", valorNorm: data.valorNorm },
+        },
+        data: { esPreferidoRecordatorio: false },
+      });
+    }
+
+    if (data.prefer.cobranza) {
+      await tx.personaContacto.updateMany({
+        where: {
+          personaId: data.personaId,
+          esPreferidoCobranza: true,
+          NOT: { tipo: "EMAIL", valorNorm: data.valorNorm },
+        },
+        data: { esPreferidoCobranza: false },
+      });
+    }
+
+    // 2) Upsert del email (idempotente)
+    return tx.personaContacto.upsert({
+      where: {
+        personaId_tipo_valorNorm: {
+          personaId: data.personaId,
+          tipo: "EMAIL",
+          valorNorm: data.valorNorm,
+        },
+      },
+      update: {
+        label: "Correo",
+        esPrincipal: false, // ← nunca principal
+        esPreferidoRecordatorio: !!data.prefer.recordatorio,
+        esPreferidoCobranza: !!data.prefer.cobranza,
+        activo: true,
+      },
+      create: {
         personaId: data.personaId,
         tipo: "EMAIL",
         valorRaw: data.valorRaw,
         valorNorm: data.valorNorm,
         label: "Correo",
-        esPrincipal: true,
+        esPrincipal: false, // ← nunca principal
         esPreferidoRecordatorio: !!data.prefer.recordatorio,
         esPreferidoCobranza: !!data.prefer.cobranza,
         activo: true,
       },
-    }),
+    });
+  },
 
   createPaciente: (
     tx: Prisma.TransactionClient,
@@ -167,19 +237,42 @@ export const pacienteRepo = {
       },
     }),
 
+  /**
+   * Determina si una relación tiene autoridad legal para firmar consentimientos
+   * Según la legislación paraguaya y buenas prácticas:
+   * - PADRE, MADRE: tienen autoridad legal automática sobre menores
+   * - TUTOR: tiene autoridad legal cuando está legalmente designado
+   * - CONYUGE: puede tener autoridad en casos específicos (adultos con discapacidad)
+   * - Otros: requieren autorización específica
+   */
+  tieneAutoridadLegal: (relacion: string, autoridadLegalExplicita?: boolean): boolean => {
+    // Si se especifica explícitamente, respetar esa decisión
+    if (autoridadLegalExplicita !== undefined) {
+      return autoridadLegalExplicita
+    }
+    
+    // Relaciones con autoridad legal automática
+    const relacionesConAutoridadLegal = ["PADRE", "MADRE", "TUTOR"]
+    return relacionesConAutoridadLegal.includes(relacion)
+  },
+
   linkResponsablePago: (
     tx: Prisma.TransactionClient,
-    data: { pacienteId: number; personaId: number; relacion: any; esPrincipal: boolean }
-  ) =>
-    tx.pacienteResponsable.create({
+    data: { pacienteId: number; personaId: number; relacion: any; esPrincipal: boolean; autoridadLegal?: boolean }
+  ) => {
+    // Determinar autoridad legal según la relación
+    const tieneAutoridadLegal = pacienteRepo.tieneAutoridadLegal(data.relacion, data.autoridadLegal)
+    
+    return tx.pacienteResponsable.create({
       data: {
         pacienteId: data.pacienteId,
         personaId: data.personaId,
         relacion: data.relacion,
         esPrincipal: data.esPrincipal,
-        autoridadLegal: false,
+        autoridadLegal: tieneAutoridadLegal,
       },
-    }),
+    })
+  },
 
   getPacienteUI: (idPaciente: number) =>
     prisma.paciente.findUnique({
@@ -436,30 +529,31 @@ export async function createPaciente(data: {
 
     // Create contacts
     if (data.telefono) {
-      const { normalizePhonePY } = await import("@/lib/normalize")
-      await tx.personaContacto.create({
-        data: {
+      const { normalizePhonePY } = await import("@/lib/normalize");
+      const telNorm = normalizePhonePY(data.telefono);
+      if (telNorm) {
+        await pacienteRepo.createContactoTelefono(tx, {
           personaId: persona.idPersona,
-          tipo: "PHONE",
           valorRaw: data.telefono,
-          valorNorm: normalizePhonePY(data.telefono),
-          esPrincipal: true,
+          valorNorm: telNorm,
           whatsappCapaz: true,
-        },
-      })
+          smsCapaz: true,
+          prefer: {},
+        });
+      }
     }
 
     if (data.email) {
-      const { normalizeEmail } = await import("@/lib/normalize")
-      await tx.personaContacto.create({
-        data: {
+      const { normalizeEmail } = await import("@/lib/normalize");
+      const emailNorm = normalizeEmail(data.email);
+      if (emailNorm) {
+        await pacienteRepo.createContactoEmail(tx, {
           personaId: persona.idPersona,
-          tipo: "EMAIL",
           valorRaw: data.email,
-          valorNorm: normalizeEmail(data.email),
-          esPrincipal: !data.telefono,
-        },
-      })
+          valorNorm: emailNorm,
+          prefer: {},
+        });
+      }
     }
 
     // Create Paciente

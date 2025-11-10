@@ -131,27 +131,30 @@ model Documento {
 }
 
 model PersonaContacto {
-  idContacto              Int          @id @default(autoincrement()) @map("idContacto")
-  personaId               Int          @map("Persona_idPersona")
-  tipo                    TipoContacto @map("tipo")
-  valorRaw                String       @map("valor_raw")
-  valorNorm               String       @map("valor_norm")
-  label                   String?      @map("label")
-  whatsappCapaz           Boolean?     @map("whatsapp_capaz")
-  smsCapaz                Boolean?     @map("sms_capaz")
-  esPrincipal             Boolean      @default(false) @map("es_principal")
-  esPreferidoRecordatorio Boolean      @default(false) @map("es_pref_recordatorio")
-  esPreferidoCobranza     Boolean      @default(false) @map("es_pref_cobranza")
-  activo                  Boolean      @default(true) @map("activo")
-  createdAt               DateTime     @default(now()) @map("created_at")
-  updatedAt               DateTime     @updatedAt @map("updated_at")
-  persona                 Persona      @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+  idContacto               Int           @id @default(autoincrement()) @map("idContacto")
+  personaId                Int           @map("Persona_idPersona")
+  tipo                     TipoContacto  @map("tipo")
+  valorRaw                 String        @map("valor_raw")
+  valorNorm                String        @map("valor_norm")
+  label                    String?       @map("label")
+  whatsappCapaz            Boolean?      @map("whatsapp_capaz")
+  smsCapaz                 Boolean?      @map("sms_capaz")
+  esPrincipal              Boolean       @default(false) @map("es_principal")
+  esPreferidoRecordatorio  Boolean       @default(false) @map("es_pref_recordatorio")
+  esPreferidoCobranza      Boolean       @default(false) @map("es_pref_cobranza")
+  activo                   Boolean       @default(true)  @map("activo")
+  createdAt                DateTime      @default(now()) @map("created_at")
+  updatedAt                DateTime      @updatedAt      @map("updated_at")
 
-  @@unique([personaId, tipo, valorNorm])
-  @@index([personaId, tipo, esPrincipal])
-  @@index([personaId, esPreferidoRecordatorio])
-  @@index([personaId, esPreferidoCobranza])
-  @@map("PersonaContacto")
+  persona                  Persona       @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+
+  // 🔥 CLAVE ÚNICA COMPUESTA que tu seed usa en el upsert:
+  @@unique([personaId, tipo, valorNorm], name: "personaId_tipo_valorNorm")
+
+  // ✅ índices útiles (opcional)
+  @@index([personaId])
+  @@index([tipo])
+  @@index([valorNorm])
 }
 
 model Especialidad {

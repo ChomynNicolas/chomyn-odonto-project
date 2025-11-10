@@ -6,6 +6,7 @@ import { useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import type { PatientRecord, UserRole } from "@/lib/types/patient"
+import type { CurrentUser } from "@/types/agenda"
 import { calculateAge, formatFullName, formatGender, getSeverityColor } from "@/lib/utils/patient-helpers"
 import { getPermissions } from "@/lib/utils/rbac"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +23,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Calendar,
   Upload,
-  Edit,
   MoreVertical,
   Printer,
   FileDown,
@@ -36,7 +36,6 @@ import {
   Paperclip,
   LayoutDashboard,
 } from "lucide-react"
-import { EditPatientSheet } from "./EditPatientSheet"
 import { NuevaCitaSheet } from "@/components/agenda/NuevaCitaSheet"
 import { toast } from "sonner"
 
@@ -46,7 +45,6 @@ interface PatientLayoutClientProps {
 }
 
 export function PatientLayoutClient({ patient, children }: PatientLayoutClientProps) {
-  const [editSheetOpen, setEditSheetOpen] = useState(false)
   const [openNuevaCita, setOpenNuevaCita] = useState(false)
   const [userRole] = useState<UserRole>("ADMIN")
   const pathname = usePathname()
@@ -84,7 +82,11 @@ export function PatientLayoutClient({ patient, children }: PatientLayoutClientPr
     return "ficha"
   }
 
-  const currentUser = { rol: userRole, profesionalId: undefined } as const
+  const currentUser: CurrentUser = {
+    idUsuario: 1, // TODO: Get from session
+    role: userRole,
+    profesionalId: undefined,
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -171,12 +173,6 @@ export function PatientLayoutClient({ patient, children }: PatientLayoutClientPr
                 <Button onClick={() => setOpenNuevaCita(true)} className="flex-1 lg:flex-none">
                   <Calendar className="mr-2 h-4 w-4" />
                   Nueva Cita
-                </Button>
-              )}
-              {permissions.canEditDemographics && (
-                <Button onClick={() => setEditSheetOpen(true)} variant="outline" className="flex-1 lg:flex-none">
-                  <Edit className="mr-2 h-4 w-4" />
-                  Editar
                 </Button>
               )}
 
@@ -285,16 +281,6 @@ export function PatientLayoutClient({ patient, children }: PatientLayoutClientPr
 
       {/* Main content */}
       <div className="container mx-auto px-4 py-6">{children}</div>
-
-      <EditPatientSheet
-        open={editSheetOpen}
-        onOpenChange={setEditSheetOpen}
-        patient={patient}
-        onSuccess={() => {
-          router.refresh()
-          setEditSheetOpen(false)
-        }}
-      />
 
       <NuevaCitaSheet
         open={openNuevaCita}

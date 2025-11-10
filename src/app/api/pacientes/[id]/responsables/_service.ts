@@ -67,3 +67,132 @@ export async function linkResponsablePago(params: {
 
   return { pacienteId, personaId, relacion, esPrincipal, idempotent: false }
 }
+
+/**
+ * Crea una persona nueva y la vincula como responsable del paciente
+ */
+export async function createResponsableWithPersona(params: {
+  pacienteId: number
+  data: {
+    nombreCompleto: string
+    tipoDocumento: "DNI" | "CEDULA" | "RUC" | "PASAPORTE"
+    numeroDocumento: string
+    tipoVinculo: "PADRE" | "MADRE" | "TUTOR" | "AUTORIZADO"
+    telefono?: string
+  }
+  actorUserId?: number
+}) {
+  const { pacienteId, data, actorUserId } = params
+
+  await ensurePacienteExists(pacienteId)
+
+  // Separar nombre completo en nombres y apellidos
+  const partesNombre = data.nombreCompleto.trim().split(/\s+/)
+  const nombres = partesNombre[0] || "Responsable"
+  const apellidos = partesNombre.slice(1).join(" ") || ""
+
+  // Crear persona y vincular en una transacción
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Crear persona
+    const persona = await tx.persona.create({
+      data: {
+        nombres,
+        apellidos,
+        genero: "NO_ESPECIFICADO",
+      },
+    })
+
+    // 2. Crear documento si se proporciona
+    if (data.numeroDocumento) {
+      await tx.documento.create({
+        data: {
+          personaId: persona.idPersona,
+          tipo: data.tipoDocumento,
+          numero: data.numeroDocumento.trim(),
+        },
+      })
+    }
+
+    // 3. Crear contacto si se proporciona teléfono
+    if (data.telefono) {
+      await tx.contacto.create({
+        data: {
+          personaId: persona.idPersona,
+          tipo: "PHONE",
+          valorRaw: data.telefono,
+          valorNorm: data.telefono.replace(/\D/g, ""),
+          activo: true,
+        },
+      })
+    }
+
+    // 4. Vincular como responsable (la autoridad legal se determina automáticamente según la relación)
+    await pacienteRepo.linkResponsablePago(tx, {
+      pacienteId,
+      personaId: persona.idPersona,
+      relacion: data.tipoVinculo as any,
+      esPrincipal: true,
+      // autoridadLegal se determina automáticamente según la relación en linkResponsablePago
+    })
+
+    // Obtener el vínculo creado para devolver la autoridad legal
+    const vinculo = await tx.pacienteResponsable.findFirst({
+      where: {
+        pacienteId,
+        personaId: persona.idPersona,
+      },
+      select: {
+        autoridadLegal: true,
+      },
+    })
+
+    return {
+      pacienteId,
+      personaId: persona.idPersona,
+      relacion: data.tipoVinculo,
+      esPrincipal: true,
+      autoridadLegal: vinculo?.autoridadLegal ?? false,
+    }
+  })
+
+  return result
+}
+
+/**
+ * Obtiene todos los responsables de un paciente
+ */
+export async function getResponsables(pacienteId: number) {
+  await ensurePacienteExists(pacienteId)
+
+  const responsables = await prisma.pacienteResponsable.findMany({
+    where: {
+      pacienteId,
+      // Solo responsables vigentes (sin vigenteHasta o vigenteHasta en el futuro)
+      OR: [
+        { vigenteHasta: null },
+        { vigenteHasta: { gte: new Date() } },
+      ],
+    },
+    include: {
+      persona: {
+        select: {
+          idPersona: true,
+          nombres: true,
+          apellidos: true,
+        },
+      },
+    },
+    orderBy: [
+      { esPrincipal: "desc" },
+      { createdAt: "asc" },
+    ],
+  })
+
+  return responsables.map((resp) => ({
+    id: resp.persona.idPersona,
+    nombre: `${resp.persona.nombres} ${resp.persona.apellidos}`.trim(),
+    tipoVinculo: resp.relacion,
+    esPrincipal: resp.esPrincipal,
+    autoridadLegal: resp.autoridadLegal,
+  }))
+}

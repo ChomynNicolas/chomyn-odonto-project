@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { Phone, Mail, FileWarning, CalendarDays, IdCard, Activity } from "lucide-react"
 
+// Tipo compatible con PacienteFichaCompletaDTO del endpoint
 type PacienteFichaDTO = {
   idPaciente: number
   estaActivo: boolean
@@ -29,7 +30,12 @@ type PacienteFichaDTO = {
     alergias: string | null
     obraSocial: string | null
   }
-  kpis: {
+  resumen?: {
+    proximaCitaEn: string | null
+    citasNoShow: number
+  }
+  // Compatibilidad con estructura antigua (fallback)
+  kpis?: {
     proximoTurno: string | null
     noShow: number
   }
@@ -44,7 +50,6 @@ export function PacientePeek({
   children: React.ReactNode
   side?: "top" | "right" | "bottom" | "left"
 }) {
-  const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [err, setErr] = React.useState<string | null>(null)
   const [data, setData] = React.useState<PacienteFichaDTO | null>(null)
@@ -59,8 +64,9 @@ export function PacientePeek({
       if (!r.ok || !j) throw new Error(j?.error ?? "No se pudo cargar el paciente")
       const d = j?.data ?? j
       setData(d as PacienteFichaDTO)
-    } catch (e: any) {
-      setErr(e?.message ?? "Error")
+    } catch (e: unknown) {
+      const error = e instanceof Error ? e : new Error("Error desconocido")
+      setErr(error.message)
     } finally {
       setLoading(false)
     }
@@ -71,7 +77,6 @@ export function PacientePeek({
       openDelay={150}
       closeDelay={100}
       onOpenChange={(o) => {
-        setOpen(o)
         if (o) void load()
       }}
     >
@@ -103,7 +108,13 @@ function PacientePeekBody({ d }: { d: PacienteFichaDTO }) {
     ? `${d.persona.documento.tipo} ${d.persona.documento.numero}${d.persona.documento.ruc ? " · RUC " + d.persona.documento.ruc : ""}`
     : null
   const contacto = pickContactoPrincipal(d.persona.contactos)
-  const proximo = d.kpis.proximoTurno ? fmtShort(new Date(d.kpis.proximoTurno)) : "—"
+  
+  // Usar resumen.proximaCitaEn (estructura nueva) o kpis.proximoTurno (estructura antigua) como fallback
+  const proximaCitaFecha = d.resumen?.proximaCitaEn ?? d.kpis?.proximoTurno ?? null
+  const proximo = proximaCitaFecha ? fmtShort(new Date(proximaCitaFecha)) : "—"
+  
+  // Usar resumen.citasNoShow (estructura nueva) o kpis.noShow (estructura antigua) como fallback
+  const noShowCount = d.resumen?.citasNoShow ?? d.kpis?.noShow ?? 0
 
   return (
     <div className="p-4">
@@ -174,7 +185,7 @@ function PacientePeekBody({ d }: { d: PacienteFichaDTO }) {
           Abrir ficha completa
         </a>
         <div className="text-xs text-muted-foreground inline-flex items-center gap-1">
-          <Activity className="h-3.5 w-3.5" /> No-show: {d.kpis.noShow}
+          <Activity className="h-3.5 w-3.5" /> No-show: {noShowCount}
         </div>
       </div>
     </div>

@@ -44,7 +44,15 @@ export async function apiCreateCita(payload: CreateReq) {
 
 // GET detalle (igual que ya tenías)
 export async function apiGetCitaDetalle(id: number) {
-  const r = await fetch(`/api/agenda/citas/${id}`, { cache: "no-store" })
+  // Usar cache: "no-store" y agregar timestamp para evitar cache del navegador
+  const r = await fetch(`/api/agenda/citas/${id}?t=${Date.now()}`, {
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  })
   if (!r.ok) throw new Error("No se pudo cargar el detalle de la cita")
   const j = await r.json()
   return j?.data ?? j
@@ -66,7 +74,13 @@ export async function apiTransitionCita(
     body: JSON.stringify(body),
   })
   const j = await r.json().catch(() => null)
-  if (!r.ok || !j?.ok) throw new Error(j?.message ?? j?.error ?? "Error en transición")
+  if (!r.ok || !j?.ok) {
+    // Preservar el código de error para manejo específico en el frontend
+    const error: any = new Error(j?.message ?? j?.error ?? "Error en transición")
+    error.code = j?.code
+    error.status = r.status
+    throw error
+  }
   return j.data
 }
 

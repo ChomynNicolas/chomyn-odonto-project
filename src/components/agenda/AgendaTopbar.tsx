@@ -188,7 +188,7 @@ function FiltersForm({
             })
           }
         />
-        {currentUser?.rol === "ODONT" && currentUser.profesionalId && (
+        {currentUser?.role === "ODONT" && currentUser.profesionalId && (
           <Button
             variant="outline"
             size="sm"

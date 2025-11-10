@@ -183,7 +183,7 @@ export const PacienteCreateSchemaV2 = z.object({
 
   responsablePago: z
     .object({
-      personaId: z.string().uuid("ID de persona inválido"),
+      personaId: z.number().int().positive({ message: "ID de persona inválido" }),
       relacion: z.enum(["PADRE", "MADRE", "TUTOR", "CONYUGE", "HIJO", "FAMILIAR", "EMPRESA", "OTRO"]),
       esPrincipal: z.boolean().default(true),
     })
@@ -195,9 +195,91 @@ export const PacienteCreateSchemaV2 = z.object({
 
 export type PacienteCreateDTOV2 = z.infer<typeof PacienteCreateSchemaV2>
 
-export const PacienteCreateSchemaClient = PacienteCreateSchemaV2.omit({
-  origen: true,
-  version: true,
+
+// ==== Enums cliente
+export const ClientGeneroEnum = z.enum(["M", "F", "X"])
+export const ClientTipoDocumentoEnum = z.enum(["CI", "DNI", "PASAPORTE", "RUC", "OTRO"])
+
+export const ClientAllergySeverityEnum = z.enum(["MILD", "MODERATE", "SEVERE"])
+
+// ==== Inputs tipados (arrays de objetos)
+export const AllergyInputClientSchema = z.object({
+  id: z.number().int().optional(),         // id de catálogo (opcional)
+  label: z.string().min(1).max(120).optional(), // libre si no hay catálogo
+  severity: ClientAllergySeverityEnum.default("MODERATE").optional(),
+  reaction: z.string().max(255).optional(),
+  notedAt: z.string().datetime().optional(),
+  isActive: z.boolean().default(true).optional(),
+})
+
+export const MedicationInputClientSchema = z.object({
+  id: z.number().int().optional(),
+  label: z.string().min(1).max(255).optional(),
+  dose: z.string().max(120).optional(),
+  freq: z.string().max(120).optional(),
+  route: z.string().max(120).optional(),
+  startAt: z.string().datetime().optional(),
+  endAt: z.string().datetime().optional(),
+  isActive: z.boolean().default(true).optional(),
+})
+
+export const VitalsClientSchema = z.object({
+  measuredAt: z.string().datetime(),
+  heightCm: z.number().int().min(50).max(250).optional(),
+  weightKg: z.number().min(10).max(300).optional(),
+  bmi: z.number().min(5).max(80).optional(),
+  bpSyst: z.number().int().min(60).max(250).optional(),
+  bpDiast: z.number().int().min(30).max(160).optional(),
+  heartRate: z.number().int().min(30).max(220).optional(),
+  notes: z.string().max(200).optional(),
+})
+
+export const PacienteCreateSchemaClient = z.object({
+  nombreCompleto: z
+    .string()
+    .min(3, "El nombre debe tener al menos 3 caracteres")
+    .max(100, "El nombre no puede exceder 100 caracteres"),
+  genero: ClientGeneroEnum,
+  fechaNacimiento: z.coerce
+    .date({ required_error: "Ingrese la fecha de nacimiento" })
+    .max(new Date(), "La fecha no puede ser futura")
+    .min(new Date("1900-01-01"), "Fecha inválida"),
+
+  tipoDocumento: ClientTipoDocumentoEnum.default("CI"),
+  numeroDocumento: z.string().min(6).max(20),
+  ruc: z.string().max(20).optional(),
+  paisEmision: z.string().length(2).default("PY"),
+
+  direccion: z.string().min(10).max(200),
+  ciudad: z.string().min(2).max(100),
+  pais: z.string().length(2).default("PY"),
+
+  telefono: z.string().min(10),
+  email: z.string().email().max(100),
+
+  preferenciasContacto: z.array(z.enum(["WHATSAPP", "LLAMADA", "EMAIL", "SMS"])).min(1),
+  preferenciasRecordatorio: z.array(z.enum(["WHATSAPP", "EMAIL", "SMS"])).default([]),
+  preferenciasCobranza: z.array(z.enum(["WHATSAPP", "EMAIL", "SMS"])).default([]),
+
+  // —— ahora arrays tipados
+  alergias: z.array(AllergyInputClientSchema).default([]),
+  medicacion: z.array(MedicationInputClientSchema).default([]),
+
+  antecedentes: z.string().max(1000).optional(),
+  observaciones: z.string().max(500).optional(),
+
+  responsablePago: z
+    .object({
+      personaId: z.number().int().positive({ message: "ID de persona inválido" }),
+      relacion: z.enum(["PADRE", "MADRE", "TUTOR", "CONYUGE", "HIJO", "FAMILIAR", "EMPRESA", "OTRO"]),
+      esPrincipal: z.boolean().default(true),
+    })
+    .optional(),
+
+  // enviado sólo si habilitás en el paso clínico
+  vitals: VitalsClientSchema.optional(),
+
+  // el flujo no necesita enviar origen/version desde el cliente
 })
 
 export type PacienteCreateDTOClient = z.infer<typeof PacienteCreateSchemaClient>

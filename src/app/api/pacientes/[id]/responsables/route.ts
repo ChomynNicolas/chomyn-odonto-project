@@ -1,10 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireRole } from "@/app/api/pacientes/_rbac"
-import { linkResponsablePago, LinkResponsableError } from "./_service"
-import { IdempotencyHeaderSchema, LinkResponsablePagoSchema } from "./_schemas"
+import { linkResponsablePago, createResponsableWithPersona, getResponsables, LinkResponsableError } from "./_service"
+import { IdempotencyHeaderSchema, LinkResponsablePagoSchema, CreateResponsableWithPersonaSchema } from "./_schemas"
 
 function jsonError(status: number, code: string, error: string, details?: any) {
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
+}
+
+export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
+  const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
+  if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado")
+
+  try {
+    const pacienteId = Number(ctx.params.id)
+    if (!Number.isFinite(pacienteId)) return jsonError(400, "VALIDATION_ERROR", "ID de paciente inválido")
+
+    const responsables = await getResponsables(pacienteId)
+
+    const res = NextResponse.json({ ok: true, data: responsables }, { status: 200 })
+    res.headers.set("Cache-Control", "no-store")
+    return res
+  } catch (e: any) {
+    if (e instanceof LinkResponsableError) return jsonError(e.status, e.code, e.message, e.extra)
+    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al obtener responsables")
+  }
 }
 
 export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
@@ -26,8 +45,22 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
     if (!Number.isFinite(pacienteId)) return jsonError(400, "VALIDATION_ERROR", "ID de paciente inválido")
 
     const raw = await req.json()
-    const body = LinkResponsablePagoSchema.parse(raw)
+    
+    // Intentar parsear como creación con persona nueva primero
+    const createWithPersona = CreateResponsableWithPersonaSchema.safeParse(raw)
+    if (createWithPersona.success) {
+      const result = await createResponsableWithPersona({
+        pacienteId,
+        data: createWithPersona.data,
+        actorUserId: gate.userId,
+      })
+      const res = NextResponse.json({ ok: true, data: result }, { status: 201 })
+      res.headers.set("Cache-Control", "no-store")
+      return res
+    }
 
+    // Si no, intentar parsear como vinculación con personaId existente
+    const body = LinkResponsablePagoSchema.parse(raw)
     const result = await linkResponsablePago({
       pacienteId,
       personaId: body.personaId,

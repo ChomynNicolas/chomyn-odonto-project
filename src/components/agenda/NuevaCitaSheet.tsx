@@ -79,7 +79,7 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
     pacienteId: prefill?.pacienteId ?? undefined,
     profesionalId:
       prefill?.profesionalId ??
-      (currentUser?.rol === "ODONT" ? currentUser?.profesionalId ?? undefined : undefined),
+      (currentUser?.role === "ODONT" ? currentUser?.profesionalId ?? undefined : undefined),
     consultorioId: prefill?.consultorioId ?? 1,
     duracionMinutos: prefill?.duracionMinutos ?? 30,
     tipo: prefill?.tipo ?? "CONSULTA",
@@ -133,7 +133,7 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
       // respeta profesional si es ODONT
       profesionalId:
         current.profesionalId ??
-        (currentUser?.rol === "ODONT" ? currentUser.profesionalId ?? undefined : undefined),
+        (currentUser?.role === "ODONT" ? currentUser.profesionalId ?? undefined : undefined),
       // mantén otros defaults
       duracionMinutos: current.duracionMinutos || 30,
       tipo: (current.tipo as NuevaCitaForm["tipo"]) || "CONSULTA",
@@ -211,7 +211,7 @@ export function NuevaCitaSheet({ open, onOpenChange, defaults, currentUser, onSu
         onChange={(id) => field.onChange(id)}
         placeholder="Buscar profesional"
         // si el usuario es ODONT, ya lo precargas y puedes deshabilitar:
-        disabled={currentUser?.rol === "ODONT"}
+        disabled={currentUser?.role === "ODONT"}
       />
     )}
   />

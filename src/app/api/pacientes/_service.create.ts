@@ -1,33 +1,33 @@
+// src/app/api/pacientes/_service.create.ts
 import type { PacienteCreateBody } from "./_schemas"
 import { pacienteRepo } from "./_repo"
 import { prisma } from "@/lib/prisma"
 import { normalizarTelefono, normalizarEmail, esMovilPY } from "@/lib/normalize"
 import { mapGeneroToDB, splitNombreCompleto } from "./_dto"
+import { withTxRetry } from "./_tx"
 
 export async function createPaciente(body: PacienteCreateBody, actorUserId: number) {
   const { nombres, apellidos } = splitNombreCompleto(body.nombreCompleto)
-
   const generoDB = body.genero ? mapGeneroToDB(body.genero) : "NO_ESPECIFICADO"
 
-  const preferRecordatorio = !!(
-    body.preferenciasRecordatorio?.whatsapp ||
-    body.preferenciasRecordatorio?.sms ||
-    body.preferenciasRecordatorio?.email
-  )
-  const preferCobranza = !!(
-    body.preferenciasCobranza?.whatsapp ||
-    body.preferenciasCobranza?.email ||
-    body.preferenciasCobranza?.sms
-  )
-
-  const toList = (s?: string) =>
+  const parseFreeList = (s?: string) =>
     (s ?? "")
       .split(/[,;\n]/g)
       .map((x) => x.trim())
       .filter(Boolean)
 
-  const result = await prisma.$transaction(async (tx) => {
-    // 1. Create Persona + Documento
+  // Normaliza a arrays tipados (retro-compat string -> array)
+  const alergiasArr = Array.isArray(body.alergias)
+    ? body.alergias
+    : parseFreeList(body.alergias).map((label) => ({ label, severity: "MODERATE" as const }))
+
+  const medsArr = Array.isArray(body.medicacion)
+    ? body.medicacion
+    : parseFreeList(body.medicacion).map((label) => ({ label }))
+
+  // ========== FASE A: transacción corta y rápida ==========
+  const { idPaciente, personaId } = await withTxRetry(async (tx) => {
+    // 1) Persona + Documento
     const persona = await pacienteRepo.createPersonaConDocumento(tx, {
       nombres,
       apellidos,
@@ -42,38 +42,40 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
       },
     })
 
-    // 2. Create PersonaContacto (telefono)
-    const telefonoNorm = normalizarTelefono(body.telefono)
-    const movil = esMovilPY(telefonoNorm)
+    // 2) Contactos (dedupe + principal por tipo)
+    const telNorm = normalizarTelefono(body.telefono)
+    const movil = esMovilPY(telNorm)
+    
+    // Determinar preferencias: si hay email, el email tiene prioridad para cobranza
+    const telefonoPreferRecordatorio = !!(body.preferenciasRecordatorio?.whatsapp || body.preferenciasRecordatorio?.sms)
+    const telefonoPreferCobranza = !!(body.preferenciasCobranza?.whatsapp || body.preferenciasCobranza?.sms) && !body.email
+    
     await pacienteRepo.createContactoTelefono(tx, {
       personaId: persona.idPersona,
       valorRaw: body.telefono,
-      valorNorm: telefonoNorm,
-      whatsappCapaz: movil,  // ✅ ahora respetado por repo
-      smsCapaz: movil,       // ✅ ahora respetado por repo
+      valorNorm: telNorm,
+      whatsappCapaz: movil,
+      smsCapaz: movil,
       prefer: {
-        recordatorio: preferRecordatorio,
-        cobranza: preferCobranza || !body.email, // si no hay email, cobranza por teléfono
+        recordatorio: telefonoPreferRecordatorio,
+        cobranza: telefonoPreferCobranza,
       },
     })
 
-    // 3. Create PersonaContacto (email) if provided
     if (body.email) {
-      const norm = normalizarEmail(body.email)
-      if (norm) {
-        await pacienteRepo.createContactoEmail(tx, {
-          personaId: persona.idPersona,
-          valorRaw: body.email,
-          valorNorm: norm,
-          prefer: {
-            recordatorio: !!body.preferenciasRecordatorio?.email,
-            cobranza: true, // Email is always preferred for billing
-          },
-        })
-      }
+      const emailNorm = normalizarEmail(body.email)
+      await pacienteRepo.createContactoEmail(tx, {
+        personaId: persona.idPersona,
+        valorRaw: body.email,
+        valorNorm: emailNorm,
+        prefer: {
+          recordatorio: !!body.preferenciasRecordatorio?.email,
+          cobranza: !!(body.preferenciasCobranza?.email || body.preferenciasCobranza?.whatsapp || body.preferenciasCobranza?.sms),
+        },
+      })
     }
 
-    // 4. Create Paciente with ciudad/pais in notas JSON
+    // 3) Paciente (metadatos)
     const notasJson: any = {}
     if (body.ciudad) notasJson.ciudad = body.ciudad
     if (body.pais) notasJson.pais = body.pais
@@ -84,94 +86,150 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
       notasJson,
     })
 
-    // 5. Create ClinicalHistoryEntry for antecedentes
-    if (body.antecedentes) {
-      await tx.clinicalHistoryEntry.create({
-        data: {
-          pacienteId: paciente.idPaciente,
-          title: "Antecedentes iniciales",
-          notes: body.antecedentes,
-          createdByUserId: actorUserId,
-        },
-      })
-    }
-
-    // 6. Create PatientAllergy records
-    for (const alergia of toList(body.alergias)) {
-      await tx.patientAllergy.create({
-        data: {
-          pacienteId: paciente.idPaciente,
-          label: alergia,
-          severity: "MODERATE", // default
-          isActive: true,
-          createdByUserId: actorUserId,
-        },
-      })
-    }
-
-    // 7) Medicación (lista libre → PatientMedication)
-    for (const medicamento of toList(body.medicacion)) {
-      await tx.patientMedication.create({
-        data: {
-          pacienteId: paciente.idPaciente,
-          label: medicamento,
-          isActive: true,
-          createdByUserId: actorUserId,
-        },
-      })
-    }
-
-    // 8. Link PacienteResponsable if provided
+    // 4) Responsable de pago (si hay)
     if (body.responsablePago?.personaId) {
-      await pacienteRepo.linkResponsablePago(tx, {
-        pacienteId: paciente.idPaciente,
-        personaId: body.responsablePago.personaId,
-        relacion: body.responsablePago.relacion,
-        esPrincipal: body.responsablePago.esPrincipal ?? true,
+      // Validar que la persona existe antes de vincular
+      const personaExiste = await tx.persona.findUnique({
+        where: { idPersona: body.responsablePago.personaId },
+        select: { idPersona: true },
       })
-    }
+      
+      if (!personaExiste) {
+        throw new Error(`La persona con ID ${body.responsablePago.personaId} no existe`)
+      }
 
-    if (body.vitals) {
-      await tx.patientVitals.create({
-        data: {
+      // Verificar si ya existe un vínculo (idempotencia)
+      const vinculoExistente = await tx.pacienteResponsable.findFirst({
+        where: {
           pacienteId: paciente.idPaciente,
-          measuredAt: body.vitals.measuredAt ? new Date(body.vitals.measuredAt) : new Date(),
-          heightCm: body.vitals.heightCm ?? null,
-          weightKg: body.vitals.weightKg ?? null,
-          bmi: body.vitals.bmi ?? null,
-          bpSyst: body.vitals.bpSyst ?? null,
-          bpDiast: body.vitals.bpDiast ?? null,
-          heartRate: body.vitals.heartRate ?? null,
-          notes: body.vitals.notes ?? null,
-          createdByUserId: actorUserId,
+          personaId: body.responsablePago.personaId,
         },
+        select: { idPacienteResponsable: true },
       })
-    }
 
-    // 9. Create AuditLog entry
-    await tx.auditLog.create({
-      data: {
-        action: "PATIENT_CREATE",
-        entity: "Patient",
-        entityId: paciente.idPaciente.toString(),
-        actorId: actorUserId,
-        metadata: JSON.stringify({
-          nombreCompleto: body.nombreCompleto,
-          documento: body.numeroDocumento,
-          telefono: body.telefono,
-          email: body.email,
-        }),
-      },
-    })
+      if (!vinculoExistente) {
+        await pacienteRepo.linkResponsablePago(tx, {
+          pacienteId: paciente.idPaciente,
+          personaId: body.responsablePago.personaId,
+          relacion: body.responsablePago.relacion,
+          esPrincipal: body.responsablePago.esPrincipal ?? true,
+          // autoridadLegal se determina automáticamente según la relación
+        })
+      }
+    }
 
     return { idPaciente: paciente.idPaciente, personaId: persona.idPersona }
-  })
+  }, { maxWaitMs: 10_000, timeoutMs: 30_000, attempts: 2 })
 
-  const item = await pacienteRepo.getPacienteUI(result.idPaciente)
-
-  return {
-    idPaciente: result.idPaciente,
-    personaId: result.personaId,
-    item,
+  // ========== FASE B: fuera de transacción (best effort) ==========
+  // 5) Antecedentes
+  if (body.antecedentes) {
+    await prisma.clinicalHistoryEntry.create({
+      data: {
+        pacienteId: idPaciente,
+        title: "Antecedentes iniciales",
+        notes: body.antecedentes,
+        createdByUserId: actorUserId,
+      },
+    }).catch((e) => {
+      console.error("[warn] antecedentes create failed", e)
+    })
   }
+
+  // 6) Alergias (dedupe in-memory y createMany)
+  if (alergiasArr.length > 0) {
+    // dedupe por (allergyId|label) en memoria
+    const key = (a: any) => (a.id ? `id:${a.id}` : `label:${(a.label ?? "").trim().toLowerCase()}`)
+    const map = new Map<string, any>()
+    for (const a of alergiasArr) {
+      if (!a.id && !a.label) continue
+      map.set(key(a), a)
+    }
+    const toInsert = Array.from(map.values()).map((a) => ({
+      pacienteId: idPaciente,
+      allergyId: a.id ?? null,
+      label: (a.label ?? null),
+      severity: (a.severity as any) ?? "MODERATE",
+      reaction: a.reaction ?? null,
+      notedAt: a.notedAt ? new Date(a.notedAt) : new Date(),
+      isActive: a.isActive ?? true,
+      createdByUserId: actorUserId,
+    }))
+
+    if (toInsert.length) {
+      await prisma.patientAllergy.createMany({ data: toInsert, skipDuplicates: true })
+        .catch(async () => {
+          // fallback 1x1 si el proveedor no soporta skipDuplicates o colisiona en unique compuesta
+          for (const row of toInsert) {
+            try {
+              await prisma.patientAllergy.create({ data: row })
+            } catch { /* ignore dup */ }
+          }
+        })
+    }
+  }
+
+  // 7) Medicación (dedupe + createMany)
+  if (medsArr.length > 0) {
+    const key = (m: any) => (m.id ? `id:${m.id}` : `label:${(m.label ?? "").trim().toLowerCase()}`)
+    const map = new Map<string, any>()
+    for (const m of medsArr) {
+      if (!m.id && !m.label) continue
+      map.set(key(m), m)
+    }
+    const toInsert = Array.from(map.values()).map((m) => ({
+      pacienteId: idPaciente,
+      medicationId: m.id ?? null,
+      label: (m.label ?? null),
+      dose: m.dose ?? null,
+      freq: m.freq ?? null,
+      route: m.route ?? null,
+      startAt: m.startAt ? new Date(m.startAt) : null,
+      endAt: m.endAt ? new Date(m.endAt) : null,
+      isActive: m.isActive ?? true,
+      createdByUserId: actorUserId,
+    }))
+
+    if (toInsert.length) {
+      await prisma.patientMedication.createMany({ data: toInsert, skipDuplicates: true })
+        .catch(async () => {
+          for (const row of toInsert) {
+            try { await prisma.patientMedication.create({ data: row }) } catch { /* ignore dup */ }
+          }
+        })
+    }
+  }
+
+  // 8) Vitals (si llega)
+  if (body.vitals) {
+    await prisma.patientVitals.create({
+      data: {
+        pacienteId: idPaciente,
+        measuredAt: body.vitals.measuredAt ? new Date(body.vitals.measuredAt) : new Date(),
+        heightCm: body.vitals.heightCm ?? null,
+        weightKg: body.vitals.weightKg ?? null,
+        bmi: body.vitals.bmi ?? null,
+        bpSyst: body.vitals.bpSyst ?? null,
+        bpDiast: body.vitals.bpDiast ?? null,
+        heartRate: body.vitals.heartRate ?? null,
+        notes: body.vitals.notes ?? null,
+        createdByUserId: actorUserId,
+      },
+    }).catch((e) => console.error("[warn] vitals create failed", e))
+  }
+
+  // 9) Audit (no bloqueante)
+  await prisma.auditLog.create({
+    data: {
+      action: "PATIENT_CREATE",
+      entity: "Patient",
+      entityId: idPaciente,
+      actorId: actorUserId,
+      metadata: { nombreCompleto: body.nombreCompleto, documento: body.numeroDocumento } as any,
+    },
+  }).catch((e) => console.error("[warn] audit create failed", e))
+
+  // 10) DTO final para UI
+  const item = await pacienteRepo.getPacienteUI(idPaciente)
+  return { idPaciente, personaId, item }
 }

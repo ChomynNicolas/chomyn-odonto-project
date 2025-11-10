@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { listPacientes, createPaciente } from "./_repo"
-
+import { listPacientes } from "./_repo"
+import { createPaciente } from "./_service.create"
 import { errors, ok } from "../_http";
 import { requireRole } from "./_rbac";
 import { PacienteCreateBodySchema } from "./_schemas";
 import { checkRateLimit } from "./_http";
 
 // In-memory idempotency cache (in production, use Redis)
-const idempotencyCache = new Map<string, { response: any; timestamp: number }>()
+type CacheItem = { data: any; timestamp: number }
+const idempotencyCache = new Map<string, CacheItem>()
 const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000 // 24 hours
 
 function cleanExpiredIdempotencyKeys() {
