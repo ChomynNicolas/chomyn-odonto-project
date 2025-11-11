@@ -202,6 +202,8 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   };
   if (query.profesionalId) whereCita.profesionalId = query.profesionalId;
   if (query.consultorioId) whereCita.consultorioId = query.consultorioId;
+  // Excluir cita específica (útil para reschedule: no considerar la cita que se está reprogramando)
+  if (query.excludeCitaId) whereCita.idCita = { not: query.excludeCitaId };
 
   const citas = await prisma.cita.findMany({
     where: whereCita,

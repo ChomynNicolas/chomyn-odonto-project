@@ -14,6 +14,17 @@ export type CitaMini = {
   consultorio?: { id: number; nombre: string; colorHex?: string | null };
 };
 
+/**
+ * Información de conflicto detectado
+ */
+export type ConflictInfo = {
+  citaId: number;
+  inicioISO: string;
+  finISO: string;
+  profesional: { id: number; nombre: string };
+  consultorio?: { id: number; nombre: string };
+};
+
 export type ReprogramarResponse =
   | { ok: true; data: { nueva: CitaMini; anterior: CitaMini } }
-  | { ok: false; error: string; details?: unknown };
+  | { ok: false; error: string; code?: string; conflicts?: ConflictInfo[]; details?: unknown };

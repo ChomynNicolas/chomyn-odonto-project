@@ -1,102 +1,72 @@
-// components/header/UserIdentity.tsx
-"use client";
+"use client"
 
-import Link from "next/link";
-import { clsx } from "clsx";
-import * as React from "react";
-import { SvgMaskIcon } from "@/components/icons/SvgMaskIcon";
-import { ROLE_ICON_NAME, RolNombre } from "@/components/icons/role-icon-map";
+import { clsx } from "clsx"
+import { SvgMaskIcon } from "@/components/icons/SvgMaskIcon"
+import { ROLE_ICON_NAME, type RolNombre } from "@/components/icons/role-icon-map"
 
 type Props = {
-  name: string;
-  role: RolNombre;
-  variant?: "header" | "sidebar";
-  className?: string;
-  loading?: boolean;
-  error?: boolean;
-};
+  name: string
+  role: RolNombre
+  variant?: "header" | "sidebar"
+  className?: string
+  loading?: boolean
+  error?: boolean
+}
 
 function roleConfig(role: RolNombre) {
   switch (role) {
     case "ADMIN":
       return {
         label: "Administrador",
-        badgeClass:
-          "bg-brand/10 text-brand-700 dark:bg-brand/20 dark:text-brand-300",
+        badgeClass: "bg-brand-500/10 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300",
         iconName: ROLE_ICON_NAME.ADMIN,
-      };
+        iconColor: "text-brand-600 dark:text-brand-400",
+      }
     case "ODONT":
       return {
         label: "Odontólogo/a",
-        badgeClass:
-          "bg-success/10 text-success-700 dark:bg-success/20 dark:text-success-300",
+        badgeClass: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
         iconName: ROLE_ICON_NAME.ODONT,
-      };
+        iconColor: "text-emerald-600 dark:text-emerald-400",
+      }
     case "RECEP":
       return {
         label: "Recepción",
-        badgeClass:
-          "bg-warning/10 text-warning-700 dark:bg-warning/20 dark:text-warning-300",
+        badgeClass: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
         iconName: ROLE_ICON_NAME.RECEP,
-      };
+        iconColor: "text-amber-600 dark:text-amber-400",
+      }
   }
 }
 
-export function UserIdentity({
-  name,
-  role,
-  variant = "header",
-  className,
-  loading,
-  error,
-}: Props) {
-  const { label, badgeClass, iconName } = roleConfig(role);
+export function UserIdentity({ name, role, variant = "header", className, loading, error }: Props) {
+  const { label, badgeClass, iconName, iconColor } = roleConfig(role)
 
-  const base = (
+  return (
     <div
       className={clsx(
-        "group flex items-center gap-3 rounded-lg",
+        "group flex items-center gap-2 rounded-lg transition-colors",
         variant === "header" ? "px-2 py-1.5" : "px-2 py-2",
-        "text-foreground",
-        className
+        className,
       )}
       aria-label={`Usuario: ${name}, Rol: ${label}`}
     >
-      
+      <div
+        className={clsx("hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:flex", badgeClass)}
+        title={label}
+      >
+        <SvgMaskIcon name={iconName} sizeClassName="h-3.5 w-3.5" className={iconColor} aria-hidden />
+        <span className="hidden lg:inline">{label}</span>
+      </div>
 
-      {/* Texto + chip de rol */}
-      <div className="flex items-center min-w-0 ">
-        <div
-          className={clsx(
-            "mt-0.5 hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex",
-            
-            badgeClass
-          )}
-          title={label}
-        >
-          <SvgMaskIcon
-            name={iconName}
-            sizeClassName="h-8 w-8"
-            // el color del relleno vendrá de las clases del chip (text-*)
-            // si quieres forzar, añade aquí p. ej. className="text-current"
-            aria-hidden
-          />
-        </div>
-        <div
-          className={clsx(
-            "truncate",
-            variant === "header" ? "text-sm font-medium" : "text-[13px] font-medium",
-            "border border-border rounded-full px-1.5 "
-          )}
-        >
-          {error ? "Usuario" : name}
-        </div>
-
-        {/* Chip (oculto en xs para ahorrar espacio) */}
+      <div
+        className={clsx(
+          "truncate rounded-full border border-gray-200 bg-white px-3 py-1 font-medium text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200",
+          variant === "header" ? "text-sm" : "text-[13px]",
+        )}
+      >
+        {loading ? "Cargando..." : error ? "Usuario" : name}
       </div>
     </div>
-  );
-
-  
-  return base;
+  )
 }

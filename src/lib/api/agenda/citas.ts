@@ -99,3 +99,48 @@ export async function apiCancelCita(
   if (!r.ok || !j?.ok) throw new Error(j?.message ?? j?.error ?? "Error cancelando cita")
   return j.data
 }
+
+// PUT reprogramar cita
+export async function apiReprogramarCita(
+  idCita: number,
+  payload: {
+    inicio: string // ISO datetime
+    duracionMinutos: number
+    profesionalId?: number
+    consultorioId?: number
+    motivo?: string
+    notas?: string
+  },
+) {
+  // Convertir a nuevo formato: inicioISO (compatibilidad con backend)
+  const body: any = {
+    inicioISO: payload.inicio, // Backend espera inicioISO
+    duracionMinutos: payload.duracionMinutos,
+    profesionalId: payload.profesionalId,
+    consultorioId: payload.consultorioId,
+    motivo: payload.motivo,
+    notas: payload.notas,
+  }
+
+  const r = await fetch(`/api/agenda/citas/${idCita}/reprogramar`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  
+  const j = await r.json().catch(() => null)
+  
+  if (!r.ok || !j?.ok) {
+    const error: any = new Error(j?.error ?? "Error reprogramando cita")
+    error.code = j?.code ?? j?.error
+    error.status = r.status
+    // Incluir conflictos si están disponibles (409 OVERLAP)
+    if (j?.conflicts) {
+      error.conflicts = j.conflicts
+    }
+    error.details = j?.details
+    throw error
+  }
+  
+  return j.data
+}

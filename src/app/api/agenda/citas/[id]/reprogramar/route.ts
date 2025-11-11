@@ -7,51 +7,132 @@ import { reprogramarCita } from "./_service";
 /**
  * PUT /api/agenda/citas/[id]/reprogramar
  * Crea nueva cita y cancela la anterior en una transacción.
+ * 
+ * Validación:
+ * - inicioISO: string ISO datetime (normalizado a UTC)
+ * - finISO: opcional, o se calcula desde duracionMinutos
+ * - motivo: opcional pero validado si se proporciona
+ * - idempotencyKey: opcional para prevenir duplicados
+ * 
+ * Respuestas:
+ * - 201: Reprogramación exitosa
+ * - 409: Conflicto de solapamiento (con detalles en conflicts[])
+ * - 422: Cita no reprogramable
+ * - 400: Bad request (validación fallida)
  */
-export async function PUT(req: NextRequest, context: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const handlerStart = performance.now();
+
   // RBAC: RECEP, ODONT, ADMIN
   const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"]);
   if (!auth.authorized) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   }
 
-  const parsedParams = paramsSchema.safeParse(context.params);
+  const params = await context.params;
+  const parsedParams = paramsSchema.safeParse(params);
   if (!parsedParams.success) {
     return NextResponse.json(
-      { ok: false, error: "BAD_REQUEST", details: parsedParams.error.flatten() },
+      { ok: false, error: "BAD_REQUEST", code: "BAD_REQUEST", details: parsedParams.error.flatten() },
       { status: 400 },
     );
   }
 
-  const body = await req.json().catch(() => null);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: "BAD_REQUEST", code: "BAD_REQUEST", details: "Body JSON inválido" },
+      { status: 400 },
+    );
+  }
+
+  // Compatibilidad: si viene "inicio" en lugar de "inicioISO", convertir
+  if (body && typeof body === "object" && "inicio" in body && !("inicioISO" in body)) {
+    const b = body as any;
+    if (typeof b.inicio === "string" || b.inicio instanceof Date) {
+      b.inicioISO = typeof b.inicio === "string" ? b.inicio : b.inicio.toISOString();
+    }
+  }
+
   const parsedBody = reprogramarBodySchema.safeParse(body);
   if (!parsedBody.success) {
     return NextResponse.json(
-      { ok: false, error: "BAD_REQUEST", details: parsedBody.error.flatten() },
+      {
+        ok: false,
+        error: "BAD_REQUEST",
+        code: "BAD_REQUEST",
+        details: parsedBody.error.flatten(),
+      },
       { status: 400 },
     );
   }
 
   try {
     const userId = (auth.session.user as any)?.idUsuario ?? (auth.session.user as any)?.id;
-    if (!userId) return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED", code: "UNAUTHORIZED" }, { status: 401 });
+    }
 
     const result = await reprogramarCita(parsedParams.data.id, parsedBody.data, Number(userId));
+    const handlerTime = performance.now() - handlerStart;
+
     if (!("ok" in result) || !result.ok) {
+      // Log de error con tiempos
+      console.log(
+        `[PUT /api/agenda/citas/${parsedParams.data.id}/reprogramar] ERROR ${result.status} ${result.error} - Handler: ${handlerTime.toFixed(2)}ms`
+      );
+
+      // Respuesta 409 con detalles de conflictos
+      if (result.status === 409 && result.code === "OVERLAP" && result.conflicts) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: result.error,
+            code: result.code,
+            conflicts: result.conflicts,
+          },
+          { status: 409 },
+        );
+      }
+
       return NextResponse.json(
-        { ok: false, error: result.error },
-        { status: (result as any).status ?? 400 },
+        {
+          ok: false,
+          error: result.error,
+          code: result.code ?? result.error,
+          details: result.details,
+        },
+        { status: result.status ?? 400 },
       );
     }
 
-    // 201? 200? → Es una mutación que crea un recurso nuevo vinculado: usamos 201 Created.
+    // Log de éxito con tiempos
+    console.log(
+      `[PUT /api/agenda/citas/${parsedParams.data.id}/reprogramar] OK 201 - Handler: ${handlerTime.toFixed(2)}ms - Nueva cita: ${result.data.nueva.idCita}`
+    );
+
+    // 201 Created: mutación que crea un recurso nuevo vinculado
     return NextResponse.json({ ok: true, data: result.data }, { status: 201 });
   } catch (e: any) {
+    const handlerTime = performance.now() - handlerStart;
     const code = e?.code as string | undefined;
+
+    console.error(
+      `[PUT /api/agenda/citas/${parsedParams.data.id}/reprogramar] EXCEPTION ${code || "UNKNOWN"} - Handler: ${handlerTime.toFixed(2)}ms`,
+      e?.message
+    );
+
     if (code === "P2003") {
-      return NextResponse.json({ ok: false, error: "FOREIGN_KEY_CONSTRAINT" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "FOREIGN_KEY_CONSTRAINT", code: "FOREIGN_KEY_CONSTRAINT" },
+        { status: 400 },
+      );
     }
-    console.error("PUT /api/agenda/citas/[id]/reprogramar error:", code || e?.message);
-    return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "INTERNAL_ERROR", code: "INTERNAL_ERROR" },
+      { status: 500 },
+    );
   }
 }

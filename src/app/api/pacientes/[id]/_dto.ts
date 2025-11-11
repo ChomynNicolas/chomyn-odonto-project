@@ -262,6 +262,13 @@ export type PacienteFichaCompletaDTO = {
       thumbnailUrl: string | null
       createdAt: string
       uploadedBy: string
+      bytes?: number
+      originalFilename?: string | null
+      format?: string | null
+      width?: number | null
+      height?: number | null
+      publicId?: string
+      resourceType?: string
     }>
     porTipo: {
       xrays: number

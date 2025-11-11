@@ -137,6 +137,13 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
       a.width && a.height ? `${a.secureUrl.split("/upload/")[0]}/upload/w_200,h_200,c_fill/${a.publicId}` : null,
     createdAt: a.createdAt.toISOString(),
     uploadedBy: a.uploadedBy.nombreApellido,
+    bytes: a.bytes,
+    originalFilename: a.originalFilename,
+    format: a.format,
+    width: a.width,
+    height: a.height,
+    publicId: a.publicId,
+    resourceType: a.resourceType,
   }))
 
   const adjuntosPorTipo = {

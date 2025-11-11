@@ -1066,3 +1066,36 @@ span.flatpickr-weekday,
   --color-amber-500: oklch(0.75 0.15 80);
   --color-violet-500: oklch\
 }
+
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom utility classes for enhanced UX */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Smooth scroll for tab navigation */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+
+  /* Text balance for better typography */
+  .text-balance {
+    text-wrap: balance;
+  }
+}

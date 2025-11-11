@@ -13,6 +13,7 @@ import { PacientePeek } from "@/components/pacientes/PacientePeek"
 import { apiCancelCita, apiGetCitaDetalle } from "@/lib/api/agenda/citas"
 import { apiTransitionCita } from "@/lib/api/agenda/citas"
 import { UploadConsentDialog } from "@/components/pacientes/consentimientos/UploadConsentDialog"
+import { NuevaCitaSheet } from "./NuevaCitaSheet"
 import type { CitaConsentimientoStatus } from "@/app/api/agenda/citas/[id]/_dto"
 import {
   Calendar,
@@ -60,6 +61,7 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
   const [cancelNotes, setCancelNotes] = React.useState("")
   const [cancelSubmitting, setCancelSubmitting] = React.useState(false)
   const [uploadConsentOpen, setUploadConsentOpen] = React.useState(false)
+  const [rescheduleOpen, setRescheduleOpen] = React.useState(false)
 
   const loadData = React.useCallback(async () => {
     try {
@@ -90,10 +92,14 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
   const [consentErrorOpen, setConsentErrorOpen] = React.useState(false)
   const [consentErrorMessage, setConsentErrorMessage] = React.useState<string | null>(null)
 
-  const handleAction = async (action: Exclude<AccionCita, "RESCHEDULE">, note?: string) => {
+  const handleAction = async (action: AccionCita, note?: string) => {
     if (!dto) return
     if (action === "CANCEL") {
       setCancelOpen(true)
+      return
+    }
+    if (action === "RESCHEDULE") {
+      setRescheduleOpen(true)
       return
     }
     try {
@@ -651,6 +657,27 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
           setUploadConsentOpen(true)
         }}
       />
+
+      {/* Sheet de reprogramación */}
+      {dto && (
+        <NuevaCitaSheet
+          open={rescheduleOpen}
+          onOpenChange={setRescheduleOpen}
+          mode="reschedule"
+          citaId={dto.idCita}
+          citaData={dto}
+          currentUser={currentUser}
+          onSuccess={async () => {
+            setRescheduleOpen(false)
+            await loadData()
+            onAfterChange?.()
+            const { toast } = await import("sonner")
+            toast.success("Cita reprogramada", {
+              description: "La cita ha sido reprogramada exitosamente. La cita original fue cancelada.",
+            })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -774,13 +801,13 @@ function getAccionesPermitidas(
   estado: EstadoCita,
   rol?: "ADMIN" | "ODONT" | "RECEP",
 ): Array<{
-  action: Exclude<AccionCita, "RESCHEDULE">
+  action: AccionCita
   label: string
   variant: "default" | "outline" | "destructive"
   icon?: string
 }> {
   const acciones: Array<{
-    action: Exclude<AccionCita, "RESCHEDULE">
+    action: AccionCita
     label: string
     variant: "default" | "outline" | "destructive"
     icon?: string
@@ -795,6 +822,13 @@ function getAccionesPermitidas(
           label: "Confirmar",
           variant: "default",
           icon: "✓",
+          roles: ["ADMIN", "ODONT", "RECEP"],
+        },
+        {
+          action: "RESCHEDULE",
+          label: "Reprogramar",
+          variant: "outline",
+          icon: "↻",
           roles: ["ADMIN", "ODONT", "RECEP"],
         },
         {
@@ -821,6 +855,13 @@ function getAccionesPermitidas(
           label: "Check-in",
           variant: "default",
           icon: "◐",
+          roles: ["ADMIN", "ODONT", "RECEP"],
+        },
+        {
+          action: "RESCHEDULE",
+          label: "Reprogramar",
+          variant: "outline",
+          icon: "↻",
           roles: ["ADMIN", "ODONT", "RECEP"],
         },
         {

@@ -9,6 +9,7 @@ export interface RBACPermissions {
   canViewClinicalData: boolean
   canEditClinicalData: boolean
   canUploadAttachments: boolean
+  canDeleteAttachments: boolean
   canScheduleAppointments: boolean
   canViewAudit: boolean
   canExport: boolean
@@ -33,6 +34,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: true,
         canEditClinicalData: true,
         canUploadAttachments: true,
+        canDeleteAttachments: true,
         canScheduleAppointments: true,
         canViewAudit: true,
         canExport: true,
@@ -47,6 +49,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: true,
         canEditClinicalData: true,
         canUploadAttachments: true,
+        canDeleteAttachments: true,
         canScheduleAppointments: true,
         canViewAudit: false,
         canExport: true,
@@ -61,6 +64,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: false, // Verás cómo usar esto para filtrar secciones clínicas
         canEditClinicalData: false,
         canUploadAttachments: false,
+        canDeleteAttachments: false,
         canScheduleAppointments: true,
         canViewAudit: false,
         canExport: RECEP_EXPORT_PDF, // <- bandera
@@ -75,6 +79,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: false,
         canEditClinicalData: false,
         canUploadAttachments: false,
+        canDeleteAttachments: false,
         canScheduleAppointments: false,
         canViewAudit: false,
         canExport: false,

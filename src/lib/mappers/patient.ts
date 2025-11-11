@@ -157,14 +157,52 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     ...dto.citas.ultimas,
   ].map(citaLiteToAppointment)
 
-  const attachments = dto.adjuntos.recientes.map((a) => ({
-    id: a.id,
-    type: a.tipo,
-    fileName: a.descripcion ?? a.tipo,
-    uploadedAt: a.createdAt,
-    url: a.secureUrl,
-    thumbnailUrl: a.thumbnailUrl ?? undefined,
-  }))
+  // Helper to split nombreApellido
+  const splitNombreApellido = (nombreApellido?: string | null) => {
+    if (!nombreApellido) return { firstName: "", lastName: "" }
+    const parts = nombreApellido.trim().split(/\s+/)
+    const firstName = parts[0] ?? ""
+    const lastName = parts.slice(1).join(" ") || ""
+    return { firstName, lastName }
+  }
+
+  const attachments = dto.adjuntos.recientes.map((a) => {
+    const { firstName, lastName } = splitNombreApellido(a.uploadedBy)
+    // Determine MIME type from format and resourceType
+    const getMimeType = (format?: string | null, resourceType?: string | null) => {
+      if (format === "pdf") return "application/pdf"
+      if (resourceType === "image") {
+        if (format === "jpg" || format === "jpeg") return "image/jpeg"
+        if (format === "png") return "image/png"
+        if (format === "gif") return "image/gif"
+        return "image/*"
+      }
+      if (resourceType === "video") return "video/*"
+      return "application/octet-stream"
+    }
+
+    return {
+      id: String(a.id),
+      type: a.tipo as any, // Map from Prisma type to frontend type
+      fileName: a.originalFilename || a.descripcion || `adjunto-${a.id}`,
+      fileSize: a.bytes || 0,
+      mimeType: getMimeType(a.format, a.resourceType),
+      uploadedAt: a.createdAt,
+      description: a.descripcion ?? undefined,
+      secureUrl: a.secureUrl,
+      thumbnailUrl: a.thumbnailUrl ?? undefined,
+      uploadedBy: {
+        firstName,
+        lastName,
+        fullName: a.uploadedBy || undefined,
+      },
+      width: a.width ?? undefined,
+      height: a.height ?? undefined,
+      format: a.format ?? undefined,
+      publicId: a.publicId ?? undefined,
+      resourceType: a.resourceType ?? undefined,
+    }
+  })
 
   const allergies = dto.clinico.alergias.map((x) => ({
     id: x.id,

@@ -1,66 +1,127 @@
-import { PrismaClient, RolNombre, Genero, AdjuntoTipo } from "@prisma/client";
-import { ALLOW_PROD_SEED, RESEED, COUNTS } from "./config";
-import { log } from "./logger";
-import { hashPassword } from "./utils";
+import { PrismaClient, RolNombre, AdjuntoTipo, RelacionPaciente } from "@prisma/client"
+import { ALLOW_PROD_SEED, RESEED, COUNTS, PROB } from "./config"
+import { log } from "./logger"
+import { hashPassword, calculateAge } from "./utils"
 import {
-  ensureRoles, ensureUsuario, ensureEspecialidades, ensureProfesionalEspecialidades,
-  ensurePersonaConDocumento, ensureContactos, ensurePacienteFromPersona,
-  ensureConsultorio, ensureProcedimientoCatalogo,
-  ensureDiagnosisCatalog, ensureAllergyCatalog, ensureMedicationCatalog,
-} from "./ensure";
-import { ESPECIALIDADES, CONSULTORIOS, PROCEDIMIENTOS_CATALOGO, DIAGNOSIS_CATALOG, ALLERGY_CATALOG, MEDICATION_CATALOG } from "./data";
-import { fakePersona, fakeDocumento, fakeContactosPersona } from "./factories";
-import { generarAgendaParaProfesional } from "./agenda";
-import { createPlanConSteps, ensureConsultaParaCita, addLineaProcedimiento, addAdjuntoConsulta, addClinicalBasics, addOdontoAndPerio } from "./clinical";
+  ensureRoles,
+  ensureUsuario,
+  ensureEspecialidades,
+  ensureProfesionalEspecialidades,
+  ensurePersonaConDocumento,
+  ensureContactos,
+  ensurePacienteFromPersona,
+  ensureConsultorio,
+  ensureProcedimientoCatalogo,
+  ensureResponsablePrincipal,
+  ensureDiagnosisCatalog,
+  ensureAllergyCatalog,
+  ensureMedicationCatalog,
+} from "./ensure"
+import {
+  ESPECIALIDADES,
+  CONSULTORIOS,
+  PROCEDIMIENTOS_CATALOGO,
+  DIAGNOSIS_CATALOG,
+  ALLERGY_CATALOG,
+  MEDICATION_CATALOG,
+} from "./data"
+import { fakePersona, fakeDocumento, fakeContactosPersona } from "./factories"
+import { generarAgendaParaProfesional, generarReprogramaciones, generarBloqueosAgenda } from "./agenda"
+import {
+  createPlanConSteps,
+  ensureConsultaParaCita,
+  addLineaProcedimiento,
+  addAdjuntoConsulta,
+  addClinicalBasics,
+  addOdontoAndPerio,
+  generarConsentimientosPaciente,
+} from "./clinical"
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 async function safeTruncate() {
   const tables = [
-  '"PeriodontogramMeasure"', '"PeriodontogramSnapshot"',
-  '"OdontogramEntry"', '"OdontogramSnapshot"',
-  '"PatientVitals"', '"PatientMedication"', '"MedicationCatalog"',
-  '"PatientAllergy"', '"AllergyCatalog"', '"PatientDiagnosis"', '"DiagnosisCatalog"',
-  '"ClinicalHistoryEntry"',
-  '"ConsultaAdjunto"', '"ConsultaProcedimiento"', '"Consulta"',
-  '"TreatmentStep"', '"TreatmentPlan"',
-  '"CitaEstadoHistorial"', '"Cita"', '"BloqueoAgenda"',
-  '"PacienteResponsable"',
-  '"ProfesionalEspecialidad"', '"Especialidad"',
-  '"Profesional"', '"Paciente"',
-  '"PersonaContacto"', '"Documento"', '"Consultorio"',
-  '"Usuario"', '"Rol"'
-];
-  await prisma.$executeRawUnsafe(`TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE;`);
+    '"Consentimiento"',
+    '"PeriodontogramMeasure"',
+    '"PeriodontogramSnapshot"',
+    '"OdontogramEntry"',
+    '"OdontogramSnapshot"',
+    '"PatientVitals"',
+    '"PatientMedication"',
+    '"MedicationCatalog"',
+    '"PatientAllergy"',
+    '"AllergyCatalog"',
+    '"PatientDiagnosis"',
+    '"DiagnosisCatalog"',
+    '"ClinicalHistoryEntry"',
+    '"Adjunto"',
+    '"ConsultaProcedimiento"',
+    '"Consulta"',
+    '"TreatmentStep"',
+    '"TreatmentPlan"',
+    '"CitaEstadoHistorial"',
+    '"Cita"',
+    '"BloqueoAgenda"',
+    '"PacienteResponsable"',
+    '"ProfesionalEspecialidad"',
+    '"Especialidad"',
+    '"Profesional"',
+    '"Paciente"',
+    '"PersonaContacto"',
+    '"Documento"',
+    '"Persona"',
+    '"Consultorio"',
+    '"ProcedimientoCatalogo"',
+    '"AuditLog"',
+    '"Usuario"',
+    '"Rol"',
+  ]
+  await prisma.$executeRawUnsafe(`TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE;`)
 }
 
 async function main() {
-  log.info("Seed iniciado");
+  log.info("🌱 Seed iniciado")
 
   if (process.env.NODE_ENV === "production" && !ALLOW_PROD_SEED) {
-    throw new Error("Semilla bloqueada en producción. Exporta ALLOW_PROD_SEED=1 si estás seguro.");
+    throw new Error("Semilla bloqueada en producción. Exporta ALLOW_PROD_SEED=1 si estás seguro.")
   }
 
   if (RESEED) {
-    log.warn("RESEED=1 → limpiando tablas...");
-    await safeTruncate();
+    log.warn("🗑️  RESEED=1 → limpiando tablas...")
+    await safeTruncate()
   }
 
   // 1) Roles
-  await ensureRoles(prisma);
+  await ensureRoles(prisma)
+  log.ok("✅ Roles creados")
 
   // 2) Usuarios base
   const [adminHash, recepHash, odontHash] = await Promise.all([
-    hashPassword("Admin123!"), hashPassword("Recep123!"), hashPassword("Odont123!")
-  ]);
+    hashPassword("Admin123!"),
+    hashPassword("Recep123!"),
+    hashPassword("Odont123!"),
+  ])
 
-  const admin = await ensureUsuario(prisma, { usuario: "admin", email: "admin@clinica.com", nombreApellido: "Administrador General", rol: RolNombre.ADMIN, passwordHash: adminHash });
-  const recep = await ensureUsuario(prisma, { usuario: "recep.sosa", email: "recep@clinica.com", nombreApellido: "Recepcionista Sosa", rol: RolNombre.RECEP, passwordHash: recepHash });
+  const admin = await ensureUsuario(prisma, {
+    usuario: "admin",
+    email: "admin@clinica.com",
+    nombreApellido: "Administrador General",
+    rol: RolNombre.ADMIN,
+    passwordHash: adminHash,
+  })
+  const recep = await ensureUsuario(prisma, {
+    usuario: "recep.sosa",
+    email: "recep@clinica.com",
+    nombreApellido: "Recepcionista Sosa",
+    rol: RolNombre.RECEP,
+    passwordHash: recepHash,
+  })
+  log.ok("✅ Usuarios base creados")
 
   // 3) Especialidades y profesionales
-  await ensureEspecialidades(prisma, ESPECIALIDADES);
+  await ensureEspecialidades(prisma, ESPECIALIDADES)
 
-  const profesionales: { idProfesional: number }[] = [];
+  const profesionales: { idProfesional: number }[] = []
   for (let i = 0; i < COUNTS.profesionales; i++) {
     const user = await ensureUsuario(prisma, {
       usuario: i === 0 ? "dra.vera" : `dr_${i}`,
@@ -68,94 +129,153 @@ async function main() {
       nombreApellido: i === 0 ? "Dra. Vera López" : `Dr. ${i} ${i % 2 ? "Gómez" : "Martínez"}`,
       rol: RolNombre.ODONT,
       passwordHash: odontHash,
-    });
+    })
 
     const persona = await ensurePersonaConDocumento(prisma, {
       ...fakePersona(1000 + i),
       doc: fakeDocumento(1000 + i),
-    });
-    await ensureContactos(prisma, persona.idPersona, fakeContactosPersona(1000 + i, "odont"));
+    })
+    await ensureContactos(prisma, persona.idPersona, fakeContactosPersona(1000 + i, "odont"))
 
     const profesional = await prisma.profesional.upsert({
       where: { userId: user.idUsuario },
       update: {},
-      create: { userId: user.idUsuario, personaId: persona.idPersona, numeroLicencia: `ODT-${10000 + i}`, estaActivo: true },
+      create: {
+        userId: user.idUsuario,
+        personaId: persona.idPersona,
+        numeroLicencia: `ODT-${10000 + i}`,
+        estaActivo: true,
+      },
       select: { idProfesional: true },
-    });
-    await ensureProfesionalEspecialidades(prisma, profesional.idProfesional, ESPECIALIDADES.slice(0, 2));
-    profesionales.push(profesional);
+    })
+    await ensureProfesionalEspecialidades(prisma, profesional.idProfesional, ESPECIALIDADES.slice(0, 2))
+    profesionales.push(profesional)
   }
+  log.ok(`✅ ${profesionales.length} profesionales creados`)
 
   // 4) Consultorios
-  const consultorios = [] as { idConsultorio: number }[];
+  const consultorios = [] as { idConsultorio: number }[]
   for (const c of CONSULTORIOS.slice(0, COUNTS.consultorios)) {
-    const row = await ensureConsultorio(prisma, c.nombre, c.colorHex);
-    consultorios.push({ idConsultorio: row.idConsultorio });
+    const row = await ensureConsultorio(prisma, c.nombre, c.colorHex)
+    consultorios.push({ idConsultorio: row.idConsultorio })
   }
+  log.ok(`✅ ${consultorios.length} consultorios creados`)
 
   // 5) Pacientes
-  const pacientesIds: number[] = [];
+  const pacientesData: Array<{ idPaciente: number; personaId: number; edad: number }> = []
   for (let i = 0; i < COUNTS.pacientes; i++) {
-    const per = await ensurePersonaConDocumento(prisma, { ...fakePersona(i), doc: fakeDocumento(i) });
-    await ensureContactos(prisma, per.idPersona, fakeContactosPersona(i, "paciente"));
-    const pac = await ensurePacienteFromPersona(prisma, per.idPersona);
-    pacientesIds.push(pac.idPaciente);
+    const personaData = fakePersona(i)
+    const per = await ensurePersonaConDocumento(prisma, { ...personaData, doc: fakeDocumento(i) })
+    await ensureContactos(prisma, per.idPersona, fakeContactosPersona(i, "paciente"))
+    const pac = await ensurePacienteFromPersona(prisma, per.idPersona)
+
+    const edad = calculateAge(personaData.fechaNacimiento!)
+    pacientesData.push({
+      idPaciente: pac.idPaciente,
+      personaId: per.idPersona,
+      edad,
+    })
+
+    if (edad < 18 && Math.random() < PROB.pacienteConResponsable) {
+      const responsableData = fakePersona(5000 + i)
+      const responsable = await ensurePersonaConDocumento(prisma, {
+        ...responsableData,
+        doc: fakeDocumento(5000 + i),
+      })
+      await ensureContactos(prisma, responsable.idPersona, fakeContactosPersona(5000 + i, "responsable"))
+
+      await ensureResponsablePrincipal(
+        prisma,
+        pac.idPaciente,
+        responsable.idPersona,
+        edad < 12 ? RelacionPaciente.PADRE : RelacionPaciente.TUTOR,
+      )
+
+      await generarConsentimientosPaciente(prisma, {
+        pacienteId: pac.idPaciente,
+        personaId: per.idPersona,
+        responsableId: responsable.idPersona,
+        registradoPorUserId: recep.idUsuario,
+      })
+    }
   }
+  log.ok(`✅ ${pacientesData.length} pacientes creados`)
 
   // 6) Catálogos clínicos
-  await ensureProcedimientoCatalogo(prisma, PROCEDIMIENTOS_CATALOGO);
-  await ensureDiagnosisCatalog(prisma, DIAGNOSIS_CATALOG);
-  await ensureAllergyCatalog(prisma, ALLERGY_CATALOG);
-  await ensureMedicationCatalog(prisma, MEDICATION_CATALOG);
+  await ensureProcedimientoCatalogo(prisma, PROCEDIMIENTOS_CATALOGO)
+  await ensureDiagnosisCatalog(prisma, DIAGNOSIS_CATALOG)
+  await ensureAllergyCatalog(prisma, ALLERGY_CATALOG)
+  await ensureMedicationCatalog(prisma, MEDICATION_CATALOG)
+  log.ok("✅ Catálogos clínicos creados")
 
-  // 7) Agenda sólo futuro por profesional
-  let totalCreadas = 0;
+  // 7) Agenda con histórico + futuro
+  let totalCitasCreadas = 0
+  let totalCitasFallidas = 0
+
   for (const prof of profesionales) {
-    const creadas = await generarAgendaParaProfesional(prisma, {
+    const resultado = await generarAgendaParaProfesional(prisma, {
       profesionalId: prof.idProfesional,
-      pacienteIds: pacientesIds,
-      consultorioIds: consultorios.map(c => c.idConsultorio),
+      pacienteIds: pacientesData.map((p) => p.idPaciente),
+      consultorioIds: consultorios.map((c) => c.idConsultorio),
       createdByUserId: recep.idUsuario,
-    });
-    totalCreadas += creadas;
+    })
+    totalCitasCreadas += resultado.creadas
+    totalCitasFallidas += resultado.fallidas
+
+    await generarReprogramaciones(prisma, {
+      profesionalId: prof.idProfesional,
+      createdByUserId: recep.idUsuario,
+    })
+
+    await generarBloqueosAgenda(prisma, {
+      profesionalId: prof.idProfesional,
+      createdByUserId: recep.idUsuario,
+      cantidad: COUNTS.bloqueos,
+    })
   }
+  log.ok(`✅ ${totalCitasCreadas} citas creadas (${totalCitasFallidas} rechazadas por solapamiento)`)
 
-  // 8) Para probar clínica: toma 5 pacientes, crea plan + consulta con 2 procedimientos y adjuntos
-  const subset = pacientesIds.slice(0, Math.min(5, pacientesIds.length));
-  for (const pid of subset) {
-    // Plan simple con 3 steps del catálogo
+  // 8) Datos clínicos expandidos
+  const cantidadConClinica = Math.floor(pacientesData.length * COUNTS.pacientesConClinica)
+  const pacientesClinica = pacientesData.slice(0, cantidadConClinica)
+
+  log.info(`🏥 Generando datos clínicos para ${pacientesClinica.length} pacientes...`)
+
+  for (const pac of pacientesClinica) {
+    // Plan con 3 steps
     await createPlanConSteps(prisma, {
-      pacienteId: pid,
+      pacienteId: pac.idPaciente,
       createdByUserId: recep.idUsuario,
-      steps: [
-        { code: "CONS-INI" },
-        { code: "LIMP" },
-        { code: "OBT", toothNumber: 16, toothSurface: "O" as any },
-      ],
-    });
+      steps: [{ code: "CONS-INI" }, { code: "LIMP" }, { code: "OBT", toothNumber: 16, toothSurface: "O" as any }],
+    })
 
-    // Tomamos una cita futura CONFIRMED de ese paciente y abrimos consulta
+    // Buscar cita completada del paciente
     const cita = await prisma.cita.findFirst({
-      where: { pacienteId: pid },
-      orderBy: { inicio: "asc" },
-    });
-    if (!cita) continue;
+      where: {
+        pacienteId: pac.idPaciente,
+        estado: "COMPLETED" as any,
+      },
+      orderBy: { inicio: "desc" },
+    })
 
+    if (!cita) continue
+
+    // Crear consulta
     const consulta = await ensureConsultaParaCita(prisma, {
       citaId: cita.idCita,
       performedByProfessionalId: cita.profesionalId,
       createdByUserId: recep.idUsuario,
-      status: "DRAFT" as any,
-      reason: "Consulta demo",
-    });
+      status: "FINAL" as any,
+      reason: "Consulta integral",
+    })
 
-    // 2 procedimientos (del catálogo) y 1 libre
-    const p1 = await addLineaProcedimiento(prisma, {
+    // Procedimientos
+    await addLineaProcedimiento(prisma, {
       consultaCitaId: consulta.citaId,
       code: "CONS-INI",
       quantity: 1,
-      resultNotes: "Evaluación completa",
-    });
+      resultNotes: "Evaluación completa realizada",
+    })
 
     const p2 = await addLineaProcedimiento(prisma, {
       consultaCitaId: consulta.citaId,
@@ -163,18 +283,10 @@ async function main() {
       toothNumber: 16,
       toothSurface: "O" as any,
       quantity: 1,
-      resultNotes: "Resina aplicada",
-    });
+      resultNotes: "Resina compuesta aplicada exitosamente",
+    })
 
-    await addLineaProcedimiento(prisma, {
-      consultaCitaId: consulta.citaId,
-      serviceType: "Fluorización tópica",
-      quantity: 1,
-      unitPriceCents: 60000,
-      resultNotes: "Aplicación preventiva",
-    });
-
-    // Adjuntos de clínica
+    // Adjunto
     await addAdjuntoConsulta(prisma, {
       consultaCitaId: consulta.citaId,
       uploadedByUserId: recep.idUsuario,
@@ -184,35 +296,40 @@ async function main() {
       size: 120_000,
       tipo: AdjuntoTipo.XRAY,
       procedimientoId: p2.idConsultaProcedimiento,
-      metadata: { tooth: 16 },
-    });
+    })
 
-    // Historia, diagnósticos, alergias, medicación, vitales
+    // Datos clínicos básicos
     await addClinicalBasics(prisma, {
-      pacienteId: pid,
+      pacienteId: pac.idPaciente,
       createdByUserId: recep.idUsuario,
       consultaId: consulta.citaId,
-    });
+    })
 
     // Odontograma + periodontograma
     await addOdontoAndPerio(prisma, {
-      pacienteId: pid,
+      pacienteId: pac.idPaciente,
       createdByUserId: recep.idUsuario,
       consultaId: consulta.citaId,
-    });
+    })
   }
 
-  log.ok("Seed completado:", {
-    profesionales: profesionales.length,
-    consultorios: consultorios.length,
-    pacientes: pacientesIds.length,
-    citas: totalCreadas,
-  });
+  log.ok(`✅ Datos clínicos generados para ${pacientesClinica.length} pacientes`)
+
+  log.info("📊 RESUMEN FINAL:")
+  log.ok(`   👥 Profesionales: ${profesionales.length}`)
+  log.ok(`   🏥 Consultorios: ${consultorios.length}`)
+  log.ok(`   🧑‍⚕️ Pacientes: ${pacientesData.length}`)
+  log.ok(`   📅 Citas totales: ${totalCitasCreadas}`)
+  log.ok(`   ❌ Citas rechazadas: ${totalCitasFallidas}`)
+  log.ok(`   📋 Datos clínicos: ${pacientesClinica.length} pacientes`)
+  log.ok("🎉 Seed completado exitosamente")
 }
 
-main().catch((e) => {
-  log.err("Seed falló:", e);
-  process.exit(1);
-}).finally(async () => {
-  await prisma.$disconnect();
-});
+main()
+  .catch((e) => {
+    log.err("❌ Seed falló:", e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

@@ -7,15 +7,166 @@ import type { CreateCitaBody } from "./_create.schema";
 const prisma = new PrismaClient();
 const ACTIVE_STATES: EstadoCita[] = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"];
 
+/**
+ * Información de conflicto detectado
+ */
+export interface ConflictInfo {
+  citaId: number;
+  inicioISO: string;
+  finISO: string;
+  profesional: { id: number; nombre: string };
+  consultorio?: { id: number; nombre: string };
+}
+
+/**
+ * Verifica solapamientos y retorna detalles de conflictos.
+ * Busca conflictos con profesional y consultorio por separado.
+ */
+async function findConflicts(
+  params: {
+    profesionalId: number;
+    consultorioId?: number | null;
+    inicio: Date;
+    fin: Date;
+  }
+): Promise<ConflictInfo[]> {
+  const { profesionalId, consultorioId, inicio, fin } = params;
+  const conflicts: ConflictInfo[] = [];
+
+  // Buscar conflictos con profesional
+  const profConflicts = await prisma.cita.findMany({
+    where: {
+      profesionalId,
+      estado: { in: ACTIVE_STATES },
+      inicio: { lt: fin },
+      fin: { gt: inicio },
+    },
+    select: {
+      idCita: true,
+      inicio: true,
+      fin: true,
+      profesional: {
+        select: {
+          idProfesional: true,
+          persona: { select: { nombres: true, apellidos: true } },
+        },
+      },
+      consultorio: {
+        select: {
+          idConsultorio: true,
+          nombre: true,
+        },
+      },
+    },
+  });
+
+  for (const c of profConflicts) {
+    conflicts.push({
+      citaId: c.idCita,
+      inicioISO: c.inicio.toISOString(),
+      finISO: c.fin.toISOString(),
+      profesional: {
+        id: c.profesional.idProfesional,
+        nombre: `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim(),
+      },
+      consultorio: c.consultorio
+        ? { id: c.consultorio.idConsultorio, nombre: c.consultorio.nombre }
+        : undefined,
+    });
+  }
+
+  // Buscar conflictos con consultorio (si se especificó)
+  if (consultorioId) {
+    const roomConflicts = await prisma.cita.findMany({
+      where: {
+        consultorioId,
+        estado: { in: ACTIVE_STATES },
+        inicio: { lt: fin },
+        fin: { gt: inicio },
+        // Evitar duplicados: solo agregar si no está ya en conflicts
+        idCita: { notIn: conflicts.map((c) => c.citaId) },
+      },
+      select: {
+        idCita: true,
+        inicio: true,
+        fin: true,
+        profesional: {
+          select: {
+            idProfesional: true,
+            persona: { select: { nombres: true, apellidos: true } },
+          },
+        },
+        consultorio: {
+          select: {
+            idConsultorio: true,
+            nombre: true,
+          },
+        },
+      },
+    });
+
+    for (const c of roomConflicts) {
+      conflicts.push({
+        citaId: c.idCita,
+        inicioISO: c.inicio.toISOString(),
+        finISO: c.fin.toISOString(),
+        profesional: {
+          id: c.profesional.idProfesional,
+          nombre: `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}`.trim(),
+        },
+        consultorio: c.consultorio
+          ? { id: c.consultorio.idConsultorio, nombre: c.consultorio.nombre }
+          : undefined,
+      });
+    }
+  }
+
+  return conflicts;
+}
+
+/**
+ * Verifica si hay bloqueos de agenda que impidan la cita
+ */
+async function hasBlocking(params: {
+  profesionalId: number;
+  consultorioId?: number | null;
+  inicio: Date;
+  fin: Date;
+}): Promise<boolean> {
+  const { profesionalId, consultorioId, inicio, fin } = params;
+  const bloqueo = await prisma.bloqueoAgenda.findFirst({
+    where: {
+      activo: true,
+      OR: [{ profesionalId }, consultorioId ? { consultorioId } : undefined].filter(Boolean) as any,
+      desde: { lt: fin },
+      hasta: { gt: inicio },
+    },
+    select: { idBloqueoAgenda: true },
+  });
+  return Boolean(bloqueo);
+}
+
 export async function createCita(
   body: CreateCitaBody & { createdByUserId: number }
-): Promise<{ ok: boolean; data?: any; error?: string; status: number }> {
+): Promise<{ 
+  ok: boolean; 
+  data?: any; 
+  error?: string; 
+  status: number;
+  code?: string;
+  conflicts?: ConflictInfo[];
+}> {
   try {
     const inicio = new Date(body.inicio);
     if (Number.isNaN(inicio.getTime())) {
       return { ok: false, error: "INVALID_DATETIME", status: 400 };
     }
     const fin = new Date(inicio.getTime() + body.duracionMinutos * 60_000);
+
+    // Validar que fin > inicio
+    if (fin <= inicio) {
+      return { ok: false, error: "INVALID_TIME_RANGE", code: "INVALID_TIME_RANGE", status: 400 };
+    }
 
     // (1) FKs existen y están activos
     const [pac, prof, cons] = await Promise.all([
@@ -42,25 +193,41 @@ export async function createCita(
     if (prof.estaActivo === false) return { ok: false, error: "PROFESIONAL_INACTIVO", status: 409 };
     if (cons && cons.activo === false) return { ok: false, error: "CONSULTORIO_INACTIVO", status: 409 };
 
-    // (2) Política: no crear citas en el pasado (opcional)
-    if (inicio < new Date()) return { ok:false, error:"NO_PAST_APPOINTMENTS", status:400 };
+    // (2) Política: no crear citas en el pasado
+    if (inicio < new Date()) {
+      return { ok: false, error: "NO_PAST_APPOINTMENTS", status: 400 };
+    }
 
-    // (3) Chequeo de solape en servidor (siempre)
-    const clash = await prisma.cita.findFirst({
-      where: {
-        estado: { in: ACTIVE_STATES },
-        inicio: { lt: fin },
-        fin: { gt: inicio },
-        OR: [
-          { profesionalId: body.profesionalId },
-          ...(body.consultorioId ? [{ consultorioId: body.consultorioId }] : []),
-        ],
-      },
-      select: { idCita: true },
+    // (3) Verificar bloqueos de agenda
+    const hasBlock = await hasBlocking({
+      profesionalId: body.profesionalId,
+      consultorioId: body.consultorioId ?? null,
+      inicio,
+      fin,
     });
-    if (clash) return { ok: false, error: "SLOT_TAKEN", status: 409 };
+    if (hasBlock) {
+      return { ok: false, error: "BLOCKED_SLOT", code: "BLOCKED_SLOT", status: 409 };
+    }
 
-    // (4) Crear con relaciones via connect (best practice)
+    // (4) Chequeo de solape en servidor con detalles
+    const conflicts = await findConflicts({
+      profesionalId: body.profesionalId,
+      consultorioId: body.consultorioId ?? null,
+      inicio,
+      fin,
+    });
+    
+    if (conflicts.length > 0) {
+      return { 
+        ok: false, 
+        error: "OVERLAP", 
+        code: "OVERLAP",
+        status: 409,
+        conflicts,
+      };
+    }
+
+    // (5) Crear con relaciones via connect (best practice)
     const created = await prisma.cita.create({
       data: {
         inicio,
@@ -84,7 +251,6 @@ export async function createCita(
         idCita: true,
         inicio: true,
         fin: true,
-        
         tipo: true,
         estado: true,
         motivo: true,

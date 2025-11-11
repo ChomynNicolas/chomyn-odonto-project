@@ -166,10 +166,17 @@ export function PacienteWizard() {
       console.log("[v0] Paciente creado exitosamente:", pacienteId)
 
       if (values.adjuntos && values.adjuntos.length > 0) {
-        uploadAdjuntosPostCreate(pacienteId, values.adjuntos).catch((err) => {
-          console.error("[v0] Error uploading adjuntos:", err)
-          toast.warning("Paciente creado, pero algunos adjuntos no se pudieron subir")
-        })
+        const uploadResults = await uploadAdjuntosPostCreate(pacienteId, values.adjuntos)
+        const successful = uploadResults.filter((r) => r.success).length
+        const failed = uploadResults.filter((r) => !r.success).length
+
+        if (failed > 0) {
+          toast.warning(
+            `Paciente creado. ${successful} adjunto${successful !== 1 ? "s" : ""} guardado${successful !== 1 ? "s" : ""}, ${failed} falló${failed !== 1 ? "ron" : ""}`,
+          )
+        } else if (successful > 0) {
+          toast.success(`${successful} adjunto${successful !== 1 ? "s" : ""} guardado${successful !== 1 ? "s" : ""} correctamente`)
+        }
       }
 
       toast.success("Paciente creado correctamente", {
@@ -268,20 +275,51 @@ function getFieldsForStep(step: number): (keyof PacienteCreateDTOClient)[] {
 }
 
 async function uploadAdjuntosPostCreate(pacienteId: number, adjuntos: any[]) {
+  const results = []
   for (const adjunto of adjuntos) {
     if (adjunto._cloud) {
-      await fetch(`/api/pacientes/${pacienteId}/adjuntos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          publicId: adjunto._cloud.publicId,
-          secureUrl: adjunto._cloud.secureUrl,
-          tipo: adjunto.tipoAdj || "OTHER",
+      try {
+        const response = await fetch(`/api/pacientes/${pacienteId}/adjuntos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            publicId: adjunto._cloud.publicId,
+            secureUrl: adjunto._cloud.secureUrl,
+            bytes: adjunto._cloud.bytes,
+            format: adjunto._cloud.format,
+            width: adjunto._cloud.width,
+            height: adjunto._cloud.height,
+            duration: adjunto._cloud.duration,
+            resourceType: adjunto._cloud.resourceType,
+            folder: adjunto._cloud.folder,
+            originalFilename: adjunto._cloud.originalFilename || adjunto.nombre,
+            version: adjunto._cloud.version,
+            accessMode: adjunto._cloud.accessMode || "AUTHENTICATED",
+            tipo: adjunto.tipoAdj || "OTHER",
+            descripcion: adjunto.nombre || undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Error desconocido" }))
+          throw new Error(errorData.error || "Error al persistir adjunto")
+        }
+
+        const result = await response.json()
+        if (!result.ok) {
+          throw new Error(result.error || "Error al persistir adjunto")
+        }
+
+        results.push({ success: true, nombre: adjunto.nombre })
+      } catch (error) {
+        console.error(`[Wizard] Error persistiendo adjunto ${adjunto.nombre}:`, error)
+        results.push({
+          success: false,
           nombre: adjunto.nombre,
-          bytes: adjunto._cloud.bytes,
-          format: adjunto._cloud.format,
-        }),
-      })
+          error: error instanceof Error ? error.message : "Error desconocido",
+        })
+      }
     }
   }
+  return results
 }

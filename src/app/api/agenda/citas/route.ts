@@ -60,7 +60,19 @@ export async function POST(req: NextRequest) {
 
     const result = await createCita({ ...parsed.data, createdByUserId: Number(userId) })
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.error }, { status: result.status })
+      // Manejar error 409 OVERLAP con detalles de conflictos
+      if (result.status === 409 && result.code === "OVERLAP" && result.conflicts) {
+        return NextResponse.json(
+          { 
+            ok: false, 
+            error: result.error, 
+            code: result.code,
+            conflicts: result.conflicts,
+          }, 
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: result.status })
     }
 
     return NextResponse.json({ ok: true, data: result.data }, { status: 201 })
