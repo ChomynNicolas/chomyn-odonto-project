@@ -25,9 +25,10 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
     // Servicio
     const data = await serviceGetProcedimientoDetalle(id);
     return NextResponse.json(ok(data), { status: 200 });
-  } catch (err: any) {
-    if (err?.name === "ZodError") {
-      return NextResponse.json(fail("Parámetros inválidos", err.flatten()), { status: 400 });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "ZodError") {
+      const zodError = err as unknown as { flatten: () => unknown }
+      return NextResponse.json(fail("Parámetros inválidos", zodError.flatten()), { status: 400 });
     }
     if (err instanceof HttpError) {
       return NextResponse.json(fail(err.message, err.details), { status: err.status });
@@ -56,21 +57,24 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     // Servicio
     const result = await servicePatchProcedimiento({ id, body, userId, role });
     return NextResponse.json(ok(result), { status: 200 });
-  } catch (err: any) {
-    if (err?.name === "ZodError") {
-      return NextResponse.json(fail("Datos inválidos", err.flatten()), { status: 400 });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "ZodError") {
+      const zodError = err as unknown as { flatten: () => unknown }
+      return NextResponse.json(fail("Datos inválidos", zodError.flatten()), { status: 400 });
     }
     if (err instanceof HttpError) {
       return NextResponse.json(fail(err.message, err.details), { status: err.status });
     }
-    if (err?.code === "P2003") {
+    const code = (err as { code?: string })?.code
+    if (code === "P2003") {
       return NextResponse.json(fail("Referencia inválida (FK)"), { status: 400 });
     }
     console.error("PATCH /api/procedimientos/[id]", err);
     return NextResponse.json(fail("Error interno"), { status: 500 });
   }
 }
-function serviceGetProcedimientoDetalle(id: number) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function serviceGetProcedimientoDetalle(_id: number) {
     throw new Error("Function not implemented.");
 }
 

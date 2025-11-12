@@ -14,6 +14,7 @@ export const getCitasQuerySchema = z.object({
   tipo: z.string().optional(), // comma-separated
   desde: z.string().datetime().optional(),
   hasta: z.string().datetime().optional(),
+  q: z.string().trim().min(1).max(200).optional(), // Búsqueda por texto (nombre, cédula, etc.)
 })
 
 export type GetCitasQuery = z.infer<typeof getCitasQuerySchema>

@@ -34,11 +34,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   Upload,
+  Search,
 } from "lucide-react"
 import type { CitaDetalleDTO, CurrentUser, EstadoCita, AccionCita } from "@/types/agenda"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import { isMinorAt } from "@/lib/utils/consent-helpers"
+import Image from "next/image"
 
 interface CitaDrawerProps {
   idCita: number
@@ -78,8 +80,9 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
         }
         return data
       })
-    } catch (e: any) {
-      setErr(e?.message ?? "Error obteniendo cita")
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : "Error obteniendo cita"
+      setErr(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -107,11 +110,13 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
       await apiTransitionCita(idCita, action, note) // otras acciones
       await loadData()
       onAfterChange?.()
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Manejar error de consentimiento requerido de manera profesional
-      if (e?.code === "CONSENT_REQUIRED_FOR_MINOR" || e?.message?.includes("consentimiento")) {
+      const errorCode = (e as { code?: string })?.code
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      if (errorCode === "CONSENT_REQUIRED_FOR_MINOR" || errorMessage.includes("consentimiento")) {
         setConsentErrorMessage(
-          e?.message ||
+          errorMessage ||
             "El paciente es menor de edad y requiere un consentimiento informado vigente firmado por su responsable antes de iniciar la consulta.",
         )
         setConsentErrorOpen(true)
@@ -119,7 +124,7 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
         // Para otros errores, usar toast
         const { toast } = await import("sonner")
         toast.error("Error en transición", {
-          description: e?.message ?? "No se pudo realizar la acción solicitada",
+          description: errorMessage || "No se pudo realizar la acción solicitada",
         })
       }
     } finally {
@@ -139,25 +144,11 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
       await loadData()
       onAfterChange?.()
       setCancelOpen(false)
-    } catch (e: any) {
-      alert(e?.message ?? "No se pudo cancelar la cita")
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : "No se pudo cancelar la cita"
+      alert(errorMessage)
     } finally {
       setCancelSubmitting(false)
-    }
-  }
-
-  function prettyMotivo(m: "PACIENTE" | "PROFESIONAL" | "CLINICA" | "EMERGENCIA" | "OTRO") {
-    switch (m) {
-      case "PACIENTE":
-        return "Paciente"
-      case "PROFESIONAL":
-        return "Profesional"
-      case "CLINICA":
-        return "Clínica"
-      case "EMERGENCIA":
-        return "Emergencia"
-      default:
-        return "Otro"
     }
   }
 
@@ -557,10 +548,12 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
                     className="group relative aspect-square rounded-lg border-2 border-border overflow-hidden hover:ring-2 hover:ring-ring hover:border-ring hover:shadow-lg transition-all bg-gradient-to-br from-muted to-muted/50"
                   >
                     {adj.tipo.startsWith("image/") ? (
-                      <img
+                      <Image
                         src={adj.url || "/placeholder.svg"}
                         alt={adj.nombre}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        fill
+                        className="object-cover group-hover:scale-110 transition-transform duration-300"
+                        sizes="(max-width: 768px) 33vw, (max-width: 1200px) 25vw, 20vw"
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center p-1.5 lg:p-2 text-center">
@@ -599,6 +592,51 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
             ))}
           </div>
         )}
+        
+        {/* Botones de navegación */}
+        {dto && (
+          <div className="flex flex-wrap gap-1.5 border-t pt-1.5 lg:pt-2">
+            {(currentUser?.role === "ADMIN" || currentUser?.role === "ODONT") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.open(`/agenda/citas/${dto.idCita}/consulta`, "_blank")
+                }}
+                className="gap-1.5 font-semibold text-xs h-8 lg:h-9"
+              >
+                <Stethoscope className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                <span className="hidden sm:inline">Consulta Clínica</span>
+                <span className="sm:hidden">Consulta</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                window.open(`/citas?q=${encodeURIComponent(dto.paciente.nombre)}`, "_blank")
+              }}
+              className="gap-1.5 font-semibold text-xs h-8 lg:h-9"
+            >
+              <Search className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+              <span className="hidden sm:inline">Buscar Citas</span>
+              <span className="sm:hidden">Buscar</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                window.open(`/pacientes/${dto.paciente.id}`, "_blank")
+              }}
+              className="gap-1.5 font-semibold text-xs h-8 lg:h-9"
+            >
+              <User2 className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+              <span className="hidden sm:inline">Ficha Paciente</span>
+              <span className="sm:hidden">Ficha</span>
+            </Button>
+          </div>
+        )}
+
         <div className="flex items-center justify-end">
           <Button
             variant="outline"

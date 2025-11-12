@@ -28,11 +28,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     })
 
     return ok(result)
-  } catch (error: any) {
-    // Errores “esperados” 422 (consentimiento, etc.)
-    if (error?.status === 422) {
+  } catch (error: unknown) {
+    // Errores "esperados" 422 (consentimiento, etc.)
+    if (error && typeof error === "object" && "status" in error && error.status === 422) {
+      const errorObj = error as { code?: string; message?: string; details?: unknown }
       return NextResponse.json(
-        { ok: false, code: error.code ?? "CONSENT_ERROR", error: error.message, details: error.details },
+        { ok: false, code: errorObj.code ?? "CONSENT_ERROR", error: errorObj.message ?? "Error", details: errorObj.details },
         { status: 422 }
       )
     }
@@ -40,7 +41,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (error instanceof ZodError) {
       return errors.validation("Datos inválidos")
     }
+    const errorMessage = error instanceof Error ? error.message : String(error)
     console.error("[v0] Error in cita transition:", error)
-    return errors.internal(error?.message || "Error en transición de cita")
+    return errors.internal(errorMessage || "Error en transición de cita")
   }
 }

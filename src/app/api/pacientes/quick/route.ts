@@ -4,7 +4,7 @@ import { requireRole } from "@/app/api/pacientes/_rbac"
 import { pacienteQuickCreateSchema, idempotencyHeaderSchema } from "./_schemas"
 import { quickCreatePaciente, QuickCreateError } from "./_service.quick"
 
-function jsonError(status: number, code: string, error: string, details?: any) {
+function jsonError(status: number, code: string, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
 }
 
@@ -27,11 +27,16 @@ export async function POST(req: NextRequest) {
     const result = await quickCreatePaciente(body, gate.userId)
     // ⬅️ ahora incluye { idPaciente, idPersona, item }
     return NextResponse.json({ ok: true, data: result }, { status: 201 })
-  } catch (e: any) {
-    if (e?.name === "ZodError") return jsonError(400, "VALIDATION_ERROR", "Datos inválidos", e.issues)
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { issues?: unknown }
+      return jsonError(400, "VALIDATION_ERROR", "Datos inválidos", zodError.issues)
+    }
     if (e instanceof QuickCreateError) return jsonError(e.status, e.code, e.message)
-    if (e?.code === "P2002")
+    const code = (e as { code?: string })?.code
+    if (code === "P2002")
       return jsonError(409, "UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto")
-    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al crear paciente")
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    return jsonError(500, "INTERNAL_ERROR", errorMessage ?? "Error al crear paciente")
   }
 }

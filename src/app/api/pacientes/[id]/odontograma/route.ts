@@ -47,8 +47,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: snapshot })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating odontogram:", error)
-    return NextResponse.json({ ok: false, error: "Error al crear odontograma" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al crear odontograma"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

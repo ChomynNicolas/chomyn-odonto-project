@@ -31,9 +31,11 @@ export async function GET(req: NextRequest) {
   try {
     const { data, meta } = await listCitas(parsed.data, page, limit, skip)
     return NextResponse.json({ ok: true, meta, data }, { status: 200 })
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Log interno si querés (sin datos sensibles)
-    console.error("GET /api/agenda/citas error:", e?.code || e?.message)
+    const errorCode = (e as { code?: string })?.code
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    console.error("GET /api/agenda/citas error:", errorCode || errorMessage)
     // Errores comunes de Prisma (P2021, etc.) → 500 genérico
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // El userId lo tomamos de la sesión para evitar spoofing
-    const userId = (auth.session.user as any)?.idUsuario ?? (auth.session.user as any)?.id
+    const userId = auth.session.user.id
     if (!userId) {
       return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
@@ -76,17 +78,18 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, data: result.data }, { status: 201 })
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Manejo de errores de Prisma:
     // - P2003 FK, P2002 unique, etc. -> 409 o 400 según corresponda
-    const code = e?.code as string | undefined
+    const code = (e as { code?: string })?.code
     if (code === "P2003") {
       return NextResponse.json({ ok: false, error: "FOREIGN_KEY_CONSTRAINT" }, { status: 400 })
     }
     if (code === "P2002") {
       return NextResponse.json({ ok: false, error: "DUPLICATE" }, { status: 409 })
     }
-    console.error("POST /api/agenda/citas error:", code || e?.message)
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    console.error("POST /api/agenda/citas error:", code || errorMessage)
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
 }

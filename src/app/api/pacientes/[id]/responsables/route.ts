@@ -3,7 +3,7 @@ import { requireRole } from "@/app/api/pacientes/_rbac"
 import { linkResponsablePago, createResponsableWithPersona, getResponsables, LinkResponsableError } from "./_service"
 import { IdempotencyHeaderSchema, LinkResponsablePagoSchema, CreateResponsableWithPersonaSchema } from "./_schemas"
 
-function jsonError(status: number, code: string, error: string, details?: any) {
+function jsonError(status: number, code: string, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
 }
 
@@ -20,9 +20,10 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
     const res = NextResponse.json({ ok: true, data: responsables }, { status: 200 })
     res.headers.set("Cache-Control", "no-store")
     return res
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof LinkResponsableError) return jsonError(e.status, e.code, e.message, e.extra)
-    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al obtener responsables")
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    return jsonError(500, "INTERNAL_ERROR", errorMessage ?? "Error al obtener responsables")
   }
 }
 
@@ -74,10 +75,15 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
     // Puedes ecoear la key para debug si deseas:
     // if (idem.success) res.headers.set("X-Idempotency-Key", idem.data["x-idempotency-key"] ?? idem.data["idempotency-key"] ?? "")
     return res
-  } catch (e: any) {
-    if (e?.name === "ZodError") return jsonError(400, "VALIDATION_ERROR", "Datos inválidos", e.issues)
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { issues?: unknown }
+      return jsonError(400, "VALIDATION_ERROR", "Datos inválidos", zodError.issues)
+    }
     if (e instanceof LinkResponsableError) return jsonError(e.status, e.code, e.message, e.extra)
-    if (e?.code === "P2002") return jsonError(409, "UNIQUE_CONFLICT", "Ya existe un vínculo igual")
-    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al vincular responsable")
+    const code = (e as { code?: string })?.code
+    if (code === "P2002") return jsonError(409, "UNIQUE_CONFLICT", "Ya existe un vínculo igual")
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    return jsonError(500, "INTERNAL_ERROR", errorMessage ?? "Error al vincular responsable")
   }
 }

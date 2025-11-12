@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canViewClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden ver medicaciones")
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const medicaciones = await prisma.patientMedication.findMany({
       where: {
         pacienteId: consulta.cita.pacienteId,
-        consultaId: citaId,
+        isActive: true,
       },
       include: {
         createdBy: {
@@ -83,9 +83,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         },
       }))
     )
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]/consulta/medicaciones]", e)
-    return errors.internal(e?.message ?? "Error al obtener medicaciones")
+    return errors.internal(errorMessage ?? "Error al obtener medicaciones")
   }
 }
 
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden crear medicaciones")
@@ -143,7 +144,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const medicacion = await prisma.patientMedication.create({
         data: {
           pacienteId: nuevaConsulta.cita.pacienteId,
-          consultaId: citaId,
           medicationId: input.medicationId ?? null,
           label: input.label ?? null,
           dose: input.dose ?? null,
@@ -197,7 +197,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const medicacion = await prisma.patientMedication.create({
       data: {
         pacienteId: consulta.cita.pacienteId,
-        consultaId: citaId,
         medicationId: input.medicationId ?? null,
         label: input.label ?? null,
         dose: input.dose ?? null,
@@ -246,10 +245,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             : medicacion.createdBy.nombreApellido ?? "Usuario",
       },
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }> }
+      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/medicaciones]", e)
-    return errors.internal(e?.message ?? "Error al crear medicación")
+    return errors.internal(errorMessage ?? "Error al crear medicación")
   }
 }
 

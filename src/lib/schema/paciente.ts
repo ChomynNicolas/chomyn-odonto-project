@@ -80,13 +80,81 @@ export const PacienteCreateSchema = z.object({
 })
 
 /** Tipos compartidos */
-export type PacienteCreateDTO = z.infer<typeof PacienteCreateSchema>
+export type PacienteCreateDTOForm = z.infer<typeof PacienteCreateSchema>
 
 /** Variante para formularios (si quisieras diferenciar a futuro).
  *  Por ahora es igual: ya incluye transforms "relajados".
  */
 export const PacienteCreateFormSchema = PacienteCreateSchema
-export type PacienteCreateFormDTO = PacienteCreateDTO
+export type PacienteCreateFormDTO = PacienteCreateDTOForm
 
 export const LinkResponsablePagoSchema = ResponsablePagoSchema
 export type LinkResponsablePagoDTO = z.infer<typeof LinkResponsablePagoSchema>
+
+/** Esquemas para server actions */
+const DocumentoSchema = z.object({
+  tipo: TipoDocumentoEnum,
+  numero: z.string().min(1, "Número de documento requerido").transform(trim),
+  paisEmision: z.string().max(2).optional().nullable(),
+  fechaEmision: z.coerce.date().optional().nullable(),
+  fechaVencimiento: z.coerce.date().optional().nullable(),
+  ruc: z.string().max(20).optional().nullable(),
+})
+
+const ContactoSchema = z.object({
+  tipo: z.enum(["PHONE", "EMAIL"]),
+  valor: z.string().min(1, "Valor de contacto requerido"),
+  label: z.string().optional().nullable(),
+})
+
+const DatosClinicosSchema = z.record(z.unknown()).optional().nullable()
+
+const ResponsablePagoCreateSchema = z.object({
+  personaId: z.number().int().positive().optional(),
+  nombres: z.string().optional(),
+  apellidos: z.string().optional(),
+  genero: GeneroEnum.optional(),
+  documento: DocumentoSchema.optional(),
+  relacion: RelacionPacienteEnum.optional(),
+  esPrincipal: z.boolean().optional(),
+  autoridadLegal: z.boolean().optional(),
+})
+
+/** Esquema de creación para server actions */
+export const pacienteCreateSchema = z.object({
+  nombres: z.string().min(1, "Nombres requeridos").transform(trim),
+  apellidos: z.string().min(1, "Apellidos requeridos").transform(trim),
+  genero: GeneroEnum.optional().nullable(),
+  fechaNacimiento: FechaNacimientoSchema.optional().nullable(),
+  direccion: relaxedString.optional().nullable(),
+  documento: DocumentoSchema,
+  contactos: z.array(ContactoSchema).optional().default([]),
+  datosClinicos: DatosClinicosSchema,
+  responsablePago: ResponsablePagoCreateSchema.optional(),
+})
+
+export type PacienteCreateDTO = z.infer<typeof pacienteCreateSchema>
+
+/** Esquema de actualización para server actions */
+export const pacienteUpdateSchema = z.object({
+  idPaciente: z.number().int().positive(),
+  updatedAt: z.string().optional(),
+  nombres: z.string().min(1).transform(trim).optional(),
+  apellidos: z.string().min(1).transform(trim).optional(),
+  genero: GeneroEnum.optional(),
+  fechaNacimiento: FechaNacimientoSchema.optional(),
+  direccion: relaxedString.optional(),
+  documento: DocumentoSchema.optional(),
+  contactos: z.array(ContactoSchema).optional(),
+  datosClinicos: DatosClinicosSchema,
+  estaActivo: z.boolean().optional(),
+})
+
+export type PacienteUpdateDTO = z.infer<typeof pacienteUpdateSchema>
+
+/** Esquema de eliminación para server actions */
+export const pacienteDeleteSchema = z.object({
+  idPaciente: z.number().int().positive(),
+})
+
+export type PacienteDeleteDTO = z.infer<typeof pacienteDeleteSchema>

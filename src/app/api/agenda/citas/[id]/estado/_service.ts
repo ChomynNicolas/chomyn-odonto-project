@@ -1,5 +1,6 @@
 // app/api/agenda/citas/[id]/estado/_service.ts
 import { PrismaClient, EstadoCita } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { EstadoBody } from "./_schemas";
 import type { CitaEstadoDTO } from "./_dto";
 
@@ -27,7 +28,27 @@ function sideEffectsFor(state: EstadoCita, now: Date) {
   return {} as const;
 }
 
-function toDTO(c: any): CitaEstadoDTO {
+type CitaWithRelations = Prisma.CitaGetPayload<{
+  select: {
+    idCita: true;
+    inicio: true;
+    fin: true;
+    duracionMinutos: true;
+    tipo: true;
+    estado: true;
+    checkedInAt: true;
+    startedAt: true;
+    completedAt: true;
+    profesional: { select: { idProfesional: true; persona: { select: { nombres: true; apellidos: true } } } };
+    paciente: { select: { idPaciente: true; persona: { select: { nombres: true; apellidos: true } } } };
+    consultorio: { select: { idConsultorio: true; nombre: true; colorHex: true } };
+  };
+}>;
+
+function toDTO(c: CitaWithRelations | null): CitaEstadoDTO {
+  if (!c) {
+    throw new Error("Cita is null");
+  }
   return {
     idCita: c.idCita,
     inicio: c.inicio.toISOString(),
@@ -98,7 +119,11 @@ export async function changeCitaEstado(
     }
 
     // 2) Preparar side-effects (timestamps)
-    const effects: any = sideEffectsFor(nuevo, now);
+    const effects: Partial<{
+      checkedInAt: Date;
+      startedAt: Date;
+      completedAt: Date;
+    }> = sideEffectsFor(nuevo, now);
     // Si completamos y no hay startedAt, marcamos startedAt también
     if (nuevo === "COMPLETED" && !current.startedAt) {
       effects.startedAt = now;

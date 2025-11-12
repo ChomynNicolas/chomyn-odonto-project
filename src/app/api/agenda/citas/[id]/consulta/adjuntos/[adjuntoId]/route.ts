@@ -23,7 +23,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol: "ADMIN" | "ODONT" | "RECEP" = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canDeleteAttachments(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden eliminar adjuntos")
@@ -48,9 +48,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     })
 
     return ok({ deleted: true })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[DELETE /api/agenda/citas/[id]/consulta/adjuntos/[adjuntoId]]", e)
-    return errors.internal(e?.message ?? "Error al eliminar adjunto")
+    return errors.internal(errorMessage ?? "Error al eliminar adjunto")
   }
 }
 

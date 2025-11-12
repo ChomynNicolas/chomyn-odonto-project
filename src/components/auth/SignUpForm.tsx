@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import Label from "@/components/form/Label"
 import Button from "@/components/ui/button/Button"
 import Image from "next/image"

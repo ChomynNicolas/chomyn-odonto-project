@@ -40,9 +40,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }))
 
     return NextResponse.json({ ok: true, data: formatted })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error fetching clinical notes:", error)
-    return NextResponse.json({ ok: false, error: "Error al obtener notas clínicas" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al obtener notas clínicas"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }
 
@@ -67,8 +68,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: note })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating clinical note:", error)
-    return NextResponse.json({ ok: false, error: "Error al crear nota clínica" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al crear nota clínica"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

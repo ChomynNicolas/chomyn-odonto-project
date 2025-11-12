@@ -70,7 +70,6 @@ export async function GET(
 
     let publicId: string
     let accessMode: "PUBLIC" | "AUTHENTICATED"
-    let resourceType: string
     let contentType: string | null = null
     let originalFilename: string | null = null
     let fileFormat: string | null = null
@@ -119,7 +118,6 @@ export async function GET(
         folder: adjunto.folder,
       })
       
-      resourceType = fileTypeInfo.resourceType
       contentType = fileTypeInfo.mimeType
     } else {
       // Fetch consentimiento from database
@@ -156,7 +154,6 @@ export async function GET(
         originalFilename: originalFilename,
       })
       
-      resourceType = fileTypeInfo.resourceType
       contentType = fileTypeInfo.mimeType
     }
     
@@ -218,9 +215,10 @@ export async function GET(
           hasTransformations: transformationOptions.length > 0,
           urlLength: cloudinaryUrl.length,
         })
-      } catch (urlError: any) {
+      } catch (urlError: unknown) {
+        const errorMessage = urlError instanceof Error ? urlError.message : String(urlError)
         console.error(`[API] Error generating authenticated URL:`, {
-          error: urlError.message,
+          error: errorMessage,
           publicId: publicId.substring(0, 80),
           resourceType: finalResourceType,
           isPDF: fileTypeInfo.isPDF,
@@ -255,9 +253,9 @@ export async function GET(
           "User-Agent": "Chomyn-Odonto/1.0",
         },
       })
-    } catch (fetchError: any) {
+    } catch (fetchError: unknown) {
       clearTimeout(timeoutId)
-      if (fetchError.name === "AbortError") {
+      if (fetchError instanceof Error && fetchError.name === "AbortError") {
         console.error(`[API] Timeout fetching image from Cloudinary:`, { url: cloudinaryUrl, publicId })
         return NextResponse.json(
           { error: "Timeout fetching image" },
@@ -395,8 +393,9 @@ export async function GET(
           } else {
             console.error(`[API] Regenerated URL also failed: ${fallbackResponse.status} ${fallbackResponse.statusText}`)
           }
-        } catch (fallbackError: any) {
-          console.error(`[API] Regenerated URL fallback failed:`, fallbackError.message)
+        } catch (fallbackError: unknown) {
+          const errorMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+          console.error(`[API] Regenerated URL fallback failed:`, errorMessage)
         }
         
         // Strategy 3: For PDFs specifically, try using storedSecureUrl even if it failed before
@@ -465,9 +464,10 @@ export async function GET(
                 }
               }
             }
-          } catch (adminError: any) {
+          } catch (adminError: unknown) {
             // Admin API may fail if resource doesn't exist or API key doesn't have permissions
-            console.error(`[API] Admin API verification failed:`, adminError.message)
+            const errorMessage = adminError instanceof Error ? adminError.message : String(adminError)
+            console.error(`[API] Admin API verification failed:`, errorMessage)
           }
         }
       }

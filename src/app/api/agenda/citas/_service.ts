@@ -3,12 +3,13 @@
 // ============================================================================
 
 import { PrismaClient, type EstadoCita, type TipoCita } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import type { GetCitasQuery } from "./_schemas"
 
 const prisma = new PrismaClient()
 
 export async function listCitas(query: GetCitasQuery, page: number, limit: number, skip: number) {
-  const where: any = {}
+  const where: Prisma.CitaWhereInput = {}
 
   if (query.profesionalId) where.profesionalId = query.profesionalId
   if (query.consultorioId) where.consultorioId = query.consultorioId
@@ -28,6 +29,74 @@ export async function listCitas(query: GetCitasQuery, page: number, limit: numbe
     where.inicio = {}
     if (query.desde) where.inicio.gte = new Date(query.desde)
     if (query.hasta) where.inicio.lte = new Date(query.hasta)
+  }
+
+  // Búsqueda por texto (nombre de paciente, cédula, motivo, etc.)
+  if (query.q && query.q.trim()) {
+    const searchTerm = query.q.trim()
+    const isDocQuery = /^\d{4,}$/.test(searchTerm) // Si es solo números, probablemente es cédula
+
+    where.OR = [
+      // Búsqueda por nombre de paciente
+      {
+        paciente: {
+          persona: {
+            OR: [
+              { nombres: { contains: searchTerm, mode: "insensitive" } },
+              { apellidos: { contains: searchTerm, mode: "insensitive" } },
+            ],
+          },
+        },
+      },
+      // Búsqueda por cédula/documento
+      {
+        paciente: {
+          persona: {
+            documento: {
+              numero: { contains: searchTerm, mode: "insensitive" },
+            },
+          },
+        },
+      },
+      // Búsqueda por motivo
+      {
+        motivo: { contains: searchTerm, mode: "insensitive" },
+      },
+      // Búsqueda por nombre de profesional
+      {
+        profesional: {
+          persona: {
+            OR: [
+              { nombres: { contains: searchTerm, mode: "insensitive" } },
+              { apellidos: { contains: searchTerm, mode: "insensitive" } },
+            ],
+          },
+        },
+      },
+    ]
+
+    // Si es búsqueda por documento, priorizar ese filtro
+    if (isDocQuery && where.OR) {
+      const docQuery: Prisma.CitaWhereInput = {
+        paciente: {
+          persona: {
+            documento: {
+              numero: { contains: searchTerm, mode: "insensitive" },
+            },
+          },
+        },
+      };
+      const otherQueries = where.OR.filter((o) => {
+        if (typeof o !== "object" || o === null) return true;
+        const hasDocQuery = "paciente" in o &&
+          typeof o.paciente === "object" && o.paciente !== null &&
+          "persona" in o.paciente &&
+          typeof o.paciente.persona === "object" && o.paciente.persona !== null &&
+          "documento" in o.paciente.persona;
+        return !hasDocQuery;
+      }) as Prisma.CitaWhereInput[];
+      where.OR = [docQuery, ...otherQueries];
+    }
   }
 
   const [rows, total] = await Promise.all([

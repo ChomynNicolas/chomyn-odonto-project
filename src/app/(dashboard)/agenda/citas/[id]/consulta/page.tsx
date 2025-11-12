@@ -21,7 +21,7 @@ export default async function ConsultaClinicaPage({ params }: PageProps) {
     redirect("/signin")
   }
 
-  const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+  const rol: "ADMIN" | "ODONT" | "RECEP" = session.user.role ?? "RECEP"
 
   // Verificar que la cita existe
   const cita = await prisma.cita.findUnique({

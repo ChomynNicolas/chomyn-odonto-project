@@ -19,18 +19,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canViewClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden ver anamnesis")
     }
 
-    // Verificar que la consulta existe
+    // Verificar que la consulta existe, si no existe retornar array vacío
     const consulta = await prisma.consulta.findUnique({
       where: { citaId },
       select: { citaId: true },
     })
-    if (!consulta) return errors.notFound("Consulta no encontrada")
+    
+    // Si no existe consulta, retornar array vacío (no error)
+    if (!consulta) {
+      return ok([])
+    }
 
     const anamnesis = await prisma.clinicalHistoryEntry.findMany({
       where: { consultaId: citaId },
@@ -71,9 +75,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         createdAt: a.createdAt.toISOString(),
       }))
     )
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]/consulta/anamnesis]", e)
-    return errors.internal(e?.message ?? "Error al obtener anamnesis")
+    return errors.internal(errorMessage ?? "Error al obtener anamnesis")
   }
 }
 
@@ -89,7 +94,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = Number.parseInt(String(session.user.id))
+    if (isNaN(userId)) return errors.forbidden("ID de usuario inválido")
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden crear anamnesis")
@@ -101,7 +108,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     // Asegurar que la consulta existe
     const consulta = await prisma.consulta.findUnique({
       where: { citaId },
-      include: {
+      select: {
+        citaId: true,
+        status: true, // Necesario para verificar si permite edición
         cita: {
           select: {
             pacienteId: true,
@@ -109,6 +118,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         },
       },
     })
+    
     if (!consulta) {
       // Crear consulta si no existe
       const cita = await prisma.cita.findUnique({
@@ -116,16 +126,75 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      await ensureConsulta(citaId, cita.profesionalId, session.user.id)
+      
+      await ensureConsulta(citaId, cita.profesionalId, userId)
+      
+      // Verificar que la consulta recién creada permite edición (debería ser DRAFT)
+      const consultaCreada = await prisma.consulta.findUnique({
+        where: { citaId },
+        select: { status: true },
+      })
+      if (consultaCreada && consultaCreada.status === "FINAL") {
+        return errors.forbidden("No se puede editar una consulta finalizada")
+      }
+      
+      const anamnesis = await prisma.clinicalHistoryEntry.create({
+        data: {
+          pacienteId: cita.pacienteId,
+          consultaId: citaId,
+          title: input.title,
+          notes: input.notes,
+          createdByUserId: userId,
+        },
+        include: {
+          createdBy: {
+            select: {
+              idUsuario: true,
+              nombreApellido: true,
+              profesional: {
+                select: {
+                  persona: {
+                    select: {
+                      nombres: true,
+                      apellidos: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      return ok({
+        id: anamnesis.idClinicalHistoryEntry,
+        title: anamnesis.title,
+        notes: anamnesis.notes,
+        fecha: anamnesis.fecha.toISOString(),
+        createdBy: {
+          id: anamnesis.createdBy.idUsuario,
+          nombre:
+            anamnesis.createdBy.profesional?.persona?.nombres && anamnesis.createdBy.profesional?.persona?.apellidos
+              ? `${anamnesis.createdBy.profesional.persona.nombres} ${anamnesis.createdBy.profesional.persona.apellidos}`.trim()
+              : anamnesis.createdBy.nombreApellido ?? "Usuario",
+        },
+        createdAt: anamnesis.createdAt.toISOString(),
+      })
     }
 
+    // Si la consulta existe, verificar que permite edición
+    if (consulta.status === "FINAL") {
+      return errors.forbidden("No se puede editar una consulta finalizada")
+    }
+    
+    // Crear anamnesis normalmente
     const anamnesis = await prisma.clinicalHistoryEntry.create({
       data: {
-        pacienteId: consulta?.cita.pacienteId ?? (await prisma.cita.findUnique({ where: { idCita: citaId }, select: { pacienteId: true } }))!.pacienteId,
+        pacienteId: consulta.cita.pacienteId,
         consultaId: citaId,
         title: input.title,
         notes: input.notes,
-        createdByUserId: session.user.id,
+        createdByUserId: userId,
       },
       include: {
         createdBy: {
@@ -161,10 +230,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       },
       createdAt: anamnesis.createdAt.toISOString(),
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }> }
+      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/anamnesis]", e)
-    return errors.internal(e?.message ?? "Error al crear anamnesis")
+    return errors.internal(errorMessage ?? "Error al crear anamnesis")
   }
 }
 

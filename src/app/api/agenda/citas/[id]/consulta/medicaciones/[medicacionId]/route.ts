@@ -6,6 +6,7 @@ import { z } from "zod"
 import { CONSULTA_RBAC } from "../../_rbac"
 import { prisma } from "@/lib/prisma"
 import { updateMedicationSchema } from "../../_schemas"
+import type { Prisma } from "@prisma/client"
 
 const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -24,7 +25,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden editar medicaciones")
@@ -33,16 +34,29 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     const body = await req.json()
     const input = updateMedicationSchema.parse(body)
 
-    // Verificar que la medicación pertenece a esta consulta
+    // Obtener la consulta para verificar el paciente
+    const consulta = await prisma.consulta.findUnique({
+      where: { citaId },
+      include: {
+        cita: {
+          select: {
+            pacienteId: true,
+          },
+        },
+      },
+    })
+    if (!consulta) return errors.notFound("Consulta no encontrada")
+
+    // Verificar que la medicación pertenece al paciente de esta consulta
     const medicacion = await prisma.patientMedication.findFirst({
       where: {
         idPatientMedication: medicacionId,
-        consultaId: citaId,
+        pacienteId: consulta.cita.pacienteId,
       },
     })
     if (!medicacion) return errors.notFound("Medicación no encontrada")
 
-    const updateData: any = {}
+    const updateData: Prisma.PatientMedicationUpdateInput = {}
     if (input.label !== undefined) updateData.label = input.label
     if (input.dose !== undefined) updateData.dose = input.dose
     if (input.freq !== undefined) updateData.freq = input.freq
@@ -92,10 +106,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
             : updated.createdBy.nombreApellido ?? "Usuario",
       },
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }> }
+      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[PUT /api/agenda/citas/[id]/consulta/medicaciones/[medicacionId]]", e)
-    return errors.internal(e?.message ?? "Error al actualizar medicación")
+    return errors.internal(errorMessage ?? "Error al actualizar medicación")
   }
 }
 
@@ -111,16 +129,30 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden desactivar medicaciones")
     }
 
+    // Obtener la consulta para verificar el paciente
+    const consulta = await prisma.consulta.findUnique({
+      where: { citaId },
+      include: {
+        cita: {
+          select: {
+            pacienteId: true,
+          },
+        },
+      },
+    })
+    if (!consulta) return errors.notFound("Consulta no encontrada")
+
+    // Verificar que la medicación pertenece al paciente de esta consulta
     const medicacion = await prisma.patientMedication.findFirst({
       where: {
         idPatientMedication: medicacionId,
-        consultaId: citaId,
+        pacienteId: consulta.cita.pacienteId,
       },
     })
     if (!medicacion) return errors.notFound("Medicación no encontrada")
@@ -131,9 +163,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     })
 
     return ok({ deleted: true })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[DELETE /api/agenda/citas/[id]/consulta/medicaciones/[medicacionId]]", e)
-    return errors.internal(e?.message ?? "Error al desactivar medicación")
+    return errors.internal(errorMessage ?? "Error al desactivar medicación")
   }
 }
 

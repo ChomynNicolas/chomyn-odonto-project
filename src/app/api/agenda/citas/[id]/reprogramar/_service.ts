@@ -1,5 +1,6 @@
 // app/api/agenda/citas/[id]/reprogramar/_service.ts
 import { PrismaClient, EstadoCita, MotivoCancelacion } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { ReprogramarBody } from "./_schemas";
 import type { CitaMini } from "./_dto";
 
@@ -12,7 +13,22 @@ function makeFin(inicio: Date, duracionMinutos: number): Date {
   return new Date(inicio.getTime() + duracionMinutos * 60 * 1000);
 }
 
-function makeMini(c: any): CitaMini {
+type CitaWithRelations = Prisma.CitaGetPayload<{
+  select: {
+    idCita: true;
+    inicio: true;
+    fin: true;
+    duracionMinutos: true;
+    tipo: true;
+    estado: true;
+    motivo: true;
+    profesional: { select: { idProfesional: true; persona: { select: { nombres: true; apellidos: true } } } };
+    paciente: { select: { idPaciente: true; persona: { select: { nombres: true; apellidos: true } } } };
+    consultorio: { select: { idConsultorio: true; nombre: true; colorHex: true } };
+  };
+}>;
+
+function makeMini(c: CitaWithRelations): CitaMini {
   return {
     idCita: c.idCita,
     inicio: c.inicio.toISOString(),
@@ -163,10 +179,15 @@ async function hasBlocking(tx: PrismaClient, params: {
   fin: Date;
 }): Promise<boolean> {
   const { profesionalId, consultorioId, inicio, fin } = params;
+  const orConditions: Prisma.BloqueoAgendaWhereInput[] = [{ profesionalId }];
+  if (consultorioId) {
+    orConditions.push({ consultorioId });
+  }
+  
   const bloqueo = await tx.bloqueoAgenda.findFirst({
     where: {
       activo: true,
-      OR: [{ profesionalId }, consultorioId ? { consultorioId } : undefined].filter(Boolean) as any,
+      OR: orConditions,
       desde: { lt: fin },
       hasta: { gt: inicio },
     },
@@ -190,7 +211,7 @@ export async function reprogramarCita(
   userId: number
 ): Promise<
   | { ok: true; data: { nueva: CitaMini; anterior: CitaMini } }
-  | { ok: false; status: number; error: string; code?: string; conflicts?: ConflictInfo[]; details?: any }
+  | { ok: false; status: number; error: string; code?: string; conflicts?: ConflictInfo[]; details?: unknown }
 > {
   // Normalizar fechas desde ISO strings (ya normalizados por Zod a UTC)
   const nuevoInicio = new Date(body.inicioISO);
@@ -255,7 +276,7 @@ export async function reprogramarCita(
 
     // 3) Chequear solape EXCLUYENDO la cita actual
     const overlapStart = performance.now();
-    const conflicts = await findConflicts(tx as any, {
+    const conflicts = await findConflicts(tx as unknown as PrismaClient, {
       profesionalId,
       consultorioId,
       inicio: nuevoInicio,
@@ -304,7 +325,7 @@ export async function reprogramarCita(
 
     // 4) Chequear bloqueos de agenda
     const blockingStart = performance.now();
-    const hasBlock = await hasBlocking(tx as any, {
+    const hasBlock = await hasBlocking(tx as unknown as PrismaClient, {
       profesionalId,
       consultorioId,
       inicio: nuevoInicio,

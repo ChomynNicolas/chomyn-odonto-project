@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { FileText, Upload, Download, Eye, Shield, AlertCircle } from "lucide-react"
+import Image from "next/image"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import { isConsentimientoVigente } from "@/lib/utils/consent-helpers"
 import type { UserRole } from "@/lib/types/patient"
@@ -206,14 +207,16 @@ function ConsentimientoViewer({ consent }: { consent: Consentimiento }) {
       </div>
 
       {/* Document preview */}
-      <div className="h-[60vh] w-full overflow-hidden rounded-lg border bg-muted/30">
+      <div className="relative h-[60vh] w-full overflow-hidden rounded-lg border bg-muted/30">
         {isPDF ? (
           <iframe src={consent.archivo.secureUrl} className="h-full w-full" title="Consentimiento" />
         ) : (
-          <img
+          <Image
             src={consent.archivo.secureUrl || "/placeholder.svg"}
             alt="Consentimiento"
-            className="h-full w-full object-contain"
+            fill
+            className="object-contain"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 60vw"
           />
         )}
       </div>

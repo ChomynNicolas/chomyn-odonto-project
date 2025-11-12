@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { pacienteRepo } from "@/app/api/pacientes/_repo"
+import { RelacionPaciente } from "@prisma/client"
 
 export class LinkResponsableError extends Error {
   code: "NOT_FOUND" | "VALIDATION_ERROR" | "UNIQUE_CONFLICT" | "INTERNAL_ERROR"
   status: number
-  extra?: any
-  constructor(code: LinkResponsableError["code"], message: string, status = 400, extra?: any) {
+  extra?: unknown
+  constructor(code: LinkResponsableError["code"], message: string, status = 400, extra?: unknown) {
     super(message)
     this.code = code
     this.status = status
@@ -36,7 +37,7 @@ export async function linkResponsablePago(params: {
   esPrincipal: boolean
   actorUserId?: number
 }) {
-  const { pacienteId, personaId, relacion, esPrincipal, actorUserId } = params
+  const { pacienteId, personaId, relacion, esPrincipal } = params
 
   await ensurePacienteExists(pacienteId)
   await ensurePersonaExists(personaId)
@@ -57,7 +58,7 @@ export async function linkResponsablePago(params: {
     await pacienteRepo.linkResponsablePago(tx, {
       pacienteId,
       personaId,
-      relacion: relacion as any,
+      relacion: relacion as RelacionPaciente,
       esPrincipal,
     })
 
@@ -82,7 +83,7 @@ export async function createResponsableWithPersona(params: {
   }
   actorUserId?: number
 }) {
-  const { pacienteId, data, actorUserId } = params
+  const { pacienteId, data } = params
 
   await ensurePacienteExists(pacienteId)
 
@@ -130,7 +131,7 @@ export async function createResponsableWithPersona(params: {
     await pacienteRepo.linkResponsablePago(tx, {
       pacienteId,
       personaId: persona.idPersona,
-      relacion: data.tipoVinculo as any,
+      relacion: data.tipoVinculo as RelacionPaciente,
       esPrincipal: true,
       // autoridadLegal se determina automáticamente según la relación en linkResponsablePago
     })

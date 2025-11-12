@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { ExportColumn } from "@/lib/kpis/export-csv"
 import ExportButton from "./ExportButton"
@@ -8,11 +8,11 @@ import ExportButton from "./ExportButton"
 
 interface DrillDownTableProps {
   endpoint: string
-  filters: Record<string, any>
+  filters: Record<string, unknown>
   columns: Array<{
     key: string
     label: string
-    format?: (value: any) => string
+    format?: (value: unknown) => string
     sortable?: boolean
   }>
   exportColumns: ExportColumn[]
@@ -37,7 +37,7 @@ export default function DrillDownTable({
   privacyMode = false,
   userId,
 }: DrillDownTableProps) {
-  const [data, setData] = useState<any[]>([])
+  const [data, setData] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState<PaginationState>({
@@ -49,21 +49,24 @@ export default function DrillDownTable({
   const [sortBy, setSortBy] = useState<string | undefined>()
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
-  useEffect(() => {
-    fetchData()
-  }, [pagination.page, pagination.pageSize, sortBy, sortOrder, filters])
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const params = new URLSearchParams({
-        ...filters,
-        page: String(pagination.page),
-        pageSize: String(pagination.pageSize),
-        ...(sortBy && { sortBy, sortOrder }),
+      const params = new URLSearchParams()
+      // Agregar filtros
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          params.set(key, String(value))
+        }
       })
+      params.set("page", String(pagination.page))
+      params.set("pageSize", String(pagination.pageSize))
+      if (sortBy) {
+        params.set("sortBy", sortBy)
+        params.set("sortOrder", sortOrder)
+      }
 
       const response = await fetch(`${endpoint}?${params}`)
       const result = await response.json()
@@ -78,12 +81,17 @@ export default function DrillDownTable({
         total: result.pagination.total,
         totalPages: result.pagination.totalPages,
       }))
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Error al cargar datos"
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
-  }
+  }, [endpoint, filters, pagination.page, pagination.pageSize, sortBy, sortOrder])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   function handleSort(key: string) {
     if (sortBy === key) {

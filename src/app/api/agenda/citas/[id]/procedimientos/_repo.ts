@@ -1,4 +1,6 @@
 import { prisma as db } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { DienteSuperficie } from "@prisma/client";
 
 // Cita (para validar existencia, estado y profesional/paciente)
 export async function repoFindCitaForProcedure(citaId: number) {
@@ -53,7 +55,7 @@ export async function repoCreateConsultaProcedimiento(data: {
   procedureId?: number | null;
   serviceType?: string | null;
   toothNumber?: number | null;
-  toothSurface?: any | null;
+  toothSurface?: DienteSuperficie | null;
   quantity: number;
   unitPriceCents?: number | null;
   totalCents?: number | null;
@@ -108,7 +110,7 @@ export async function repoListProcedimientosByCita(opts: {
     q?: string;
   };
 }) {
-  const where: any = { consultaId: opts.citaId };
+  const where: Prisma.ConsultaProcedimientoWhereInput = { consultaId: opts.citaId };
 
   // Filtros
   if (typeof opts.filters?.toothNumber === "number") {

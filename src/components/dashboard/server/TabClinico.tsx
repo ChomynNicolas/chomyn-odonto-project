@@ -13,7 +13,7 @@ export default async function TabClinico({ role }: { role: Rol }) {
   const session = await auth()
   if (!session) redirect("/signin")
 
-  const userId = (session.user as any)?.id ?? 0
+  const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
   // Calcular rango del mes actual
   const now = new Date()

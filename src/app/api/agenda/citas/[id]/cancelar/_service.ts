@@ -1,5 +1,5 @@
 // app/api/agenda/citas/[id]/cancelar/_service.ts
-import { PrismaClient, EstadoCita, MotivoCancelacion } from "@prisma/client";
+import { PrismaClient, EstadoCita, MotivoCancelacion, Prisma } from "@prisma/client";
 import type { CancelarBody } from "./_schemas";
 import type { CitaMiniDTO } from "./_dto";
 
@@ -7,7 +7,24 @@ const prisma = new PrismaClient();
 
 const CANCELLABLE: EstadoCita[] = ["SCHEDULED","CONFIRMED","CHECKED_IN","IN_PROGRESS"];
 
-function toMini(c: any): CitaMiniDTO {
+type CitaWithRelations = Prisma.CitaGetPayload<{
+  select: {
+    idCita: true;
+    inicio: true;
+    fin: true;
+    duracionMinutos: true;
+    tipo: true;
+    estado: true;
+    motivo: true;
+    cancelReason: true;
+    cancelledAt: true;
+    profesional: { select: { idProfesional: true; persona: { select: { nombres: true; apellidos: true } } } };
+    paciente: { select: { idPaciente: true; persona: { select: { nombres: true; apellidos: true } } } };
+    consultorio: { select: { idConsultorio: true; nombre: true; colorHex: true } };
+  };
+}>;
+
+function toMini(c: CitaWithRelations): CitaMiniDTO {
   return {
     idCita: c.idCita,
     inicio: c.inicio.toISOString(),

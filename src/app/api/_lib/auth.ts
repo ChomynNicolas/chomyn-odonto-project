@@ -11,7 +11,7 @@ export async function requireSessionWithRoles(_req: NextRequest, allowed: Role[]
     return { authorized: false as const, status: 401, error: "UNAUTHORIZED" as const };
   }
   // session.user.role debería existir vía callback de NextAuth
-  const role = (session.user as any)?.role as Role | undefined;
+  const role = (session.user.role ?? undefined) as Role | undefined;
   if (!role || !allowed.includes(role)) {
     return { authorized: false as const, status: 403, error: "FORBIDDEN" as const };
   }

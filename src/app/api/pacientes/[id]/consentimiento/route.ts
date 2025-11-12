@@ -36,10 +36,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     })
 
     return ok(consentimientos)
-  } catch (e: any) {
-    safeLog("error", "Error listing consents", { requestId, error: e?.message })
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error listing consents", { requestId, error: errorMessage })
 
-    if (e?.name === "ZodError") {
+    if (e instanceof Error && e.name === "ZodError") {
       return errors.validation("Parámetros inválidos")
     }
 
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return errors.apiError?.(e.status, e.code, e.message, e.extra) ?? errors.internal(e.message)
     }
 
-    return errors.internal(e?.message ?? "Error al listar consentimientos")
+    return errors.internal(errorMessage ?? "Error al listar consentimientos")
   }
 }
 
@@ -82,11 +83,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     })
 
     return ok(consentimiento, undefined, 201)
-  } catch (e: any) {
-    safeLog("error", "Error creating consent", { requestId, error: e?.message })
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error creating consent", { requestId, error: errorMessage })
 
-    if (e?.name === "ZodError") {
-      return errors.validation(e.issues?.[0]?.message ?? "Datos inválidos")
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { issues?: Array<{ message?: string }> }
+      return errors.validation(zodError.issues?.[0]?.message ?? "Datos inválidos")
     }
 
     if (e instanceof ConsentimientoError) {
@@ -95,10 +98,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return errors.apiError?.(e.status, e.code, e.message, e.extra) ?? errors.internal(e.message)
     }
 
-    if (e?.code === "P2002") {
+    const code = (e as { code?: string })?.code
+    if (code === "P2002") {
       return errors.conflict("Ya existe un consentimiento con esos datos")
     }
 
-    return errors.internal(e?.message ?? "Error al crear consentimiento")
+    return errors.internal(errorMessage ?? "Error al crear consentimiento")
   }
 }

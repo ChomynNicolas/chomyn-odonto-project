@@ -2,12 +2,12 @@
 import type {
   ConsultaEstado,
   DiagnosisStatus,
-  TreatmentStepStatus,
   ToothCondition,
   DienteSuperficie,
   PerioSite,
   PerioBleeding,
   AdjuntoTipo,
+  AllergySeverity,
 } from "@prisma/client"
 
 // ============================================================================
@@ -15,6 +15,7 @@ import type {
 // ============================================================================
 export interface ConsultaClinicaDTO {
   citaId: number
+  pacienteId?: number // ID del paciente para navegación
   status: ConsultaEstado
   startedAt: string | null
   finishedAt: string | null
@@ -24,9 +25,14 @@ export interface ConsultaClinicaDTO {
   performedBy: {
     id: number
     nombre: string
-  }
-  createdAt: string
-  updatedAt: string
+  } | null
+  createdAt: string | null // null si la consulta no existe aún
+  updatedAt: string | null
+  
+  // Estado de la cita (para sincronización)
+  citaEstado?: import("@prisma/client").EstadoCita
+  citaInicio?: string
+  citaFin?: string
 
   // Módulos
   anamnesis: AnamnesisDTO[]
@@ -36,6 +42,8 @@ export interface ConsultaClinicaDTO {
   adjuntos: AdjuntoDTO[]
   odontograma: OdontogramaDTO | null
   periodontograma: PeriodontogramaDTO | null
+  vitales: VitalesDTO[]
+  alergias: AlergiasDTO[]
 }
 
 // ============================================================================
@@ -174,6 +182,37 @@ export interface PeriodontogramMeasureDTO {
   plaque: boolean | null
   mobility: number | null
   furcation: number | null
+}
+
+// ============================================================================
+// SIGNOS VITALES
+// ============================================================================
+export interface VitalesDTO {
+  id: number
+  measuredAt: string
+  heightCm: number | null
+  weightKg: number | null
+  bmi: number | null
+  bpSyst: number | null
+  bpDiast: number | null
+  heartRate: number | null
+  notes: string | null
+  createdBy: {
+    id: number
+    nombre: string
+  }
+}
+
+// ============================================================================
+// ALERGIAS
+// ============================================================================
+export interface AlergiasDTO {
+  id: number
+  label: string
+  severity: AllergySeverity
+  reaction: string | null
+  notedAt: string
+  isActive: boolean
 }
 
 // ============================================================================

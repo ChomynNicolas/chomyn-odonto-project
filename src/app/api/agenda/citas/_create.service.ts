@@ -2,6 +2,7 @@
 // SERVICE - Crear Cita (robusto y con mejores prácticas)
 // ============================================================================
 import { PrismaClient, type EstadoCita } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { CreateCitaBody } from "./_create.schema";
 
 const prisma = new PrismaClient();
@@ -134,10 +135,15 @@ async function hasBlocking(params: {
   fin: Date;
 }): Promise<boolean> {
   const { profesionalId, consultorioId, inicio, fin } = params;
+  const orConditions: Prisma.BloqueoAgendaWhereInput[] = [{ profesionalId }];
+  if (consultorioId) {
+    orConditions.push({ consultorioId });
+  }
+  
   const bloqueo = await prisma.bloqueoAgenda.findFirst({
     where: {
       activo: true,
-      OR: [{ profesionalId }, consultorioId ? { consultorioId } : undefined].filter(Boolean) as any,
+      OR: orConditions,
       desde: { lt: fin },
       hasta: { gt: inicio },
     },
@@ -146,11 +152,21 @@ async function hasBlocking(params: {
   return Boolean(bloqueo);
 }
 
+type CreateCitaResponse = {
+  idCita: number;
+  inicio: string;
+  fin: string;
+  tipo: string;
+  estado: string;
+  motivo: string | null;
+  duracionMinutos: number;
+};
+
 export async function createCita(
   body: CreateCitaBody & { createdByUserId: number }
 ): Promise<{ 
   ok: boolean; 
-  data?: any; 
+  data?: CreateCitaResponse; 
   error?: string; 
   status: number;
   code?: string;
@@ -271,11 +287,13 @@ export async function createCita(
         duracionMinutos: created.duracionMinutos,
       },
     };
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Errores típicos Prisma
-    if (e?.code === "P2003") return { ok: false, error: "FOREIGN_KEY_CONSTRAINT", status: 400 };
-    if (e?.code === "P2002") return { ok: false, error: "DUPLICATE", status: 409 };
-    console.error("createCita error:", e?.code || e?.message);
+    const code = (e as { code?: string })?.code;
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    if (code === "P2003") return { ok: false, error: "FOREIGN_KEY_CONSTRAINT", status: 400 };
+    if (code === "P2002") return { ok: false, error: "DUPLICATE", status: 409 };
+    console.error("createCita error:", code || errorMessage);
     return { ok: false, error: "INTERNAL_ERROR", status: 500 };
   }
 }

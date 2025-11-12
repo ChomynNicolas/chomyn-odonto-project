@@ -2,13 +2,14 @@ import { prisma } from "@/lib/prisma"
 import { consentimientoRepo } from "./_repo"
 import { calcularVigenteHasta, esVigente, nombreCompleto, type ConsentimientoDTO } from "./_dto"
 import type { ConsentimientoCreateBody, ConsentimientoListQuery } from "./_schemas"
+import type { Prisma } from "@prisma/client"
 
 export class ConsentimientoError extends Error {
   code: string
   status: number
-  extra?: any
+  extra?: unknown
 
-  constructor(code: string, message: string, status = 400, extra?: any) {
+  constructor(code: string, message: string, status = 400, extra?: unknown) {
     super(message)
     this.code = code
     this.status = status
@@ -221,7 +222,33 @@ export async function revocarConsentimiento(params: {
   })
 }
 
-function mapToDTO(data: any): ConsentimientoDTO {
+type ConsentimientoWithRelations = Prisma.ConsentimientoGetPayload<{
+  include: {
+    responsable: {
+      include: {
+        documento: true
+        PacienteResponsable: {
+          select: { relacion: true }
+        }
+      }
+    }
+    cita: {
+      select: {
+        idCita: true
+        inicio: true
+        tipo: true
+      }
+    }
+    registradoPor: {
+      select: {
+        idUsuario: true
+        nombreApellido: true
+      }
+    }
+  }
+}>
+
+function mapToDTO(data: ConsentimientoWithRelations): ConsentimientoDTO {
   const relacion = data.responsable.PacienteResponsable?.[0]?.relacion ?? null
   
   // Prisma devuelve los campos con los nombres del modelo (Paciente_idPaciente, firmado_en, etc.)

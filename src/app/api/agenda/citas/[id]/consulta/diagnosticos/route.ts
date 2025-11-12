@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canViewClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden ver diagnósticos")
@@ -73,9 +73,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         },
       }))
     )
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]/consulta/diagnosticos]", e)
-    return errors.internal(e?.message ?? "Error al obtener diagnósticos")
+    return errors.internal(errorMessage ?? "Error al obtener diagnósticos")
   }
 }
 
@@ -91,7 +92,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = Number.parseInt(String(session.user.id))
+    if (isNaN(userId)) return errors.forbidden("ID de usuario inválido")
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden crear diagnósticos")
@@ -103,7 +106,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     // Asegurar que la consulta existe
     const consulta = await prisma.consulta.findUnique({
       where: { citaId },
-      include: {
+      select: {
+        citaId: true,
+        status: true, // Necesario para verificar si permite edición
         cita: {
           select: {
             pacienteId: true,
@@ -117,7 +122,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      await ensureConsulta(citaId, cita.profesionalId, session.user.id)
+      await ensureConsulta(citaId, cita.profesionalId, userId)
       const nuevaConsulta = await prisma.consulta.findUnique({
         where: { citaId },
         include: {
@@ -129,6 +134,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         },
       })
       if (!nuevaConsulta) return errors.internal("Error al crear consulta")
+      
+      // Verificar que la consulta recién creada permite edición
+      if (nuevaConsulta.status === "FINAL") {
+        return errors.forbidden("No se puede editar una consulta finalizada")
+      }
 
       const diagnostico = await prisma.patientDiagnosis.create({
         data: {
@@ -139,7 +149,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           label: input.label,
           status: input.status,
           notes: input.notes ?? null,
-          createdByUserId: session.user.id,
+          createdByUserId: userId,
         },
         include: {
           createdBy: {
@@ -180,6 +190,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       })
     }
 
+    // Verificar que la consulta permite edición
+    if (consulta.status === "FINAL") {
+      return errors.forbidden("No se puede editar una consulta finalizada")
+    }
+    
     const diagnostico = await prisma.patientDiagnosis.create({
       data: {
         pacienteId: consulta.cita.pacienteId,
@@ -189,7 +204,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         label: input.label,
         status: input.status,
         notes: input.notes ?? null,
-        createdByUserId: session.user.id,
+        createdByUserId: userId,
       },
       include: {
         createdBy: {
@@ -228,10 +243,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             : diagnostico.createdBy.nombreApellido ?? "Usuario",
       },
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }>; input?: unknown }
+      const errorMessage = zodError.errors?.[0]?.message ?? "Datos inválidos"
+      console.error("[POST /api/agenda/citas/[id]/consulta/diagnosticos] Validation error:", {
+        error: errorMessage,
+        errors: zodError.errors,
+        input: zodError.input,
+      })
+      return errors.validation(errorMessage)
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/diagnosticos]", e)
-    return errors.internal(e?.message ?? "Error al crear diagnóstico")
+    return errors.internal(errorMessage ?? "Error al crear diagnóstico")
   }
 }
 

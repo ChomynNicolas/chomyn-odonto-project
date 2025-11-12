@@ -18,7 +18,7 @@ export async function GET(
 
   // TODO: remplazar por SELECTs reales de tus tablas
   const data = {
-    planes: [] as any[],
+    planes: [] as unknown[],
   };
 
   return NextResponse.json({ ok: true, data });

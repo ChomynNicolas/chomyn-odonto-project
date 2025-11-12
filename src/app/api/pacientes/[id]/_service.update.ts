@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { normalizeEmail, normalizePhonePY } from "@/lib/normalize"
 import type { PatientUpdateBody } from "./_schemas"
+import type { Prisma } from "@prisma/client"
 
 interface UpdateContext {
   userId: number
@@ -11,8 +12,8 @@ interface UpdateContext {
 /**
  * Calculate field differences for audit logging
  */
-function calculateDiff(oldData: any, newData: any): Record<string, { old: any; new: any }> {
-  const diff: Record<string, { old: any; new: any }> = {}
+function calculateDiff(oldData: Record<string, unknown>, newData: Record<string, unknown>): Record<string, { old: unknown; new: unknown }> {
+  const diff: Record<string, { old: unknown; new: unknown }> = {}
 
   for (const key in newData) {
     if (newData[key] !== undefined && oldData[key] !== newData[key]) {
@@ -45,7 +46,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     })
 
     if (!current) {
-      const error: any = new Error("Paciente no encontrado")
+      const error = new Error("Paciente no encontrado") as Error & { status: number }
       error.status = 404
       throw error
     }
@@ -53,9 +54,9 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     // 2. Concurrency control - check updatedAt
     const currentUpdatedAt = current.updatedAt.toISOString()
     if (currentUpdatedAt !== body.updatedAt) {
-      const error: any = new Error(
+      const error = new Error(
         "El paciente fue actualizado por otro usuario. Por favor, recarga la página e intenta nuevamente.",
-      )
+      ) as Error & { status: number; code: string }
       error.status = 409
       error.code = "VERSION_CONFLICT"
       throw error
@@ -86,7 +87,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       })
 
       if (duplicate) {
-        const error: any = new Error("Ya existe un paciente con este tipo y número de documento")
+        const error = new Error("Ya existe un paciente con este tipo y número de documento") as Error & { status: number; code: string }
         error.status = 409
         error.code = "DUPLICATE_DOCUMENT"
         throw error
@@ -106,7 +107,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       })
 
       if (duplicate) {
-        const error: any = new Error("Ya existe un paciente con este email")
+        const error = new Error("Ya existe un paciente con este email") as Error & { status: number; code: string }
         error.status = 409
         error.code = "DUPLICATE_EMAIL"
         throw error
@@ -114,8 +115,8 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 6. Prepare update data for Persona
-    const personaUpdateData: any = {}
-    const oldPersonaData: any = {}
+    const personaUpdateData: Prisma.PersonaUpdateInput = {}
+    const oldPersonaData: Record<string, unknown> = {}
 
     if (canEditDemographics) {
       if (body.firstName !== undefined) {
@@ -150,7 +151,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
 
     // 8. Update or create Documento if needed
     if (canEditDemographics && (body.documentType || body.documentNumber || body.ruc)) {
-      const documentData: any = {}
+      const documentData: Prisma.DocumentoUpdateInput = {}
 
       if (body.documentType) documentData.tipo = body.documentType
       if (body.documentNumber) documentData.numero = body.documentNumber.trim()
@@ -240,8 +241,8 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 11. Update Paciente notes (legacy fields)
-    const notasData: any = current.notas ? JSON.parse(current.notas as string) : {}
-    const oldNotasData: any = { ...notasData }
+    const notasData: Record<string, unknown> = current.notas ? (JSON.parse(current.notas as string) as Record<string, unknown>) : {}
+    const oldNotasData: Record<string, unknown> = { ...notasData }
 
     if (body.insurance !== undefined) {
       notasData.obraSocial = body.insurance
@@ -257,7 +258,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 12. Update Paciente status if allowed
-    const pacienteUpdateData: any = {
+    const pacienteUpdateData: Prisma.PacienteUpdateInput = {
       notas: JSON.stringify(notasData),
     }
 
@@ -283,7 +284,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     })
 
     // 13. Calculate diff for audit
-    const newData: any = {
+    const newData: Record<string, unknown> = {
       firstName: body.firstName,
       lastName: body.lastName,
       gender: body.gender,

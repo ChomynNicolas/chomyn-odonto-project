@@ -10,20 +10,20 @@ export type ApiError = {
   ok: false
   code: string
   error: string
-  details?: any
+  details?: unknown
   timestamp?: string
 }
 
-export type ApiSuccess<T = any> = {
+export type ApiSuccess<T = unknown> = {
   ok: true
   data: T
-  meta?: any
+  meta?: unknown
 }
 
 /**
  * Success response builder
  */
-export function ok<T>(data: T, meta?: any, status = 200): NextResponse {
+export function ok<T>(data: T, meta?: unknown, status = 200): NextResponse {
   return NextResponse.json({ ok: true, data, ...(meta && { meta }) } as ApiSuccess<T>, { status })
 }
 
@@ -31,7 +31,7 @@ export function ok<T>(data: T, meta?: any, status = 200): NextResponse {
  * Error response builders
  */
 export const errors = {
-  validation: (message = "Datos inválidos", details?: any) =>
+  validation: (message = "Datos inválidos", details?: unknown) =>
     NextResponse.json(
       {
         ok: false,
@@ -120,7 +120,7 @@ export const errors = {
       { status: 429 },
     ),
 
-  internal: (message = "Error interno del servidor", details?: any) =>
+  internal: (message = "Error interno del servidor", details?: unknown) =>
     NextResponse.json(
       {
         ok: false,
@@ -154,7 +154,7 @@ export const errors = {
       { status: 409 },
     ),
 
-  apiError: (status: number, code: string, message: string, details?: any) =>
+  apiError: (status: number, code: string, message: string, details?: unknown) =>
     NextResponse.json(
       {
         ok: false,
@@ -170,7 +170,7 @@ export const errors = {
 /**
  * ETag generation and validation
  */
-export function generateETag(data: any): string {
+export function generateETag(data: unknown): string {
   const hash = crypto.createHash("md5").update(JSON.stringify(data)).digest("hex")
   return `"${hash}"`
 }
@@ -257,7 +257,7 @@ export function checkRateLimit(
 /**
  * Safe logging (avoid PHI in logs)
  */
-export function safeLog(level: "info" | "error" | "warn", message: string, meta?: Record<string, any>) {
+export function safeLog(level: "info" | "error" | "warn", message: string, meta?: Record<string, unknown>) {
   const timestamp = new Date().toISOString()
   const requestId = meta?.requestId ?? "unknown"
 

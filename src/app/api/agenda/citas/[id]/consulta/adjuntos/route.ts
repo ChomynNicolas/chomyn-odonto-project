@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol: "ADMIN" | "ODONT" | "RECEP" = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canViewClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden ver adjuntos clínicos")
@@ -79,9 +79,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         createdAt: a.createdAt.toISOString(),
       }))
     )
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]/consulta/adjuntos]", e)
-    return errors.internal(e?.message ?? "Error al obtener adjuntos")
+    return errors.internal(errorMessage ?? "Error al obtener adjuntos")
   }
 }
 
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol: "ADMIN" | "ODONT" | "RECEP" = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canUploadAttachments(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden subir adjuntos")
@@ -254,10 +255,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       },
       createdAt: adjunto.createdAt.toISOString(),
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }> }
+      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/adjuntos]", e)
-    return errors.internal(e?.message ?? "Error al crear adjunto")
+    return errors.internal(errorMessage ?? "Error al crear adjunto")
   }
 }
 

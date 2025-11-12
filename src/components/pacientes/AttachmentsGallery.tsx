@@ -12,7 +12,6 @@ import { formatDate, formatRelativeTime } from "@/lib/utils/patient-helpers"
 import {
   Upload,
   FileText,
-  ImageIcon,
   X,
   ChevronLeft,
   ChevronRight,
@@ -20,7 +19,6 @@ import {
   Search,
   Trash2,
   Loader2,
-  File,
   FileImage,
   ScanLine,
   Camera,
@@ -32,8 +30,6 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
-  Maximize2,
-  Minimize2,
   Shield,
 } from "lucide-react"
 import Image from "next/image"
@@ -628,6 +624,7 @@ export function AttachmentsGallery({
                       <div className="relative flex-1 overflow-hidden bg-muted/30">
                         {isImage(attachment.mimeType) && attachment.thumbnailUrl ? (
                           attachmentIsProxyUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={attachment.thumbnailUrl}
                               alt={attachment.fileName}
@@ -867,7 +864,6 @@ function AttachmentViewer({
 }: AttachmentViewerProps) {
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
   const isImageType = attachment.mimeType.startsWith("image/")
@@ -1046,6 +1042,7 @@ function AttachmentViewer({
                 }}
               >
                 {attachmentIsProxyUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={attachment.secureUrl}
                     alt={attachment.fileName}

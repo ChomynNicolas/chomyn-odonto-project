@@ -1,5 +1,5 @@
 // src/app/api/agenda/citas/[id]/consulta/_rbac.ts
-import type { Role } from "@/app/api/_lib/auth"
+import type { ConsultaEstado } from "@prisma/client"
 
 export type RolConsulta = "ADMIN" | "ODONT" | "RECEP"
 
@@ -58,6 +58,26 @@ export const CONSULTA_RBAC = {
     return rol === "ADMIN" || rol === "ODONT"
   },
 } as const
+
+/**
+ * Verifica que la consulta permita edición (no está finalizada)
+ */
+export function canEditConsulta(consulta: { status: ConsultaEstado } | null): boolean {
+  if (!consulta) return false
+  return consulta.status !== "FINAL"
+}
+
+/**
+ * Verifica que la consulta permita edición y lanza error si no
+ */
+export function requireConsultaEditable(consulta: { status: ConsultaEstado } | null): asserts consulta is { status: Exclude<ConsultaEstado, "FINAL"> } {
+  if (!consulta) {
+    throw new Error("Consulta no encontrada")
+  }
+  if (consulta.status === "FINAL") {
+    throw new Error("No se puede editar una consulta finalizada")
+  }
+}
 
 /**
  * Verifica que el rol tenga permisos para editar datos clínicos

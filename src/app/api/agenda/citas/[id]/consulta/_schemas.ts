@@ -3,8 +3,6 @@ import { z } from "zod"
 import {
   ConsultaEstado,
   DiagnosisStatus,
-  AllergySeverity,
-  TreatmentStepStatus,
   ToothCondition,
   DienteSuperficie,
   PerioSite,
@@ -24,12 +22,45 @@ export type ParamsSchema = z.infer<typeof paramsSchema>
 // ============================================================================
 // ANAMNESIS / NOTAS CLÍNICAS
 // ============================================================================
+/**
+ * Schema para crear una nueva anamnesis clínica
+ * - title: Opcional, 1-200 caracteres si se proporciona, puede ser null o string vacío
+ * - notes: Obligatorio, 1-5000 caracteres
+ */
 export const createAnamnesisSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  notes: z.string().min(1).max(5000),
+  title: z
+    .string()
+    .max(200, "El título no puede exceder 200 caracteres")
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+  notes: z
+    .string()
+    .min(1, "Las notas son obligatorias")
+    .max(5000, "Las notas no pueden exceder 5000 caracteres")
+    .trim(),
 })
 
-export const updateAnamnesisSchema = createAnamnesisSchema.partial()
+/**
+ * Schema para actualizar una anamnesis existente
+ * Todos los campos son opcionales para permitir actualizaciones parciales
+ */
+export const updateAnamnesisSchema = z
+  .object({
+    title: z
+      .string()
+      .max(200, "El título no puede exceder 200 caracteres")
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+    notes: z
+      .string()
+      .min(1, "Las notas no pueden estar vacías")
+      .max(5000, "Las notas no pueden exceder 5000 caracteres")
+      .trim()
+      .optional(),
+  })
+  .partial()
 
 export type CreateAnamnesisInput = z.infer<typeof createAnamnesisSchema>
 export type UpdateAnamnesisInput = z.infer<typeof updateAnamnesisSchema>
@@ -38,16 +69,31 @@ export type UpdateAnamnesisInput = z.infer<typeof updateAnamnesisSchema>
 // DIAGNÓSTICOS
 // ============================================================================
 export const createDiagnosisSchema = z.object({
-  diagnosisId: z.number().int().positive().optional(),
-  code: z.string().max(50).optional(),
-  label: z.string().min(1).max(200),
+  diagnosisId: z.number().int().positive().optional().nullable(),
+  code: z
+    .string()
+    .max(50)
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+  label: z.string().min(1).max(200).trim(),
   status: z.nativeEnum(DiagnosisStatus).default(DiagnosisStatus.ACTIVE),
-  notes: z.string().max(1000).optional(),
+  notes: z
+    .string()
+    .max(1000)
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
 })
 
 export const updateDiagnosisSchema = z.object({
   status: z.nativeEnum(DiagnosisStatus).optional(),
-  notes: z.string().max(1000).optional(),
+  notes: z
+    .string()
+    .max(1000)
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
 })
 
 export type CreateDiagnosisInput = z.infer<typeof createDiagnosisSchema>
@@ -156,6 +202,32 @@ export const createPeriodontogramSchema = z.object({
 
 export type CreatePeriodontogramInput = z.infer<typeof createPeriodontogramSchema>
 export type PeriodontogramMeasureInput = z.infer<typeof periodontogramMeasureSchema>
+
+// ============================================================================
+// SIGNOS VITALES
+// ============================================================================
+/**
+ * Schema para crear nuevos signos vitales
+ * Todos los campos son opcionales y nullable para permitir registros parciales
+ */
+export const createVitalesSchema = z.object({
+  heightCm: z.number().int().min(0).max(300).nullable().optional(),
+  weightKg: z.number().int().min(0).max(500).nullable().optional(),
+  bpSyst: z.number().int().min(0).max(300).nullable().optional(),
+  bpDiast: z.number().int().min(0).max(200).nullable().optional(),
+  heartRate: z.number().int().min(0).max(300).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+  measuredAt: z.string().datetime().optional(),
+})
+
+/**
+ * Schema para actualizar signos vitales existentes
+ * Todos los campos son opcionales para permitir actualizaciones parciales
+ */
+export const updateVitalesSchema = createVitalesSchema.partial()
+
+export type CreateVitalesInput = z.infer<typeof createVitalesSchema>
+export type UpdateVitalesInput = z.infer<typeof updateVitalesSchema>
 
 // ============================================================================
 // ESTADO DE CONSULTA

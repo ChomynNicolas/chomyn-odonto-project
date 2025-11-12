@@ -1,8 +1,9 @@
 // src/app/api/procedimientos/[id]/_service.ts
 
 import { PatchProcedimientoSchema } from "./_schemas";
-import { repoDeleteProcedimiento, repoGetCatalogo, repoGetProcedimientoForUpdate, repoGetTreatmentStep, repoUpdateProcedimiento } from "./_repo";
+import { repoDeleteProcedimiento, repoGetCatalogo, repoGetProcedimientoForUpdate, repoGetTreatmentStep, repoUpdateProcedimiento, type ProcedimientoForUpdate } from "./_repo";
 import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from "../../_lib/errors";
+import type { Prisma } from "@prisma/client";
 
 type Rol = "ADMIN" | "ODONT" | "RECEP";
 const canUpdate = (r?: string) => r === "ADMIN" || r === "ODONT";
@@ -18,8 +19,32 @@ export async function servicePatchProcedimiento(opts: {
   const patch = PatchProcedimientoSchema.parse(opts.body);
 
   // 2) Cargar procedimiento + contexto
-  const proc = await repoGetProcedimientoForUpdate(opts.id);
-  if (!proc) throw new NotFoundError("Procedimiento no encontrado");
+  const procRaw = await repoGetProcedimientoForUpdate(opts.id);
+  if (!procRaw) throw new NotFoundError("Procedimiento no encontrado");
+  // Type assertion: TypeScript no infiere correctamente el tipo con include+select anidados
+  // pero sabemos que la query incluye estas relaciones según la definición en _repo.ts
+  type ProcWithRelations = {
+    idConsultaProcedimiento: number;
+    consultaId: number;
+    procedureId: number | null;
+    serviceType: string | null;
+    toothNumber: number | null;
+    toothSurface: string | null;
+    quantity: number;
+    unitPriceCents: number | null;
+    totalCents: number | null;
+    treatmentStepId: number | null;
+    resultNotes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    ConsultaAdjunto: Array<{ idConsultaAdjunto: number }>;
+    catalogo: { idProcedimiento: number; aplicaDiente: boolean; aplicaSuperficie: boolean; activo: boolean } | null;
+    consulta: {
+      citaId: number;
+      cita: { pacienteId: number; profesionalId: number };
+    };
+  };
+  const proc = procRaw as unknown as ProcWithRelations;
 
   // 3) Optimistic locking (si viene)
   if (patch.updatedAt) {
@@ -43,7 +68,7 @@ export async function servicePatchProcedimiento(opts: {
 
   if (patch.accion === "ANULAR") {
     // Regla ANULAR: neutraliza y conserva trazabilidad
-    const neutralData: any = {
+    const neutralData: Prisma.ConsultaProcedimientoUpdateInput = {
       procedureId: null,
       serviceType: null,
       toothNumber: null,
@@ -59,7 +84,7 @@ export async function servicePatchProcedimiento(opts: {
   }
 
   // ACCIÓN = ACTUALIZAR
-  const data: any = {};
+  const data: Prisma.ConsultaProcedimientoUpdateInput = {};
 
   // Cambios de catálogo / texto libre
   if (patch.procedureId !== undefined) {
@@ -70,6 +95,7 @@ export async function servicePatchProcedimiento(opts: {
       if (!cat || !cat.activo) throw new BadRequestError("procedureId inválido o inactivo");
       data.procedureId = patch.procedureId;
       // Validar diente/superficie si aplica más abajo con los valores resultantes
+      // Actualizar el catálogo en proc para las validaciones siguientes
       proc.catalogo = cat;
     }
   }
@@ -81,16 +107,16 @@ export async function servicePatchProcedimiento(opts: {
 
   const effectiveCatalog = patch.procedureId !== undefined ? (patch.procedureId ? (proc.catalogo ?? null) : null) : proc.catalogo;
 
-  if (effectiveCatalog?.aplicaDiente && (patch.toothNumber === undefined ? proc.toothNumber : patch.toothNumber) == null) {
+  if (effectiveCatalog?.aplicaDiente && toothNumber == null) {
     throw new BadRequestError("Este procedimiento requiere toothNumber");
   }
-  if (!effectiveCatalog?.aplicaDiente && patch.toothNumber != null) {
+  if (!effectiveCatalog?.aplicaDiente && toothNumber != null) {
     throw new BadRequestError("Este procedimiento no admite toothNumber");
   }
-  if (effectiveCatalog?.aplicaSuperficie && (patch.toothSurface === undefined ? proc.toothSurface : patch.toothSurface) == null) {
+  if (effectiveCatalog?.aplicaSuperficie && toothSurface == null) {
     throw new BadRequestError("Este procedimiento requiere toothSurface");
   }
-  if (!effectiveCatalog?.aplicaSuperficie && patch.toothSurface != null) {
+  if (!effectiveCatalog?.aplicaSuperficie && toothSurface != null) {
     throw new BadRequestError("Este procedimiento no admite toothSurface");
   }
 

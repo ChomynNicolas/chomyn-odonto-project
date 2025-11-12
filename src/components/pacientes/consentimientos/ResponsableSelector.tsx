@@ -39,9 +39,10 @@ export function ResponsableSelector({ pacienteId, value, onChange }: Responsable
       } else {
         setResponsables([])
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[v0] Error loading responsables:", error)
-      setError(error.message || "Error al cargar responsables")
+      const errorMessage = error instanceof Error ? error.message : "Error al cargar responsables"
+      setError(errorMessage)
       setResponsables([])
     } finally {
       setLoading(false)

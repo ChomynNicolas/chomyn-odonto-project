@@ -33,8 +33,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: allergy })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating allergy:", error)
-    return NextResponse.json({ ok: false, error: "Error al crear alergia" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al crear alergia"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

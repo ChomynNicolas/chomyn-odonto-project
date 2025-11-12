@@ -17,6 +17,20 @@ import type { CurrentUser, AgendaFilters, EstadoCita } from "@/types/agenda"
 import { cn } from "@/lib/utils"
 import { NuevaCitaSheet } from "./NuevaCitaSheet"
 
+// Tipo para las propiedades extendidas de los eventos de FullCalendar
+type CitaEventExtendedProps = {
+  consultorioColorHex?: string
+  estado?: EstadoCita
+  urgencia?: boolean
+  primeraVez?: boolean
+  planActivo?: boolean
+  tieneAlergias?: boolean
+  saldoPendiente?: boolean
+  profesionalNombre?: string
+  profesionalId?: number
+  consultorioNombre?: string
+}
+
 // Constantes de horario laboral (local)
 const WORK_START = "08:00"
 const WORK_END = "16:00"
@@ -113,7 +127,7 @@ export default function CitasCalendar({
         }
       })
 
-      const ext = arg.event.extendedProps as any
+      const ext = arg.event.extendedProps as CitaEventExtendedProps
       if (ext?.consultorioColorHex) {
         arg.el.style.borderLeft = `4px solid ${ext.consultorioColorHex}`
       }
@@ -216,7 +230,7 @@ export default function CitasCalendar({
 }
 
 function renderEventContent(arg: EventContentArg) {
-  const ext = arg.event.extendedProps as any
+  const ext = arg.event.extendedProps as CitaEventExtendedProps
   const estado: EstadoCita = ext?.estado ?? "SCHEDULED"
 
   // Chip de estado con color + patrón accesible

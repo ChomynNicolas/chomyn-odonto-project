@@ -7,7 +7,8 @@ import { PacienteCreateBodySchema } from "./_schemas";
 import { checkRateLimit } from "./_http";
 
 // In-memory idempotency cache (in production, use Redis)
-type CacheItem = { data: any; timestamp: number }
+type PacienteCreated = Awaited<ReturnType<typeof createPaciente>>
+type CacheItem = { data: PacienteCreated; timestamp: number }
 const idempotencyCache = new Map<string, CacheItem>()
 const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000 // 24 hours
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
           : searchParams.get("estaActivo") === "false"
             ? false
             : undefined,
-      sort: (searchParams.get("sort") as any) ?? "createdAt_desc",
+      sort: (searchParams.get("sort") as string) ?? "createdAt_desc",
       cursor: searchParams.get("cursor") ?? undefined,
       limit: Number.parseInt(searchParams.get("limit") ?? "20"),
     }
@@ -53,8 +54,6 @@ export async function POST(request: NextRequest) {
     // ✅ Rate-limit sencillo por IP y ruta (ajusta valores si querés)
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      
-      (request as any).ip ||
       "unknown"
     const rl = checkRateLimit(`POST:/api/pacientes:${ip}`, 50, 60_000) // 50 req/min/IP
     if (!rl.allowed) {

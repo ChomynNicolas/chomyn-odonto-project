@@ -46,8 +46,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: vitals })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating vital signs:", error)
-    return NextResponse.json({ ok: false, error: "Error al registrar signos vitales" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al registrar signos vitales"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

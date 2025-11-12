@@ -69,10 +69,11 @@ export function AddResponsableDialog({ open, onOpenChange, pacienteId, onSuccess
 
       reset()
       onSuccess()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[v0] Error creating responsable:", error)
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error al procesar la solicitud"
       toast.error("Error al agregar responsable", {
-        description: error.message || "Ocurrió un error al procesar la solicitud",
+        description: errorMessage,
       })
     }
   }
@@ -97,7 +98,10 @@ export function AddResponsableDialog({ open, onOpenChange, pacienteId, onSuccess
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="tipoDocumento">Tipo de documento</Label>
-              <Select value={tipoDocumento} onValueChange={(v) => setValue("tipoDocumento", v as any)}>
+              <Select
+                value={tipoDocumento}
+                onValueChange={(v) => setValue("tipoDocumento", v as "DNI" | "CEDULA" | "RUC" | "PASAPORTE")}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona" />
                 </SelectTrigger>
@@ -120,7 +124,10 @@ export function AddResponsableDialog({ open, onOpenChange, pacienteId, onSuccess
 
           <div className="space-y-2">
             <Label htmlFor="tipoVinculo">Tipo de vínculo</Label>
-            <Select value={tipoVinculo} onValueChange={(v) => setValue("tipoVinculo", v as any)}>
+            <Select
+              value={tipoVinculo}
+              onValueChange={(v) => setValue("tipoVinculo", v as "PADRE" | "MADRE" | "TUTOR" | "AUTORIZADO")}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona" />
               </SelectTrigger>

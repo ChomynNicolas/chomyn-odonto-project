@@ -16,15 +16,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     const dto = await getCitaDetail(id, rol)
     if (!dto) return errors.notFound("Cita no encontrada")
 
     const consentimientoStatus = await getCitaConsentimientoStatus(id)
     return ok({ ...dto, consentimientoStatus })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]]", e)
-    return errors.internal(e?.message ?? "Error al obtener cita")
+    return errors.internal(errorMessage ?? "Error al obtener cita")
   }
 }

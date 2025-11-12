@@ -51,7 +51,7 @@ export type ProcedimientoDetalleDTO = {
     mimeType: string;
     size: number;
     tipo: string;
-    metadata?: any;
+    metadata?: unknown;
     uploadedByUserId: number;
     createdAt: string;
   }>;

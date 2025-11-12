@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { normalizarTelefono, normalizarEmail, esMovilPY } from "@/lib/normalize"
 import { mapGeneroToDB, splitNombreCompleto } from "./_dto"
 import { withTxRetry } from "./_tx"
+import type { AllergySeverity } from "@prisma/client"
 
 export async function createPaciente(body: PacienteCreateBody, actorUserId: number) {
   const { nombres, apellidos } = splitNombreCompleto(body.nombreCompleto)
@@ -76,7 +77,7 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
     }
 
     // 3) Paciente (metadatos)
-    const notasJson: any = {}
+    const notasJson: Record<string, unknown> = {}
     if (body.ciudad) notasJson.ciudad = body.ciudad
     if (body.pais) notasJson.pais = body.pais
     if (body.observaciones) notasJson.observaciones = body.observaciones
@@ -139,8 +140,9 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
   // 6) Alergias (dedupe in-memory y createMany)
   if (alergiasArr.length > 0) {
     // dedupe por (allergyId|label) en memoria
-    const key = (a: any) => (a.id ? `id:${a.id}` : `label:${(a.label ?? "").trim().toLowerCase()}`)
-    const map = new Map<string, any>()
+    type AlergiaItem = { id?: number | null; label?: string | null; severity?: AllergySeverity; reaction?: string | null; notedAt?: string | Date | null; isActive?: boolean }
+    const key = (a: AlergiaItem) => (a.id ? `id:${a.id}` : `label:${(a.label ?? "").trim().toLowerCase()}`)
+    const map = new Map<string, AlergiaItem>()
     for (const a of alergiasArr) {
       if (!a.id && !a.label) continue
       map.set(key(a), a)
@@ -149,7 +151,7 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
       pacienteId: idPaciente,
       allergyId: a.id ?? null,
       label: (a.label ?? null),
-      severity: (a.severity as any) ?? "MODERATE",
+      severity: (a.severity as AllergySeverity) ?? "MODERATE",
       reaction: a.reaction ?? null,
       notedAt: a.notedAt ? new Date(a.notedAt) : new Date(),
       isActive: a.isActive ?? true,
@@ -171,8 +173,9 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
 
   // 7) Medicación (dedupe + createMany)
   if (medsArr.length > 0) {
-    const key = (m: any) => (m.id ? `id:${m.id}` : `label:${(m.label ?? "").trim().toLowerCase()}`)
-    const map = new Map<string, any>()
+    type MedicacionItem = { id?: number | null; label?: string | null; dose?: string | null; freq?: string | null; route?: string | null; startAt?: string | Date | null; endAt?: string | Date | null; isActive?: boolean }
+    const key = (m: MedicacionItem) => (m.id ? `id:${m.id}` : `label:${(m.label ?? "").trim().toLowerCase()}`)
+    const map = new Map<string, MedicacionItem>()
     for (const m of medsArr) {
       if (!m.id && !m.label) continue
       map.set(key(m), m)
@@ -225,7 +228,7 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
       entity: "Patient",
       entityId: idPaciente,
       actorId: actorUserId,
-      metadata: { nombreCompleto: body.nombreCompleto, documento: body.numeroDocumento } as any,
+      metadata: { nombreCompleto: body.nombreCompleto, documento: body.numeroDocumento } as Record<string, unknown>,
     },
   }).catch((e) => console.error("[warn] audit create failed", e))
 

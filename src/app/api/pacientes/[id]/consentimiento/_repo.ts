@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import { TipoConsentimiento } from "@prisma/client"
 
 export const consentimientoRepo = {
   // Verificar si paciente existe
@@ -43,7 +44,7 @@ export const consentimientoRepo = {
   buscarConsentimientoVigente: async (pacienteId: number, tipo: string, responsablePersonaId?: number) => {
     const where: Prisma.ConsentimientoWhereInput = {
       Paciente_idPaciente: pacienteId,
-      tipo: tipo as any,
+      tipo: tipo as TipoConsentimiento,
       activo: true,
       vigente_hasta: { gte: new Date() },
     }
@@ -88,7 +89,7 @@ export const consentimientoRepo = {
         Paciente_idPaciente: data.pacienteId,
         Persona_idPersona_responsable: data.responsablePersonaId,
         Cita_idCita: data.citaId,
-        tipo: data.tipo as any,
+        tipo: data.tipo as TipoConsentimiento,
         firmado_en: data.firmadoEn,
         vigente_hasta: data.vigenteHasta,
         public_id: data.publicId,
@@ -141,7 +142,7 @@ export const consentimientoRepo = {
     }
 
     if (params.tipo) {
-      where.tipo = params.tipo as any
+      where.tipo = params.tipo as TipoConsentimiento
     }
 
     if (params.vigente !== undefined) {

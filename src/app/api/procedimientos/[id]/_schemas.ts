@@ -36,6 +36,6 @@ export const PatchProcedimientoSchema = z.object({
 .refine(v => {
   // Si es ACTUALIZAR debe venir al menos un campo significativo
   if (v.accion !== "ACTUALIZAR") return true;
-  const keys = ["procedureId","serviceType","toothNumber","toothSurface","quantity","unitPriceCents","totalCents","treatmentStepId","resultNotes","updatedAt"];
-  return keys.some(k => (v as any)[k] !== undefined);
+  const keys: Array<keyof typeof v> = ["procedureId","serviceType","toothNumber","toothSurface","quantity","unitPriceCents","totalCents","treatmentStepId","resultNotes","updatedAt"];
+  return keys.some(k => v[k] !== undefined);
 }, { message: "No hay cambios para aplicar", path: ["accion"] });

@@ -107,7 +107,22 @@ export default function AdjuntosDropzone({ files, onChange, pacienteId, onBusyCh
     if (signed.publicId) form.append("public_id", signed.publicId)
 
     const xhr = new XMLHttpRequest()
-    const prom = new Promise<any>((resolve, reject) => {
+    const prom = new Promise<{
+      public_id: string
+      secure_url: string
+      bytes: number
+      format?: string
+      width?: number
+      height?: number
+      duration?: number
+      resource_type: string
+      folder?: string
+      original_filename?: string
+      etag?: string
+      version?: number
+      access_mode?: string
+      error?: { message?: string }
+    }>((resolve, reject) => {
       xhr.upload.onprogress = (ev) => {
         if (ev.lengthComputable) onProgress(Math.round((ev.loaded / ev.total) * 100))
       }
@@ -153,7 +168,7 @@ export default function AdjuntosDropzone({ files, onChange, pacienteId, onBusyCh
   }
 
   function validate(f: File) {
-    if (!ACCEPTED.includes(f.type as any)) throw new Error(`Tipo no permitido (${f.type}). Permitidos: ${ACCEPTED.join(", ")}`)
+    if (!ACCEPTED.includes(f.type as (typeof ACCEPTED)[number])) throw new Error(`Tipo no permitido (${f.type}). Permitidos: ${ACCEPTED.join(", ")}`)
     if (f.size > MAX_BYTES) throw new Error(`El archivo supera los ${MAX_MB}MB`)
   }
 
@@ -209,8 +224,9 @@ export default function AdjuntosDropzone({ files, onChange, pacienteId, onBusyCh
         } else {
           toast("Archivo subido", { description: `${f.name} (pendiente de asociar al paciente)` })
         }
-      } catch (err: any) {
-        toast.error("Error al subir adjunto", { description: err?.message ?? String(err) })
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        toast.error("Error al subir adjunto", { description: errorMessage })
       }
     }
     e.target.value = ""

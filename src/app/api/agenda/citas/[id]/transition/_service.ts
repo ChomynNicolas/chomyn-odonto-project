@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { logAudit } from "@/lib/audit/log"
 import type { CitaAction } from "./_schemas"
-import { EstadoCita, MotivoCancelacion } from "@prisma/client"
+import { EstadoCita, MotivoCancelacion, ConsultaEstado } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import { differenceInYears } from "date-fns"
 
 interface TransitionContext {
@@ -15,9 +16,16 @@ interface TransitionContext {
 }
 
 export async function executeCitaTransition(ctx: TransitionContext) {
+  // Obtener datos necesarios incluyendo profesionalId para crear consulta
   const cita = await prisma.cita.findUnique({
     where: { idCita: ctx.citaId },
-    select: { idCita: true, inicio: true, estado: true, pacienteId: true },
+    select: { 
+      idCita: true, 
+      inicio: true, 
+      estado: true, 
+      pacienteId: true,
+      profesionalId: true, // Necesario para crear consulta automáticamente
+    },
   })
   if (!cita) throw new Error("Cita no encontrada")
 
@@ -29,7 +37,7 @@ export async function executeCitaTransition(ctx: TransitionContext) {
   const newEstado = getNewEstado(cita.estado, ctx.action)
 
   const now = new Date()
-  const data: any = { estado: newEstado, updatedAt: now }
+  const data: Prisma.CitaUpdateInput = { estado: newEstado, updatedAt: now }
 
   switch (ctx.action) {
     case "CONFIRM":
@@ -55,8 +63,10 @@ export async function executeCitaTransition(ctx: TransitionContext) {
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    // 1. Actualizar estado de la cita
     const up = await tx.cita.update({ where: { idCita: ctx.citaId }, data })
 
+    // 2. Registrar cambio de estado en historial
     await tx.citaEstadoHistorial.create({
       data: {
         citaId: ctx.citaId,
@@ -67,6 +77,27 @@ export async function executeCitaTransition(ctx: TransitionContext) {
         changedAt: now,
       },
     })
+
+    // 3. Crear consulta automáticamente cuando se inicia la consulta (START)
+    if (ctx.action === "START") {
+      // Verificar si ya existe consulta (evitar duplicados)
+      const consultaExistente = await tx.consulta.findUnique({
+        where: { citaId: ctx.citaId },
+        select: { citaId: true },
+      })
+
+      if (!consultaExistente) {
+        await tx.consulta.create({
+          data: {
+            citaId: ctx.citaId,
+            performedById: cita.profesionalId,
+            createdByUserId: ctx.usuarioId,
+            status: ConsultaEstado.DRAFT,
+            startedAt: now, // Sincronizar con startedAt de la cita
+          },
+        })
+      }
+    }
 
     return up
   })
@@ -81,6 +112,7 @@ export async function executeCitaTransition(ctx: TransitionContext) {
       to: newEstado,
       notas: ctx.notas,
       motivoCancelacion: ctx.motivoCancelacion,
+      consultaCreada: ctx.action === "START", // Indicar si se creó consulta automáticamente
     },
     ip: ctx.ip,
     userAgent: ctx.userAgent,

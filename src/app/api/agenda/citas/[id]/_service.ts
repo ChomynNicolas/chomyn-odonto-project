@@ -1,12 +1,13 @@
 // app/api/agenda/citas/[id]/_service.ts
 import { PrismaClient, EstadoCita } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import type { CitaDetalleDTO, RolUsuario } from "@/types/agenda"
 
 const prisma = new PrismaClient()
 
 export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<CitaDetalleDTO | null> {
   // Select condicional para alergias
-  const patientAllergySelect: any = {
+  const patientAllergySelect: Prisma.PatientAllergyFindManyArgs = {
     where: { isActive: true },
     select: { idPatientAllergy: true, label: true },
   }
@@ -96,7 +97,7 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
   const alergiasDetalle =
     rol === "RECEP"
       ? null
-      : (cita.paciente.PatientAllergy?.map((a: any) => a.label).filter(Boolean).join(", ") || null)
+      : (cita.paciente.PatientAllergy?.map((a) => a.label).filter(Boolean).join(", ") || null)
 
   const noShowCount = cita.paciente.citas.length
 

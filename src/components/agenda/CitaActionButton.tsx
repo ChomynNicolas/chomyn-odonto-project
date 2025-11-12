@@ -54,10 +54,11 @@ export function CitaActionButton({ citaId, estadoActual, consentimientoStatus, o
       })
 
       onSuccess?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[v0] Error starting consultation:", error)
+      const errorMessage = error instanceof Error ? error.message : "No se pudo iniciar la consulta"
       toast.error("Error", {
-        description: error.message || "No se pudo iniciar la consulta",
+        description: errorMessage,
       })
     } finally {
       setLoading(false)

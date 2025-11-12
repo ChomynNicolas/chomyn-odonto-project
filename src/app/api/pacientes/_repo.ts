@@ -1,6 +1,6 @@
 // src/app/api/pacientes/_repo.ts
 import { prisma } from "@/lib/prisma";
-import type { Prisma, EstadoCita } from "@prisma/client";
+import type { Prisma, EstadoCita, Genero, TipoDocumento, RelacionPaciente } from "@prisma/client";
 import type { PacienteListFilters } from "@/lib/api/pacientes.types"
 import { getStartOfDayInTZ, getEndOfDayInTZ, isTodayInTZ } from "@/lib/date-utils"
 
@@ -89,13 +89,13 @@ export const pacienteRepo = {
       data: {
         nombres: data.nombres,
         apellidos: data.apellidos,
-        genero: data.genero as any,
+        genero: data.genero as Genero | null,
         fechaNacimiento: data.fechaNacimiento,
         direccion: data.direccion,
         estaActivo: true,
         documento: {
           create: {
-            tipo: (data.doc.tipo as any) ?? "CI",
+            tipo: (data.doc.tipo as TipoDocumento) ?? "CI",
             numero: data.doc.numero,
             ruc: data.doc.ruc ?? null,
             paisEmision: data.doc.paisEmision ?? "PY",
@@ -227,7 +227,7 @@ export const pacienteRepo = {
 
   createPaciente: (
     tx: Prisma.TransactionClient,
-    data: { personaId: number; notasJson: any }
+    data: { personaId: number; notasJson: Record<string, unknown> }
   ) =>
     tx.paciente.create({
       data: {
@@ -258,7 +258,7 @@ export const pacienteRepo = {
 
   linkResponsablePago: (
     tx: Prisma.TransactionClient,
-    data: { pacienteId: number; personaId: number; relacion: any; esPrincipal: boolean; autoridadLegal?: boolean }
+    data: { pacienteId: number; personaId: number; relacion: RelacionPaciente; esPrincipal: boolean; autoridadLegal?: boolean }
   ) => {
     // Determinar autoridad legal según la relación
     const tieneAutoridadLegal = pacienteRepo.tieneAutoridadLegal(data.relacion, data.autoridadLegal)
@@ -510,7 +510,7 @@ export async function createPaciente(data: {
         nombres: data.nombres,
         apellidos: data.apellidos,
         fechaNacimiento: data.fechaNacimiento,
-        genero: data.genero as any,
+        genero: data.genero as Genero | null,
         direccion: data.direccion,
       },
     })
@@ -520,7 +520,7 @@ export async function createPaciente(data: {
       await tx.documento.create({
         data: {
           personaId: persona.idPersona,
-          tipo: data.documento.tipo as any,
+          tipo: data.documento.tipo as TipoDocumento,
           numero: data.documento.numero,
           paisEmision: data.documento.paisEmision ?? "PY",
         },

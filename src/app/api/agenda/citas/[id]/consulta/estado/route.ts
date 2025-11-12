@@ -5,6 +5,7 @@ import { ok, errors } from "@/app/api/_http"
 import { paramsSchema, updateConsultaStatusSchema } from "../_schemas"
 import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 
 /**
  * PUT /api/agenda/citas/[id]/consulta/estado
@@ -18,7 +19,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden actualizar el estado de la consulta")
@@ -33,7 +34,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     })
     if (!consulta) return errors.notFound("Consulta no encontrada")
 
-    const updateData: any = {
+    const updateData: Prisma.ConsultaUpdateInput = {
       status: input.status,
     }
     if (input.startedAt) updateData.startedAt = new Date(input.startedAt)
@@ -50,10 +51,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       startedAt: updated.startedAt?.toISOString() ?? null,
       finishedAt: updated.finishedAt?.toISOString() ?? null,
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }> }
+      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[PUT /api/agenda/citas/[id]/consulta/estado]", e)
-    return errors.internal(e?.message ?? "Error al actualizar estado de consulta")
+    return errors.internal(errorMessage ?? "Error al actualizar estado de consulta")
   }
 }
 

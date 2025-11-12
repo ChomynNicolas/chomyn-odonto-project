@@ -20,11 +20,12 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle } from "lucide-react"
+import Image from "next/image"
 import { toast } from "sonner"
 import { ResponsableSelector } from "./ResponsableSelector"
 
 const uploadSchema = z.object({
-  responsablePersonaId: z.number({ required_error: "Selecciona un responsable" }),
+  responsablePersonaId: z.number().min(1, "Selecciona un responsable"),
   firmadoEn: z.string().min(1, "La fecha de firma es requerida"),
   observaciones: z.string().optional(),
   file: z.instanceof(File, { message: "Selecciona un archivo" }),
@@ -187,10 +188,11 @@ export function UploadConsentDialog({ open, onOpenChange, pacienteId, citaId, on
       setSelectedFile(null)
       setPreviewUrl(null)
       onSuccess()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[v0] Error uploading consent:", error)
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error al procesar el archivo"
       toast.error("Error al subir consentimiento", {
-        description: error.message || "Ocurrió un error al procesar el archivo",
+        description: errorMessage,
       })
     } finally {
       setUploading(false)
@@ -252,11 +254,13 @@ export function UploadConsentDialog({ open, onOpenChange, pacienteId, citaId, on
                 </Alert>
               )}
               {previewUrl && (
-                <div className="overflow-hidden rounded-lg border">
-                  <img
-                    src={previewUrl || "/placeholder.svg"}
+                <div className="relative h-48 w-full overflow-hidden rounded-lg border bg-muted/30">
+                  <Image
+                    src={previewUrl}
                     alt="Preview"
-                    className="h-48 w-full object-contain bg-muted/30"
+                    fill
+                    className="object-contain"
+                    sizes="(max-width: 768px) 100vw, 50vw"
                   />
                 </div>
               )}

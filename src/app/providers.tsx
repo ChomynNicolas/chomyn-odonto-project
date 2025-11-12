@@ -23,7 +23,10 @@ export function Providers({ children, initialSession }: ProvidersProps) {
             staleTime: 30_000,
             gcTime: 5 * 60_000,
             refetchOnWindowFocus: false,
-            retry: (failureCount, error: any) => (error?.status === 404 ? false : failureCount < 2),
+            retry: (failureCount, error: unknown) => {
+              const status = (error as { status?: number })?.status;
+              return status === 404 ? false : failureCount < 2;
+            },
           },
         },
       }),

@@ -6,11 +6,31 @@ import { normalizeEmail, normalizePhonePY } from "@/lib/normalize";
 import { canCreatePaciente, canUpdatePaciente, canDeletePaciente, type Rol } from "@/lib/rbac";
 import { pacienteCreateSchema, pacienteUpdateSchema, pacienteDeleteSchema, type PacienteCreateDTO, type PacienteUpdateDTO, type PacienteDeleteDTO } from "@/lib/schema/paciente";
 import { auth } from "@/auth";
+import type { Prisma } from "@prisma/client";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string; fieldErrors?: Record<string,string> };
 
 function assertRol(r?: string): asserts r is Rol {
   if (!r || !["ADMIN","ODONT","RECEP"].includes(r)) throw new Error("Rol inválido");
+}
+
+function isPrismaUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestError {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "code" in e &&
+    typeof (e as { code: unknown }).code === "string" &&
+    (e as { code: string }).code === "P2002"
+  );
+}
+
+function isErrorWithMessage(e: unknown): e is { message: string } {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "message" in e &&
+    typeof (e as { message: unknown }).message === "string"
+  );
 }
 
 function packNotas(datosClinicos?: PacienteCreateDTO["datosClinicos"]) {
@@ -145,9 +165,9 @@ export async function createPaciente(input: PacienteCreateDTO): Promise<ActionRe
     revalidatePath("/pacientes");
     revalidatePath(`/pacientes/${result.idPaciente}`);
     return { ok:true, data: result };
-  } catch (e: any) {
+  } catch (e: unknown) {
     // manejar violaciones únicas (documento/contacto)
-    const msg = e?.code === "P2002" ? "Conflicto de unicidad (documento/contacto ya existe)" : "Error al registrar el paciente";
+    const msg = isPrismaUniqueError(e) ? "Conflicto de unicidad (documento/contacto ya existe)" : "Error al registrar el paciente";
     return { ok:false, error: msg };
   }
 }
@@ -277,8 +297,8 @@ export async function updatePaciente(input: PacienteUpdateDTO): Promise<ActionRe
     revalidatePath("/pacientes");
     revalidatePath(`/pacientes/${dto.idPaciente}`);
     return { ok:true, data: { idPaciente: result.idPaciente } };
-  } catch (e: any) {
-    const msg = e?.message?.includes("Conflicto de versión") ? e.message : "Error al actualizar el paciente";
+  } catch (e: unknown) {
+    const msg = isErrorWithMessage(e) && e.message.includes("Conflicto de versión") ? e.message : "Error al actualizar el paciente";
     return { ok:false, error: msg };
   }
 }

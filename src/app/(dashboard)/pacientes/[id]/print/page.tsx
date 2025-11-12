@@ -28,7 +28,7 @@ export default async function PatientPrintPage({ params }: { params: { id: strin
 
   const user = {
     id: Number(session.user.id),
-    role: (session.user as any).rolNombre || "RECEP",
+    role: (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
   } as const
 
   // 2) Verificación de acceso y permisos
@@ -53,7 +53,7 @@ export default async function PatientPrintPage({ params }: { params: { id: strin
     demo.birthDate && typeof demo.age === "number"
       ? `${formatDate(demo.birthDate)} (${demo.age} años)`
       : "—"
-  const genderStr = demo.gender ? formatGender(demo.gender as any) : "No especificado"
+  const genderStr = demo.gender ? formatGender(demo.gender as "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO") : "No especificado"
 
   const primaryPhone = demo.contacts.primaryPhone?.valueNorm
   const primaryEmail = demo.contacts.primaryEmail?.valueNorm

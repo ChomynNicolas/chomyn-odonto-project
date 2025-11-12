@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
   // Compatibilidad: si viene "inicio" en lugar de "inicioISO", convertir
   if (body && typeof body === "object" && "inicio" in body && !("inicioISO" in body)) {
-    const b = body as any;
+    const b = body as { inicio?: string | Date; inicioISO?: string };
     if (typeof b.inicio === "string" || b.inicio instanceof Date) {
       b.inicioISO = typeof b.inicio === "string" ? b.inicio : b.inicio.toISOString();
     }
@@ -70,7 +70,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   }
 
   try {
-    const userId = (auth.session.user as any)?.idUsuario ?? (auth.session.user as any)?.id;
+    const userId = auth.session.user.id;
     if (!userId) {
       return NextResponse.json({ ok: false, error: "UNAUTHORIZED", code: "UNAUTHORIZED" }, { status: 401 });
     }
@@ -115,13 +115,14 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
     // 201 Created: mutación que crea un recurso nuevo vinculado
     return NextResponse.json({ ok: true, data: result.data }, { status: 201 });
-  } catch (e: any) {
+  } catch (e: unknown) {
     const handlerTime = performance.now() - handlerStart;
-    const code = e?.code as string | undefined;
+    const code = (e as { code?: string })?.code;
+    const errorMessage = e instanceof Error ? e.message : String(e);
 
     console.error(
       `[PUT /api/agenda/citas/${parsedParams.data.id}/reprogramar] EXCEPTION ${code || "UNKNOWN"} - Handler: ${handlerTime.toFixed(2)}ms`,
-      e?.message
+      errorMessage
     );
 
     if (code === "P2003") {

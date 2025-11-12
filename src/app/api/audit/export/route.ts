@@ -51,8 +51,9 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ ok: true })
-  } catch (error: any) {
-    console.error("POST /api/audit/export error:", error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error("POST /api/audit/export error:", errorMessage)
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
 }

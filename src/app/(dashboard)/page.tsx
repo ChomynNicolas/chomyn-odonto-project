@@ -15,7 +15,7 @@ export default async function DashboardPage({
 }: { searchParams?: Promise<{ tab?: DashboardTab; [k: string]: string | undefined }> }) {
   const session = await auth()
   if (!session) redirect("/signin")
-  const role = ((session.user as any)?.role ?? "RECEP") as Rol
+  const role: Rol = (session.user.role ?? "RECEP") as Rol
 
   const params = await searchParams
   const urlTab = params?.tab as DashboardTab | undefined

@@ -11,7 +11,7 @@ function canList(role?: string) {
 }
 
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     // Auth + RBAC
     const session = await auth();
@@ -20,7 +20,7 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
     if (!canList(role)) return NextResponse.json(fail("No autorizado"), { status: 403 });
 
     // Params + Query
-    const { id: citaId } = ParamIdSchema.parse(ctx.params);
+    const { id: citaId } = ParamIdSchema.parse(await ctx.params);
     const { searchParams } = new URL(req.url);
     const query = ListQuerySchema.parse({
       limit: searchParams.get("limit") ?? undefined,
@@ -32,9 +32,10 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
 
     const data = await serviceListProcedimientosByCita({ citaId, query });
     return NextResponse.json(ok(data), { status: 200 });
-  } catch (err: any) {
-    if (err?.name === "ZodError") {
-      return NextResponse.json(fail("Parámetros inválidos", err.flatten()), { status: 400 });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "ZodError") {
+      const zodError = err as unknown as { flatten: () => unknown };
+      return NextResponse.json(fail("Parámetros inválidos", zodError.flatten()), { status: 400 });
     }
     if (err instanceof HttpError) {
       return NextResponse.json(fail(err.message, err.details), { status: err.status });
@@ -45,7 +46,7 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
 }
 
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     // Auth + RBAC
     const session = await auth();
@@ -56,24 +57,26 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     if (!canCreateProcedure(role)) return NextResponse.json(fail("No autorizado"), { status: 403 });
 
     // Params + Body (validación temprana)
-    const { id: citaId } = ParamIdSchema.parse(ctx.params);
+    const { id: citaId } = ParamIdSchema.parse(await ctx.params);
     const body = await req.json();
     const dto = CrearProcedimientoSchema.parse(body);
 
     // Servicio
     const created = await serviceCreateProcedureForCita({ citaId, dto, userId });
     return NextResponse.json(ok(created), { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Zod
-    if (err?.name === "ZodError") {
-      return NextResponse.json(fail("Datos inválidos", err.flatten()), { status: 400 });
+    if (err instanceof Error && err.name === "ZodError") {
+      const zodError = err as unknown as { flatten: () => unknown };
+      return NextResponse.json(fail("Datos inválidos", zodError.flatten()), { status: 400 });
     }
     // HttpErrors propias
     if (err instanceof HttpError) {
       return NextResponse.json(fail(err.message, err.details), { status: err.status });
     }
     // Prisma FK, etc.
-    if (err?.code === "P2003") {
+    const code = (err as { code?: string })?.code;
+    if (code === "P2003") {
       return NextResponse.json(fail("Referencia inválida (FK)"), { status: 400 });
     }
     console.error("POST /api/agenda/citas/[id]/procedimientos", err);

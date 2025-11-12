@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
-import type { AdjuntoTipo, AccessMode } from "@prisma/client"
+import type { AdjuntoTipo, AccessMode, Prisma } from "@prisma/client"
 
 const CreateAdjuntoSchema = z.object({
   publicId: z.string(),
@@ -60,7 +60,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // 1. Direct attachments (pacienteId = pacienteId)
     // 2. Attachments from consultations (consulta.cita.pacienteId = pacienteId)
     // 3. Attachments from procedures (procedimiento.consulta.cita.pacienteId = pacienteId)
-    const where: any = {
+    const where: Prisma.AdjuntoWhereInput = {
       isActive: true,
       OR: [
         // Direct patient attachments
@@ -225,7 +225,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       // Determine context (patient direct, consultation, or procedure)
       let context: "patient" | "consultation" | "procedure" = "patient"
       let contextId: number | null = null
-      let contextInfo: any = null
+      let contextInfo: { consultaId: number; consultaFecha: string } | { consultaFecha: string; consultaTipo: string } | null = null
 
       if (a.procedimiento) {
         context = "procedure"
@@ -274,14 +274,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Map consentimientos to response format (as attachments)
     // Note: Consentimientos are typically stored with PUBLIC access, but we'll handle them the same way
     const mappedConsentimientos = consentimientos.map((c) => {
-      // Get base URL from request or environment variable (not used for consentimientos, but kept for consistency)
-      const url = new URL(req.url)
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${url.protocol}//${url.host}`
-      
       // Consentimientos are typically PDFs, so we might not have thumbnails
       // But if they do have dimensions, generate thumbnail URL
       let thumbnailUrl: string | null = null
-      let secureUrl: string = c.secure_url
+      const secureUrl: string = c.secure_url
 
       // For consentimientos, we'll use direct URLs since they're typically PUBLIC
       // But if needed, we can create a similar proxy endpoint for consentimientos
@@ -292,7 +288,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       // Determine context (patient direct or consultation)
       let context: "patient" | "consultation" | "procedure" = "patient"
       let contextId: number | null = null
-      let contextInfo: any = null
+      let contextInfo: { consultaFecha: string; consultaTipo: string } | null = null
 
       if (c.cita) {
         context = "consultation"

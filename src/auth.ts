@@ -40,30 +40,59 @@ export const {
         password: { label: "Contraseña", type: "password" },
       },
       async authorize(creds) {
+        try {
+          const parsed = CredentialsSchema.safeParse(creds)
 
-        const parsed = CredentialsSchema.safeParse(creds)
+          if (!parsed.success) {
+            console.error("[auth] Invalid credentials format:", parsed.error)
+            return null
+          }
+          
+          const { usuario, password } = parsed.data
 
-        if (!parsed.success) return null
-        const { usuario, password } = parsed.data
+          const dbUser = await prisma.usuario.findUnique({
+            where: { usuario: usuario.toLowerCase() },
+            include: { rol: true },
+          })
+          
+          if (!dbUser) {
+            console.error(`[auth] User not found: ${usuario.toLowerCase()}`)
+            return null
+          }
 
-        const dbUser = await prisma.usuario.findUnique({
-          where: { usuario: usuario.toLowerCase() },
-          include: { rol: true },
-        })
-        if (!dbUser) return null
+          if (!dbUser.estaActivo) {
+            console.error(`[auth] User is inactive: ${usuario.toLowerCase()}`)
+            return null
+          }
 
-        const ok = await bcrypt.compare(password, dbUser.passwordHash)
-        if (!ok) return null
+          const ok = await bcrypt.compare(password, dbUser.passwordHash)
+          if (!ok) {
+            console.error(`[auth] Invalid password for user: ${usuario.toLowerCase()}`)
+            return null
+          }
 
-        // ✅ Devuelve un "UserWithRole" estricto (sin any)
-        const user: UserWithRole = {
-          id: String(dbUser.idUsuario),
-          name: dbUser.nombreApellido ?? null,
-          email: dbUser.email ?? undefined,
-          role: dbUser.rol.nombreRol as AppRole,
-          username: dbUser.usuario,
+          // ✅ Devuelve un "UserWithRole" estricto (sin any)
+          const user: UserWithRole = {
+            id: String(dbUser.idUsuario),
+            name: dbUser.nombreApellido ?? null,
+            email: dbUser.email ?? undefined,
+            role: dbUser.rol.nombreRol as AppRole,
+            username: dbUser.usuario,
+          }
+          
+          // Actualizar último login
+          await prisma.usuario.update({
+            where: { idUsuario: dbUser.idUsuario },
+            data: { ultimoLoginAt: new Date() },
+          }).catch(() => {
+            // Ignorar errores al actualizar último login
+          })
+          
+          return user
+        } catch (error) {
+          console.error("[auth] Error during authorization:", error)
+          return null
         }
-        return user
       },
     }),
   ],

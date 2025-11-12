@@ -26,9 +26,10 @@ export async function GET(req: NextRequest, ctx: { params: { id: string; consent
     }
 
     return ok(consentimiento)
-  } catch (e: any) {
-    safeLog("error", "Error getting consent", { requestId, error: e?.message })
-    return errors.internal(e?.message ?? "Error al obtener consentimiento")
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error getting consent", { requestId, error: errorMessage })
+    return errors.internal(errorMessage ?? "Error al obtener consentimiento")
   }
 }
 
@@ -57,11 +58,13 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string; cons
     safeLog("info", "Consent revoked successfully", { requestId, consentimientoId })
 
     return ok({ success: true, message: "Consentimiento revocado correctamente" })
-  } catch (e: any) {
-    safeLog("error", "Error revoking consent", { requestId, error: e?.message })
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error revoking consent", { requestId, error: errorMessage })
 
-    if (e?.name === "ZodError") {
-      return errors.validation(e.issues?.[0]?.message ?? "Datos inválidos")
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { issues?: Array<{ message?: string }> }
+      return errors.validation(zodError.issues?.[0]?.message ?? "Datos inválidos")
     }
 
     if (e instanceof ConsentimientoError) {
@@ -69,6 +72,6 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string; cons
       return errors.apiError?.(e.status, e.code, e.message, e.extra) ?? errors.internal(e.message)
     }
 
-    return errors.internal(e?.message ?? "Error al revocar consentimiento")
+    return errors.internal(errorMessage ?? "Error al revocar consentimiento")
   }
 }

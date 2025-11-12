@@ -47,14 +47,17 @@ export default function EditarPacientePage() {
         }
 
         // Transform API data to form format
+        type Contacto = { tipo: "PHONE" | "EMAIL"; valorNorm?: string | null }
+        const contactos = (data.persona?.contactos ?? []) as Contacto[]
+        
         setPatientData({
           nombreCompleto: nombreCompleto || "Sin nombre",
           genero: data.persona?.genero || "NO_DECLARA",
           fechaNacimiento: data.persona?.fechaNacimiento || undefined,
           dni: data.persona?.documento?.numero || "",
           ruc: data.persona?.documento?.ruc || "",
-          telefono: data.persona?.contactos?.find((c: any) => c.tipo === "PHONE")?.valorNorm || "",
-          email: data.persona?.contactos?.find((c: any) => c.tipo === "EMAIL")?.valorNorm || "",
+          telefono: contactos.find((c) => c.tipo === "PHONE")?.valorNorm || "",
+          email: contactos.find((c) => c.tipo === "EMAIL")?.valorNorm || "",
           domicilio: data.persona?.direccion || "",
           ...notasData,
         })

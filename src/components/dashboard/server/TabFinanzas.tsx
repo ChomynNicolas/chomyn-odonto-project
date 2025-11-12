@@ -24,7 +24,7 @@ export default async function TabFinanzas({ role }: { role: Rol }) {
     )
   }
 
-  const userId = (session.user as any)?.id ?? 0
+  const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
   const now = new Date()
   const startDate = startOfMonth(now)

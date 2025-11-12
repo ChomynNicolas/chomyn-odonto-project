@@ -33,8 +33,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: diagnosis })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating diagnosis:", error)
-    return NextResponse.json({ ok: false, error: "Error al crear diagnóstico" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al crear diagnóstico"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { PrismaClient, EstadoCita } from "@prisma/client";
+import { PrismaClient, EstadoCita, Prisma } from "@prisma/client";
 import { requireSessionWithRoles } from "@/app/api/_lib/auth";
 
 export const revalidate = 0;
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
   } = parsed.data;
 
   try {
-    const where: any = {
+    const where: Prisma.CitaWhereInput = {
       inicio: { lt: end },
       fin: { gt: start },
     };
@@ -177,8 +177,10 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.json({ ok: true, data: filtered }, { status: 200 });
     res.headers.set("Cache-Control", "no-store");
     return res;
-  } catch (e: any) {
-    console.error("GET /api/agenda/citas/calendar error:", e?.code || e?.message);
+  } catch (e: unknown) {
+    const errorCode = (e as { code?: string })?.code
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    console.error("GET /api/agenda/citas/calendar error:", errorCode || errorMessage);
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

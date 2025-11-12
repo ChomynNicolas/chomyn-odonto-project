@@ -6,6 +6,7 @@ import { z } from "zod"
 import { CONSULTA_RBAC } from "../../_rbac"
 import { prisma } from "@/lib/prisma"
 import { updateProcedureSchema } from "../../_schemas"
+import type { Prisma } from "@prisma/client"
 
 const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -24,7 +25,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden editar procedimientos")
@@ -42,7 +43,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     })
     if (!procedimiento) return errors.notFound("Procedimiento no encontrado")
 
-    const updateData: any = {}
+    const updateData: Prisma.ConsultaProcedimientoUpdateInput = {}
     if (input.quantity !== undefined) updateData.quantity = input.quantity
     if (input.unitPriceCents !== undefined) updateData.unitPriceCents = input.unitPriceCents
     if (input.totalCents !== undefined) {
@@ -75,10 +76,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     })
-  } catch (e: any) {
-    if (e.name === "ZodError") return errors.validation(e.errors[0]?.message ?? "Datos inválidos")
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { errors?: Array<{ message?: string }> }
+      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+    }
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[PUT /api/agenda/citas/[id]/consulta/procedimientos/[procedimientoId]]", e)
-    return errors.internal(e?.message ?? "Error al actualizar procedimiento")
+    return errors.internal(errorMessage ?? "Error al actualizar procedimiento")
   }
 }
 
@@ -94,7 +99,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
-    const rol = ((session.user as any)?.rol ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden eliminar procedimientos")
@@ -113,9 +118,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     })
 
     return ok({ deleted: true })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[DELETE /api/agenda/citas/[id]/consulta/procedimientos/[procedimientoId]]", e)
-    return errors.internal(e?.message ?? "Error al eliminar procedimiento")
+    return errors.internal(errorMessage ?? "Error al eliminar procedimiento")
   }
 }
 

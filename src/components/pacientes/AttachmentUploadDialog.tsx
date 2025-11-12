@@ -11,7 +11,6 @@ import { Progress } from "@/components/ui/progress"
 import { Upload, X, FileText, ImageIcon, Loader2 } from "lucide-react"
 import type { AttachmentType } from "@/lib/types/patient"
 import { useCreateAttachment } from "@/hooks/useAttachments"
-import { getAttachmentTypeLabel } from "@/lib/api/attachments-api"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -61,7 +60,7 @@ export function AttachmentUploadDialog({
     }
 
     // Validate file type
-    if (!ACCEPTED_TYPES.includes(selectedFile.type as any)) {
+    if (!ACCEPTED_TYPES.includes(selectedFile.type as (typeof ACCEPTED_TYPES)[number])) {
       toast.error("Tipo de archivo no soportado", {
         description: "Solo se permiten imágenes y PDFs",
       })
@@ -174,10 +173,11 @@ export function AttachmentUploadDialog({
       setUploadProgress(0)
       onOpenChange(false)
       onSuccess?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error uploading attachment:", error)
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error al subir el archivo"
       toast.error("Error al subir archivo", {
-        description: error.message || "Ocurrió un error al subir el archivo",
+        description: errorMessage,
       })
     } finally {
       setIsUploading(false)

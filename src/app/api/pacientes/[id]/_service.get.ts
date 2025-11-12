@@ -38,7 +38,7 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
     alergias?: string | null
     medicacion?: string | null
     obraSocial?: string | null
-  }>(base.notas as any, {})
+  }>(base.notas as unknown, {})
 
   // Map citas
   const toCitaLite = (c: (typeof base.citas)[number]): CitaLite => ({

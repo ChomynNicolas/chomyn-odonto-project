@@ -1,18 +1,11 @@
 // src/app/api/agenda/citas/[id]/consulta/_service.ts
 import { prisma } from "@/lib/prisma"
 import { ConsultaEstado } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import type {
   ConsultaClinicaDTO,
-  AnamnesisDTO,
-  DiagnosticoDTO,
-  ProcedimientoDTO,
-  MedicacionDTO,
-  AdjuntoDTO,
-  OdontogramaDTO,
-  PeriodontogramaDTO,
   ConsultaAdminDTO,
 } from "./_dto"
-import type { CreateAnamnesisInput, CreateDiagnosisInput, CreateProcedureInput, CreateMedicationInput, CreateOdontogramInput, CreatePeriodontogramInput } from "./_schemas"
 
 const userMiniSelect = {
   idUsuario: true,
@@ -30,7 +23,9 @@ const userMiniSelect = {
   },
 } as const
 
-function displayUser(user: any): string {
+type UserMini = Prisma.UsuarioGetPayload<{ select: typeof userMiniSelect }>
+
+function displayUser(user: UserMini | null | undefined): string {
   if (!user) return "Usuario"
   const p = user.profesional?.persona
   if (p?.nombres || p?.apellidos) {
@@ -120,16 +115,23 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
         orderBy: { takenAt: "desc" },
         take: 1,
       },
+      PatientVitals: {
+        include: {
+          createdBy: {
+            select: userMiniSelect,
+          },
+        },
+        orderBy: { measuredAt: "desc" },
+      },
     },
   })
 
   if (!consulta) return null
 
-  // Obtener medicaciones del paciente asociadas a esta consulta
+  // Obtener medicaciones del paciente activas (mostrar todas las activas)
   const medicaciones = await prisma.patientMedication.findMany({
     where: {
       pacienteId: consulta.cita.pacienteId,
-      consultaId: citaId,
       isActive: true,
     },
     include: {
@@ -140,8 +142,53 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
     orderBy: { startAt: "desc" },
   })
 
+  // Obtener vitales de la consulta, o si no hay, obtener el último del paciente
+  type VitalWithUser = Prisma.PatientVitalsGetPayload<{
+    include: {
+      createdBy: { select: typeof userMiniSelect }
+    }
+  }>
+  
+  let vitales: VitalWithUser[] = consulta.PatientVitals
+  if (!vitales || vitales.length === 0) {
+    // Si no hay vitales en la consulta, obtener el último registro del paciente
+    const pacienteVitals = await prisma.patientVitals.findFirst({
+      where: {
+        pacienteId: consulta.cita.pacienteId,
+      },
+      include: {
+        createdBy: {
+          select: userMiniSelect,
+        },
+      },
+      orderBy: { measuredAt: "desc" },
+    })
+    if (pacienteVitals) {
+      vitales = [pacienteVitals]
+    } else {
+      vitales = []
+    }
+  }
+
+  // Obtener alergias activas del paciente
+  const alergias = await prisma.patientAllergy.findMany({
+    where: {
+      pacienteId: consulta.cita.pacienteId,
+      isActive: true,
+    },
+    include: {
+      allergyCatalog: {
+        select: {
+          name: true,
+        },
+      },
+    },
+    orderBy: { notedAt: "desc" },
+  })
+
   const dto: ConsultaClinicaDTO = {
     citaId: consulta.citaId,
+    pacienteId: consulta.cita.pacienteId,
     status: consulta.status,
     startedAt: consulta.startedAt?.toISOString() ?? null,
     finishedAt: consulta.finishedAt?.toISOString() ?? null,
@@ -154,6 +201,11 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
     },
     createdAt: consulta.createdAt.toISOString(),
     updatedAt: consulta.updatedAt.toISOString(),
+    
+    // Estado de la cita para sincronización
+    citaEstado: consulta.cita.estado,
+    citaInicio: consulta.cita.inicio.toISOString(),
+    citaFin: consulta.cita.fin.toISOString(),
 
     anamnesis: consulta.ClinicalHistoryEntry.map((e) => ({
       id: e.idClinicalHistoryEntry,
@@ -271,6 +323,31 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
           })),
         }
       : null,
+
+    vitales: vitales.map((v) => ({
+      id: v.idPatientVitals,
+      measuredAt: v.measuredAt.toISOString(),
+      heightCm: v.heightCm,
+      weightKg: v.weightKg,
+      bmi: v.bmi,
+      bpSyst: v.bpSyst,
+      bpDiast: v.bpDiast,
+      heartRate: v.heartRate,
+      notes: v.notes,
+      createdBy: {
+        id: v.createdBy.idUsuario,
+        nombre: displayUser(v.createdBy),
+      },
+    })),
+
+    alergias: alergias.map((a) => ({
+      id: a.idPatientAllergy,
+      label: a.label ?? a.allergyCatalog?.name ?? "Alergia desconocida",
+      severity: a.severity,
+      reaction: a.reaction,
+      notedAt: a.notedAt.toISOString(),
+      isActive: a.isActive,
+    })),
   }
 
   return dto

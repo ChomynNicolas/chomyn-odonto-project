@@ -1,8 +1,6 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState } from "react"
 import { Dropdown } from "@/components/ui/dropdown/Dropdown";
 import { DropdownItem } from "@/components/ui/dropdown/DropdownItem";
 import { MoreDotIcon } from "@/icons";

@@ -13,7 +13,7 @@ import type {
   DashboardKpiResponse,
   CitaAtrasadaItem,
 } from "./_dto"
-import type { EstadoCita } from "@prisma/client"
+import type { EstadoCita, TipoCita, Genero } from "@prisma/client"
 
 
 import type { Role } from "@/app/api/_lib/auth"
@@ -44,7 +44,7 @@ export async function buildDashboardKpi(
   const ahora = new Date()
 
   // Scopes por rol
-  const scopeCita: any = { inicio: { gte: desde, lte: hasta } }
+  const scopeCita: Prisma.CitaWhereInput = { inicio: { gte: desde, lte: hasta } }
   if (role === "ODONT" && params.profesionalId) scopeCita.profesionalId = params.profesionalId
   if (role !== "ADMIN" && params.consultorioId) scopeCita.consultorioId = params.consultorioId
 
@@ -396,11 +396,11 @@ function buildCitaWhereClause(filters: KpiFilters, startDate: Date, endDate: Dat
   }
 
   if (filters.tipoCita?.length) {
-    where.tipo = { in: filters.tipoCita as any[] }
+    where.tipo = { in: filters.tipoCita as TipoCita[] }
   }
 
   if (filters.estadoCita?.length) {
-    where.estado = { in: filters.estadoCita as any[] }
+    where.estado = { in: filters.estadoCita as EstadoCita[] }
   }
 
   // Filtros demográficos del paciente
@@ -410,7 +410,7 @@ function buildCitaWhereClause(filters: KpiFilters, startDate: Date, endDate: Dat
     }
 
     if (filters.genero?.length) {
-      where.paciente.persona.genero = { in: filters.genero as any[] }
+      where.paciente.persona.genero = { in: filters.genero as Genero[] }
     }
 
     // Edad se calcula en aplicación, no en query (complejo en SQL)
@@ -490,7 +490,13 @@ interface AgendaMetrics {
   sameDayCancellations: number
 }
 
-function calculateAgendaMetrics(citas: any[]): AgendaMetrics {
+type CitaWithHistorial = Prisma.CitaGetPayload<{
+  include: {
+    CitaEstadoHistorial: true;
+  };
+}>;
+
+function calculateAgendaMetrics(citas: CitaWithHistorial[]): AgendaMetrics {
   const programados = citas.length
   const completados = citas.filter((c) => c.estado === "COMPLETED").length
   const cancelados = citas.filter((c) => c.estado === "CANCELLED").length
@@ -498,7 +504,7 @@ function calculateAgendaMetrics(citas: any[]): AgendaMetrics {
   const reprogramados = citas.filter((c) => c.reprogramadaDesdeId !== null).length
 
   // Confirmación: citas que tuvieron transición a CONFIRMED
-  const confirmados = citas.filter((c) => c.CitaEstadoHistorial.some((h: any) => h.estadoNuevo === "CONFIRMED")).length
+  const confirmados = citas.filter((c) => c.CitaEstadoHistorial.some((h) => h.estadoNuevo === "CONFIRMED")).length
 
   // Lead time: promedio de (inicio - createdAt) en días
   const leadTimes = citas.map((c) => differenceInDays(new Date(c.inicio), new Date(c.createdAt))).filter((d) => d >= 0)
@@ -623,11 +629,19 @@ async function calculateUtilizacionKpis(filters: KpiFilters, startDate: Date, en
   }
 }
 
-function detectarConflictos(citas: any[]): number {
+type CitaForConflict = {
+  idCita: number;
+  inicio: Date;
+  fin: Date;
+  profesionalId: number;
+  consultorioId: number | null;
+};
+
+function detectarConflictos(citas: CitaForConflict[]): number {
   let conflictos = 0
 
   // Agrupar por profesional
-  const citasPorProfesional = new Map<number, any[]>()
+  const citasPorProfesional = new Map<number, CitaForConflict[]>()
   for (const cita of citas) {
     if (!citasPorProfesional.has(cita.profesionalId)) {
       citasPorProfesional.set(cita.profesionalId, [])

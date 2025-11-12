@@ -1,5 +1,6 @@
 // src/app/api/pacientes/[id]/_repo.ts
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 
 export const fichaRepo = {
   getPacienteBase: (idPaciente: number) =>
@@ -89,16 +90,10 @@ export const fichaRepo = {
 
   updatePersona: (
     idPersona: number,
-    data: {
-      nombres?: string | null
-      apellidos?: string | null
-      genero?: any
-      fechaNacimiento?: Date | null
-      direccion?: string | null
-    },
+    data: Prisma.PersonaUpdateInput,
   ) => prisma.persona.update({ where: { idPersona }, data }),
 
-  updatePacienteNotas: (idPaciente: number, notas: any) =>
+  updatePacienteNotas: (idPaciente: number, notas: unknown) =>
     prisma.paciente.update({ where: { idPaciente }, data: { notas: JSON.stringify(notas) } }),
 
   countDependencies: async (pacienteId: number) => {

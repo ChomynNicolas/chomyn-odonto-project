@@ -22,7 +22,7 @@ export async function GET(
     antecedentesMedicos: null,
     alergias: null,
     medicacion: null,
-    evoluciones: [] as any[],
+    evoluciones: [] as unknown[],
   };
 
   return NextResponse.json({ ok: true, data });

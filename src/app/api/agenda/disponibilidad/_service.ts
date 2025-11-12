@@ -1,7 +1,15 @@
 // app/api/agenda/disponibilidad/_service.ts
 import { PrismaClient, type EstadoCita } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { GetDisponibilidadQuery } from "./_schemas";
 import type { SlotDTO } from "./_dto";
+
+// Tipo para la disponibilidad del profesional (JSON almacenado en BD)
+type ProfesionalDisponibilidad = {
+  dow?: {
+    [key: string]: [string, string][];
+  };
+} | null;
 
 const prisma = new PrismaClient();
 
@@ -115,7 +123,7 @@ function fallbackWorkingWindowsUtc(fechaYMD: string) {
  */
 function buildWorkingWindowsUtc(
   fechaYMD: string,
-  profesionalDisponibilidad: any | null
+  profesionalDisponibilidad: ProfesionalDisponibilidad
 ): Array<{ start: Date; end: Date }> {
   if (!profesionalDisponibilidad?.dow) return fallbackWorkingWindowsUtc(fechaYMD);
 
@@ -195,7 +203,7 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   const working = buildWorkingWindowsUtc(ymd, profesional?.disponibilidad ?? null);
 
   // 3) Citas activas que intersecten el día
-  const whereCita: any = {
+  const whereCita: Prisma.CitaWhereInput = {
     estado: { in: ACTIVE_CITA_STATES },
     inicio: { lt: nextDayUtc },
     fin: { gt: dayStartUtc },
@@ -211,7 +219,7 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   });
 
   // 4) Bloqueos
-  const whereBloq: any = {
+  const whereBloq: Prisma.BloqueoAgendaWhereInput = {
     activo: true,
     desde: { lt: nextDayUtc },
     hasta: { gt: dayStartUtc },
