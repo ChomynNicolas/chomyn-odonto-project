@@ -2,14 +2,15 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ error: "ID inválido" }, { status: 400 })
     }

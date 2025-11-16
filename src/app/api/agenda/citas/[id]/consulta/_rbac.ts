@@ -57,6 +57,20 @@ export const CONSULTA_RBAC = {
   canEditOdontogram(rol?: string): boolean {
     return rol === "ADMIN" || rol === "ODONT"
   },
+
+  /**
+   * Ver planes de tratamiento
+   */
+  canViewTreatmentPlan(rol?: string): boolean {
+    return rol === "ADMIN" || rol === "ODONT"
+  },
+
+  /**
+   * Editar planes de tratamiento
+   */
+  canEditTreatmentPlan(rol?: string): boolean {
+    return rol === "ADMIN" || rol === "ODONT"
+  },
 } as const
 
 /**

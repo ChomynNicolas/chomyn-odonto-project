@@ -4,14 +4,15 @@ import { ok, errors, safeLog } from "@/app/api/pacientes/_http"
 import { ConsentimientoRevokeSchema } from "../_schemas"
 import { obtenerConsentimiento, revocarConsentimiento, ConsentimientoError } from "../_service"
 
-export async function GET(req: NextRequest, ctx: { params: { id: string; consentimientoId: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string; consentimientoId: string }> }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return errors.forbidden()
 
   const requestId = crypto.randomUUID()
 
   try {
-    const consentimientoId = Number(ctx.params.consentimientoId)
+    const params = await ctx.params
+    const consentimientoId = Number(params.consentimientoId)
     if (!Number.isFinite(consentimientoId)) {
       return errors.validation("ID de consentimiento inválido")
     }
@@ -33,14 +34,15 @@ export async function GET(req: NextRequest, ctx: { params: { id: string; consent
   }
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { id: string; consentimientoId: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string; consentimientoId: string }> }) {
   const gate = await requireRole(["ADMIN", "ODONT"])
   if (!gate.ok) return errors.forbidden()
 
   const requestId = crypto.randomUUID()
 
   try {
-    const consentimientoId = Number(ctx.params.consentimientoId)
+    const params = await ctx.params
+    const consentimientoId = Number(params.consentimientoId)
     if (!Number.isFinite(consentimientoId)) {
       return errors.validation("ID de consentimiento inválido")
     }

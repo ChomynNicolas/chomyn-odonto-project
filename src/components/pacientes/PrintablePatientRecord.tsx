@@ -3,14 +3,118 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { AlertTriangle, Activity, Pill, Stethoscope, Calendar, ClipboardList } from "lucide-react"
 
+// Types based on how data is used in the component
+type Contacto = {
+  tipo: "PHONE" | "EMAIL"
+  valorNorm: string
+  esPrincipal?: boolean
+}
+
+type Documento = {
+  tipo: string
+  numero: string
+  ruc?: string | null
+  pais?: string
+}
+
+type Persona = {
+  nombres: string
+  apellidos: string
+  fechaNacimiento?: string | Date | null
+  genero?: string | null
+  direccion?: string | null
+  documento?: Documento | null
+  contactos: Contacto[]
+}
+
+type Cita = {
+  idCita: number | string
+  inicio: string | Date
+  estado: string
+  motivo?: string | null
+  profesional: {
+    persona: {
+      nombres: string
+      apellidos: string
+    }
+  }
+  consultorio?: {
+    nombre: string
+  } | null
+}
+
+type Paciente = {
+  persona: Persona
+  citas: Cita[]
+}
+
+type Allergy = {
+  idPatientAllergy: number | string
+  label?: string
+  reaction?: string | null
+  severity: "MILD" | "MODERATE" | "SEVERE"
+  allergyCatalog?: {
+    name: string
+  } | null
+}
+
+type Diagnosis = {
+  idPatientDiagnosis: number | string
+  label: string
+  code?: string | null
+  notes?: string | null
+  notedAt: string | Date
+  diagnosisCatalog?: {
+    name: string
+  } | null
+}
+
+type Medication = {
+  idPatientMedication: number | string
+  label?: string
+  dose?: string | null
+  freq?: string | null
+  route?: string | null
+  medicationCatalog?: {
+    name: string
+  } | null
+}
+
+type VitalSigns = {
+  measuredAt: string | Date
+  heightCm?: number | null
+  weightKg?: number | null
+  bmi?: number | null
+  bpSyst?: number | null
+  bpDiast?: number | null
+  heartRate?: number | null
+}
+
+type TreatmentStep = {
+  idTreatmentStep: number | string
+  order: number
+  serviceType?: string | null
+  toothNumber?: number | null
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+  procedimientoCatalogo?: {
+    nombre: string
+  } | null
+}
+
+type TreatmentPlan = {
+  titulo: string
+  descripcion?: string | null
+  steps: TreatmentStep[]
+}
+
 interface PrintablePatientRecordProps {
   data: {
-    paciente: any
-    allergies: any[]
-    diagnoses: any[]
-    medications: any[]
-    vitalSigns: any | null
-    treatmentPlans: any[]
+    paciente: Paciente
+    allergies: Allergy[]
+    diagnoses: Diagnosis[]
+    medications: Medication[]
+    vitalSigns: VitalSigns | null
+    treatmentPlans: TreatmentPlan[]
   }
 }
 
@@ -20,11 +124,17 @@ export function PrintablePatientRecord({ data }: PrintablePatientRecordProps) {
   const documento = persona.documento
 
   const fullName = formatFullName(persona.nombres, persona.apellidos, "")
-  const age = persona.fechaNacimiento ? calculateAge(persona.fechaNacimiento) : null
-  const gender = persona.genero ? formatGender(persona.genero) : "No especificado"
+  const age = persona.fechaNacimiento
+    ? calculateAge(
+        persona.fechaNacimiento instanceof Date
+          ? persona.fechaNacimiento.toISOString()
+          : persona.fechaNacimiento
+      )
+    : null
+  const gender = persona.genero ? formatGender(persona.genero as "MALE" | "FEMALE" | "OTHER" | "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO") : "No especificado"
 
-  const primaryPhone = persona.contactos.find((c: any) => c.tipo === "PHONE" && c.esPrincipal)
-  const primaryEmail = persona.contactos.find((c: any) => c.tipo === "EMAIL" && c.esPrincipal)
+  const primaryPhone = persona.contactos.find((c) => c.tipo === "PHONE" && c.esPrincipal)
+  const primaryEmail = persona.contactos.find((c) => c.tipo === "EMAIL" && c.esPrincipal)
 
   const activeTreatmentPlan = treatmentPlans[0]
 
@@ -234,7 +344,7 @@ export function PrintablePatientRecord({ data }: PrintablePatientRecordProps) {
               <p className="mb-3 text-sm text-gray-600">{activeTreatmentPlan.descripcion}</p>
             )}
             <div className="space-y-2">
-              {activeTreatmentPlan.steps.map((step: any) => (
+              {activeTreatmentPlan.steps.map((step) => (
                 <div
                   key={step.idTreatmentStep}
                   className="flex items-center justify-between border-l-2 border-orange-300 bg-white px-3 py-2"
@@ -272,7 +382,7 @@ export function PrintablePatientRecord({ data }: PrintablePatientRecordProps) {
             Últimas Citas
           </h2>
           <div className="space-y-2 rounded-lg border bg-indigo-50 p-4">
-            {paciente.citas.slice(0, 5).map((cita: any) => (
+            {paciente.citas.slice(0, 5).map((cita) => (
               <div
                 key={cita.idCita}
                 className="flex items-center justify-between border-l-2 border-indigo-300 bg-white px-3 py-2"

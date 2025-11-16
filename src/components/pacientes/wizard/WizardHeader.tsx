@@ -11,19 +11,14 @@ interface Step {
 interface WizardHeaderProps {
   currentStep: number
   steps: readonly Step[]
-  errors: FieldErrors
+  errors?: FieldErrors // Opcional por ahora, se usará cuando se implemente el mapeo de errores
 }
 
-export function WizardHeader({ currentStep, steps, errors }: WizardHeaderProps) {
+export function WizardHeader({ currentStep, steps }: WizardHeaderProps) {
   const getStepStatus = (stepId: number) => {
     if (stepId < currentStep) return "completed"
     if (stepId === currentStep) return "current"
     return "pending"
-  }
-
-  const getStepErrors = (stepId: number) => {
-    // TODO: Mapear errores por paso
-    return 0
   }
 
   return (
@@ -37,7 +32,9 @@ export function WizardHeader({ currentStep, steps, errors }: WizardHeaderProps) 
         <ol role="list" className="flex items-center gap-2 overflow-x-auto pb-2">
           {steps.map((step, index) => {
             const status = getStepStatus(step.id)
-            const errorCount = getStepErrors(step.id)
+            // TODO: Mapear errores por paso usando errors prop cuando se implemente
+            // Por ahora siempre retornamos 0, pero la estructura está lista para cuando se implemente
+            const errorCount = 0 as number
 
             return (
               <li key={step.id} className="flex items-center gap-2">
@@ -59,6 +56,7 @@ export function WizardHeader({ currentStep, steps, errors }: WizardHeaderProps) 
                       {step.name}
                       {step.required && <span className="ml-1 text-destructive">*</span>}
                     </div>
+                    {/* TODO: Mostrar errores cuando se implemente el mapeo de errores por paso */}
                     {errorCount > 0 && (
                       <div className="text-xs text-destructive">
                         {errorCount} {errorCount === 1 ? "error" : "errores"}

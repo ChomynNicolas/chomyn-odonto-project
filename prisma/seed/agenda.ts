@@ -1,4 +1,4 @@
-import { type PrismaClient, EstadoCita, type TipoCita, MotivoCancelacion } from "@prisma/client"
+import { type PrismaClient, EstadoCita, type TipoCita, MotivoCancelacion, TipoBloqueoAgenda } from "@prisma/client"
 import { faker } from "@faker-js/faker/locale/es"
 import { COUNTS, DAYS_WINDOW_FWD, DAYS_WINDOW_PAST, PROB, RETRY_CONFIG } from "./config"
 import { addMinutes, generateSlotWithRetry } from "./utils"
@@ -235,7 +235,7 @@ export async function generarBloqueosAgenda(
       "CAPACITACION",
       "MANTENIMIENTO",
       "BLOQUEO_MANUAL",
-    ] as any)
+    ] as const) as TipoBloqueoAgenda
 
     // Genera rango de fechas futuro
     const desde = generateSlotWithRetry(false, DAYS_WINDOW_FWD).inicio

@@ -1,12 +1,15 @@
-export type Rol = "ADMIN"|"ODONT"|"RECEP";
+export type Rol = "ADMIN" | "ODONT" | "RECEP"
 
 export function canCreatePaciente(rol: Rol) {
-  return rol === "ADMIN" || rol === "RECEP" || rol === "ODONT";
+  return rol === "ADMIN" || rol === "RECEP" || rol === "ODONT"
 }
-export const canUpdatePaciente = (rol: Rol) => rol === "ADMIN" || rol === "RECEP" || rol === "ODONT";
-export const canDeletePaciente = (rol: Rol) => rol === "ADMIN"; // soft delete solo admin (sugerido)
+export const canUpdatePaciente = (rol: Rol) => rol === "ADMIN" || rol === "RECEP" || rol === "ODONT"
+export const canDeletePaciente = (rol: Rol) => rol === "ADMIN" // soft delete solo admin (sugerido)
 
-export function isRole(user: { rol?: string } | undefined, roles: Array<"ADMIN"|"ODONT"|"RECEP">) {
-  if (!user?.rol) return false;
-  return roles.includes(user.rol as any);
+export function isRole(user: { rol?: string } | undefined, roles: Array<"ADMIN" | "ODONT" | "RECEP">) {
+  if (!user?.rol) return false
+  // Type guard to check if user.rol is a valid Rol
+  const validRoles: Rol[] = ["ADMIN", "ODONT", "RECEP"]
+  if (!validRoles.includes(user.rol as Rol)) return false
+  return roles.includes(user.rol as Rol)
 }

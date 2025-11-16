@@ -4,6 +4,7 @@
 import { useParams } from "next/navigation";
 import { usePacientePlanes } from "@/hooks/usePacientePlanesQuery";
 import { SectionCard, EmptyText, InlineError, SmallSkeleton } from "@/components/pacientes/detail/TabSection";
+import type { PlanItem } from "@/lib/api/pacientes.detail.types";
 
 export default function TabPlanes() {
   const { id } = useParams<{ id: string }>();
@@ -23,7 +24,8 @@ export default function TabPlanes() {
   }
 
   if (isError) {
-    return <InlineError message={(error as any)?.message} onRetry={() => refetch()} />;
+    const errorMessage = error instanceof Error ? error.message : undefined
+    return <InlineError message={errorMessage} onRetry={() => refetch()} />;
   }
 
   if (!data || data.planes.length === 0) {
@@ -32,7 +34,7 @@ export default function TabPlanes() {
 
   return (
     <div className="space-y-3">
-      {data.planes.map(pl => (
+      {data.planes.map((pl: PlanItem) => (
         <div key={pl.id} className="rounded-lg border border-border p-4">
           <div className="flex items-center justify-between">
             <div>

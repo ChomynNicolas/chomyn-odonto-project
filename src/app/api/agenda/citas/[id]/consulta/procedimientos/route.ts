@@ -6,6 +6,7 @@ import { paramsSchema, createProcedureSchema } from "../_schemas"
 import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
+import { TreatmentStepStatus } from "@prisma/client"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/procedimientos
@@ -72,13 +73,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
     const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden crear procedimientos")
     }
 
     const body = await req.json()
-    const input = createProcedureSchema.parse(body)
+    const validationResult = createProcedureSchema.safeParse(body)
+    if (!validationResult.success) {
+      // Extraer el primer mensaje de error relevante
+      const firstError = validationResult.error.issues[0]
+      const errorMessage = firstError?.message || "Datos inválidos"
+      return errors.validation(errorMessage)
+    }
+    const input = validationResult.data
 
     // Asegurar que la consulta existe
     const consulta = await prisma.consulta.findUnique({
@@ -91,7 +100,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      await ensureConsulta(citaId, cita.profesionalId, session.user.id)
+      await ensureConsulta(citaId, cita.profesionalId, userId)
     }
 
     // Calcular total si no se proporciona
@@ -112,6 +121,29 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       },
     })
 
+    // Si el procedimiento está vinculado a un step, actualizar su estado
+    if (input.treatmentStepId) {
+      const step = await prisma.treatmentStep.findUnique({
+        where: { idTreatmentStep: input.treatmentStepId },
+        select: { status: true },
+      })
+
+      if (step) {
+        // Actualizar estado a COMPLETED si está en PENDING, SCHEDULED o IN_PROGRESS
+        if (
+          step.status === TreatmentStepStatus.PENDING ||
+          step.status === TreatmentStepStatus.SCHEDULED ||
+          step.status === TreatmentStepStatus.IN_PROGRESS
+        ) {
+          await prisma.treatmentStep.update({
+            where: { idTreatmentStep: input.treatmentStepId },
+            data: { status: TreatmentStepStatus.COMPLETED },
+          })
+        }
+        // Si ya está en COMPLETED, CANCELLED o DEFERRED, no cambiar (idempotencia)
+      }
+    }
+
     return ok({
       id: procedimiento.idConsultaProcedimiento,
       procedureId: procedimiento.procedureId,
@@ -127,10 +159,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       updatedAt: procedimiento.updatedAt.toISOString(),
     })
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === "ZodError") {
-      const zodError = e as { errors?: Array<{ message?: string }> }
-      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
-    }
     const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/procedimientos]", e)
     return errors.internal(errorMessage ?? "Error al crear procedimiento")

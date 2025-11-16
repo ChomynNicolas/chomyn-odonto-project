@@ -100,6 +100,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
     const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
     if (!CONSULTA_RBAC.canEditOdontogram(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden crear odontograma")
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      await ensureConsulta(citaId, cita.profesionalId, session.user.id)
+      await ensureConsulta(citaId, cita.profesionalId, userId)
       const nuevaConsulta = await prisma.consulta.findUnique({
         where: { citaId },
         include: {
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           pacienteId: nuevaConsulta.cita.pacienteId,
           consultaId: citaId,
           notes: input.notes ?? null,
-          createdByUserId: session.user.id,
+          createdByUserId: userId,
           entries: {
             create: input.entries.map((e) => ({
               toothNumber: e.toothNumber,
@@ -202,7 +203,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         pacienteId: consulta.cita.pacienteId,
         consultaId: citaId,
         notes: input.notes ?? null,
-        createdByUserId: session.user.id,
+        createdByUserId: userId,
         entries: {
           create: input.entries.map((e) => ({
             toothNumber: e.toothNumber,

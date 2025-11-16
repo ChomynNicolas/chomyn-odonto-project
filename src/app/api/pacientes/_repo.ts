@@ -1,120 +1,107 @@
 // src/app/api/pacientes/_repo.ts
-import { prisma } from "@/lib/prisma";
-import type { Prisma, EstadoCita, Genero, TipoDocumento, RelacionPaciente } from "@prisma/client";
-import type { PacienteListFilters } from "@/lib/api/pacientes.types"
-import { getStartOfDayInTZ, getEndOfDayInTZ, isTodayInTZ } from "@/lib/date-utils"
+import { prisma } from "@/lib/prisma"
+import type { Prisma, TipoDocumento, RelacionPaciente, Genero } from "@prisma/client"
+import { isTodayInTZ } from "@/lib/date-utils"
 
 /** ==========================
  * Tipos de entrada/vista
  * ========================== */
 export type PacienteListInput = {
-  where: Prisma.PacienteWhereInput;
-  orderBy:
-    | Prisma.PacienteOrderByWithRelationInput
-    | Prisma.PacienteOrderByWithRelationInput[];
-  limit: number;
-  cursorId?: number | null;
-};
+  where: Prisma.PacienteWhereInput
+  orderBy: Prisma.PacienteOrderByWithRelationInput | Prisma.PacienteOrderByWithRelationInput[]
+  limit: number
+  cursorId?: number | null
+}
 
 /** ==========================
  * DTO enriquecido para la lista
  * ========================== */
 export type PacienteListItemDTO = {
-  idPaciente: number;
-  estaActivo: boolean;
-
-  persona: {
-    idPersona: number;
-    nombres: string;
-    apellidos: string;
-    genero: string | null;
-    fechaNacimiento: string | null; // ISO
-  };
-
+  idPaciente: number
+  personaId: number
+  nombres: string
+  apellidos: string
+  nombreCompleto: string
+  fechaNacimiento: string | null
+  edad: number | null
+  genero: string | null
   documento: {
-    tipo: string | null;
-    numero: string | null;
-    ruc: string | null;
-  };
-
-  contactos: Array<{
-    tipo: "PHONE" | "EMAIL";
-    valorNorm: string;
-    esPrincipal: boolean;
-    activo: boolean;
-    whatsappCapaz?: boolean | null;
-    esPreferidoRecordatorio?: boolean;
-    esPreferidoCobranza?: boolean;
-  }>;
-
-  // Derivados
-  edad: number | null;
-  hasAlergias: boolean;
-  hasMedicacion: boolean;
-  obraSocial: string | null;
-  hasResponsablePrincipal: boolean;
-
-  // Agenda
-  lastVisitAt: string | null; // ISO
-  lastVisitProfesionalId: number | null;
-
-  nextAppointmentAt: string | null; // ISO
-  nextAppointmentEstado:
-    | Extract<EstadoCita,"SCHEDULED" | "CONFIRMED" | "CHECKED_IN" | "IN_PROGRESS">
-    | null;
-  nextAppointmentProfesionalId: number | null;
-  nextAppointmentConsultorioId: number | null;
-
-  // Tratamiento
-  activePlansCount: number;
-};
-
+    tipo: string
+    numero: string
+  } | null
+  contactoPrincipal: {
+    tipo: "PHONE" | "EMAIL"
+    valor: string
+    whatsappCapaz?: boolean
+  } | null
+  estaActivo: boolean
+  createdAt: string
+  proximaCita: {
+    idCita: number
+    inicio: string
+    tipo: string
+    profesional: string
+    esHoy: boolean
+  } | null
+}
 
 /** ==========================
  * Repositorio
  * ========================== */
 export const pacienteRepo = {
-  createPersonaConDocumento: (
+  createPersonaConDocumento: async (
     tx: Prisma.TransactionClient,
     data: {
-      nombres: string;
-      apellidos: string;
-      genero: string | null;
-      fechaNacimiento: Date | null;
-      direccion: string | null;
-      doc: { tipo: string; numero: string; ruc?: string | null; paisEmision?: string | null };
-    }
+      nombres: string
+      apellidos: string
+      segundoApellido?: string | null
+      genero: Genero | string
+      fechaNacimiento: Date | null
+      direccion: string | null
+      doc: {
+        tipo: TipoDocumento | string
+        numero: string
+        ruc?: string | null
+        paisEmision?: string | null
+      }
+    },
   ) => {
-    return tx.persona.create({
+    const persona = await tx.persona.create({
       data: {
-        nombres: data.nombres,
-        apellidos: data.apellidos,
-        genero: data.genero as Genero | null,
+        nombres: data.nombres.trim(),
+        apellidos: data.apellidos.trim(),
+        segundoApellido: data.segundoApellido?.trim() ?? null,
+        genero: (data.genero as Genero) ?? null,
         fechaNacimiento: data.fechaNacimiento,
         direccion: data.direccion,
         estaActivo: true,
         documento: {
           create: {
-            tipo: (data.doc.tipo as TipoDocumento) ?? "CI",
-            numero: data.doc.numero,
+            tipo: data.doc.tipo as TipoDocumento,
+            numero: data.doc.numero.trim(),
             ruc: data.doc.ruc ?? null,
             paisEmision: data.doc.paisEmision ?? "PY",
           },
         },
       },
-    });
+      include: {
+        documento: true,
+      },
+    })
+
+    return persona
   },
 
   createContactoTelefono: async (
     tx: Prisma.TransactionClient,
     data: {
-      personaId: number;
-      valorRaw: string;
-      valorNorm: string;
-      whatsappCapaz?: boolean;
-      smsCapaz?: boolean;
-      prefer: { recordatorio?: boolean; cobranza?: boolean };
-    }
+      personaId: number
+      valorRaw: string
+      valorNorm: string
+      whatsappCapaz?: boolean
+      smsCapaz?: boolean
+      prefer: { recordatorio?: boolean; cobranza?: boolean }
+    },
   ) => {
     // 1) Degradar cualquier PHONE principal previo (si es distinto número)
     await tx.personaContacto.updateMany({
@@ -125,7 +112,7 @@ export const pacienteRepo = {
         NOT: { valorNorm: data.valorNorm },
       },
       data: { esPrincipal: false },
-    });
+    })
 
     // 2) Upsert del número (idempotente)
     return tx.personaContacto.upsert({
@@ -137,9 +124,10 @@ export const pacienteRepo = {
         },
       },
       update: {
+        valorRaw: data.valorRaw,
         label: "Móvil",
-        whatsappCapaz: data.whatsappCapaz ?? true,
-        smsCapaz: data.smsCapaz ?? true,
+        whatsappCapaz: data.whatsappCapaz ?? null,
+        smsCapaz: data.smsCapaz ?? null,
         esPrincipal: true, // único principal
         esPreferidoRecordatorio: !!data.prefer.recordatorio,
         esPreferidoCobranza: !!data.prefer.cobranza,
@@ -151,25 +139,24 @@ export const pacienteRepo = {
         valorRaw: data.valorRaw,
         valorNorm: data.valorNorm,
         label: "Móvil",
-        whatsappCapaz: data.whatsappCapaz ?? true,
-        smsCapaz: data.smsCapaz ?? true,
+        whatsappCapaz: data.whatsappCapaz ?? null,
+        smsCapaz: data.smsCapaz ?? null,
         esPrincipal: true,
         esPreferidoRecordatorio: !!data.prefer.recordatorio,
         esPreferidoCobranza: !!data.prefer.cobranza,
         activo: true,
       },
-    });
+    })
   },
-
 
   createContactoEmail: async (
     tx: Prisma.TransactionClient,
     data: {
-      personaId: number;
-      valorRaw: string;
-      valorNorm: string;
-      prefer: { recordatorio?: boolean; cobranza?: boolean };
-    }
+      personaId: number
+      valorRaw: string
+      valorNorm: string
+      prefer: { recordatorio?: boolean; cobranza?: boolean }
+    },
   ) => {
     // 1) Degradar cualquier contacto previo que sea preferido para recordatorio/cobranza
     // si el email va a ser preferido (para evitar conflictos con índices únicos parciales)
@@ -181,7 +168,7 @@ export const pacienteRepo = {
           NOT: { tipo: "EMAIL", valorNorm: data.valorNorm },
         },
         data: { esPreferidoRecordatorio: false },
-      });
+      })
     }
 
     if (data.prefer.cobranza) {
@@ -192,7 +179,7 @@ export const pacienteRepo = {
           NOT: { tipo: "EMAIL", valorNorm: data.valorNorm },
         },
         data: { esPreferidoCobranza: false },
-      });
+      })
     }
 
     // 2) Upsert del email (idempotente)
@@ -205,6 +192,7 @@ export const pacienteRepo = {
         },
       },
       update: {
+        valorRaw: data.valorRaw,
         label: "Correo",
         esPrincipal: false, // ← nunca principal
         esPreferidoRecordatorio: !!data.prefer.recordatorio,
@@ -222,13 +210,10 @@ export const pacienteRepo = {
         esPreferidoCobranza: !!data.prefer.cobranza,
         activo: true,
       },
-    });
+    })
   },
 
-  createPaciente: (
-    tx: Prisma.TransactionClient,
-    data: { personaId: number; notasJson: Record<string, unknown> }
-  ) =>
+  createPaciente: (tx: Prisma.TransactionClient, data: { personaId: number; notasJson: Record<string, unknown> }) =>
     tx.paciente.create({
       data: {
         personaId: data.personaId,
@@ -250,19 +235,16 @@ export const pacienteRepo = {
     if (autoridadLegalExplicita !== undefined) {
       return autoridadLegalExplicita
     }
-    
+
     // Relaciones con autoridad legal automática
     const relacionesConAutoridadLegal = ["PADRE", "MADRE", "TUTOR"]
     return relacionesConAutoridadLegal.includes(relacion)
   },
 
-  linkResponsablePago: (
-    tx: Prisma.TransactionClient,
-    data: { pacienteId: number; personaId: number; relacion: RelacionPaciente; esPrincipal: boolean; autoridadLegal?: boolean }
-  ) => {
+  linkResponsablePago: (tx: Prisma.TransactionClient, data: { pacienteId: number; personaId: number; relacion: RelacionPaciente; esPrincipal: boolean; autoridadLegal?: boolean }) => {
     // Determinar autoridad legal según la relación
     const tieneAutoridadLegal = pacienteRepo.tieneAutoridadLegal(data.relacion, data.autoridadLegal)
-    
+
     return tx.pacienteResponsable.create({
       data: {
         pacienteId: data.pacienteId,
@@ -301,272 +283,115 @@ export const pacienteRepo = {
         },
       },
     }),
-};
 
+  listPacientes: async (input: PacienteListInput) => {
+    const { where, orderBy, limit, cursorId } = input
 
-
-
-
-
-export async function listPacientes(filters: PacienteListFilters) {
-  const { q, createdFrom, createdTo, estaActivo, sort = "createdAt_desc", cursor, limit = 20 } = filters
-
-  // Build where clause
-  const where: Prisma.PacienteWhereInput = {
-    ...(estaActivo !== undefined && { estaActivo }),
-  }
-
-  // Date filters with TZ normalization
-  if (createdFrom || createdTo) {
-    where.createdAt = {}
-    if (createdFrom) {
-      where.createdAt.gte = getStartOfDayInTZ(createdFrom)
-    }
-    if (createdTo) {
-      where.createdAt.lte = getEndOfDayInTZ(createdTo)
-    }
-  }
-
-  // Search query
-  if (q && q.trim()) {
-    const searchTerm = q.trim()
-    where.OR = [
-      {
+    // Fetch data
+    const items = await prisma.paciente.findMany({
+      where,
+      orderBy,
+      take: limit + 1,
+      ...(cursorId && { skip: 1, cursor: { idPaciente: cursorId } }),
+      include: {
         persona: {
-          OR: [
-            { nombres: { contains: searchTerm, mode: "insensitive" } },
-            { apellidos: { contains: searchTerm, mode: "insensitive" } },
-          ],
-        },
-      },
-      {
-        persona: {
-          documento: {
-            numero: { contains: searchTerm, mode: "insensitive" },
+          include: {
+            documento: true,
+            contactos: {
+              where: { activo: true },
+              orderBy: [{ esPrincipal: "desc" }, { createdAt: "asc" }],
+              select: {
+                tipo: true,
+                valorRaw: true,
+                valorNorm: true,
+                whatsappCapaz: true,
+              },
+            },
           },
         },
-      },
-      {
-        persona: {
-          contactos: {
-            some: {
-              valorNorm: { contains: searchTerm, mode: "insensitive" },
+        citas: {
+          where: {
+            inicio: { gte: new Date() },
+            estado: { in: ["SCHEDULED", "CONFIRMED"] },
+          },
+          orderBy: { inicio: "asc" },
+          take: 1,
+          include: {
+            profesional: {
+              include: {
+                persona: true,
+              },
             },
           },
         },
       },
-    ]
-  }
+    })
 
-  // Cursor pagination setup
-  let cursorObj: Prisma.PacienteWhereUniqueInput | undefined
-  if (cursor) {
-    try {
-      const parsed = JSON.parse(Buffer.from(cursor, "base64").toString())
-      if (sort.startsWith("createdAt")) {
-        cursorObj = { idPaciente: parsed.idPaciente }
-      } else if (sort.startsWith("nombre")) {
-        cursorObj = { idPaciente: parsed.idPaciente }
-      }
-    } catch {
-      // Invalid cursor, ignore
-    }
-  }
+    const hasMore = items.length > limit
+    const resultItems = hasMore ? items.slice(0, limit) : items
 
-  // Order by
-  let orderBy: Prisma.PacienteOrderByWithRelationInput[]
-  if (sort === "createdAt_asc") {
-    orderBy = [{ createdAt: "asc" }, { idPaciente: "asc" }]
-  } else if (sort === "createdAt_desc") {
-    orderBy = [{ createdAt: "desc" }, { idPaciente: "desc" }]
-  } else if (sort === "nombre_asc") {
-    orderBy = [{ persona: { apellidos: "asc" } }, { persona: { nombres: "asc" } }, { idPaciente: "asc" }]
-  } else {
-    orderBy = [{ persona: { apellidos: "desc" } }, { persona: { nombres: "desc" } }, { idPaciente: "desc" }]
-  }
+    // Count total (for pagination info)
+    const totalCount = await prisma.paciente.count({ where })
 
-  // Fetch data
-  const items = await prisma.paciente.findMany({
-    where,
-    orderBy,
-    take: limit + 1,
-    ...(cursorObj && { skip: 1, cursor: cursorObj }),
-    include: {
-      persona: {
-        include: {
-          documento: true,
-          contactos: {
-            where: { activo: true },
-            orderBy: [{ esPrincipal: "desc" }, { createdAt: "asc" }],
-          },
-        },
-      },
-      citas: {
-        where: {
-          inicio: { gte: new Date() },
-          estado: { in: ["SCHEDULED", "CONFIRMED"] },
-        },
-        orderBy: { inicio: "asc" },
-        take: 1,
-        include: {
-          profesional: {
-            include: {
-              persona: true,
-            },
-          },
-        },
-      },
-    },
-  })
+    // Map to DTOs
+    const dtos: PacienteListItemDTO[] = resultItems.map((p) => {
+      const edad = p.persona.fechaNacimiento
+        ? Math.floor((Date.now() - new Date(p.persona.fechaNacimiento).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        : null
 
-  const hasMore = items.length > limit
-  const resultItems = hasMore ? items.slice(0, limit) : items
-
-  // Map to DTOs
-  const dtos: PacienteListItemDTO[] = resultItems.map((p) => {
-    const edad = p.persona.fechaNacimiento
-      ? Math.floor((Date.now() - new Date(p.persona.fechaNacimiento).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-      : null
-
-    const contactoPrincipal = p.persona.contactos[0]
-      ? {
-          tipo: p.persona.contactos[0].tipo,
-          valor: p.persona.contactos[0].valorRaw,
-          whatsappCapaz: p.persona.contactos[0].whatsappCapaz ?? undefined,
-        }
-      : null
-
-    const proximaCita = p.citas[0]
-      ? {
-          idCita: p.citas[0].idCita,
-          inicio: p.citas[0].inicio.toISOString(),
-          tipo: p.citas[0].tipo,
-          profesional: `${p.citas[0].profesional.persona.nombres} ${p.citas[0].profesional.persona.apellidos}`,
-          esHoy: isTodayInTZ(p.citas[0].inicio),
-        }
-      : null
-
-    return {
-      idPaciente: p.idPaciente,
-      personaId: p.personaId,
-      nombres: p.persona.nombres,
-      apellidos: p.persona.apellidos,
-      nombreCompleto: `${p.persona.nombres} ${p.persona.apellidos}`,
-      fechaNacimiento: p.persona.fechaNacimiento?.toISOString() ?? null,
-      edad,
-      genero: p.persona.genero,
-      documento: p.persona.documento
+      const contactoPrincipal = p.persona.contactos[0]
         ? {
-            tipo: p.persona.documento.tipo,
-            numero: p.persona.documento.numero,
+            tipo: p.persona.contactos[0].tipo,
+            valor: p.persona.contactos[0].valorRaw ?? p.persona.contactos[0].valorNorm ?? "",
+            whatsappCapaz: p.persona.contactos[0].whatsappCapaz ?? undefined,
           }
-        : null,
-      contactoPrincipal,
-      estaActivo: p.estaActivo,
-      createdAt: p.createdAt.toISOString(),
-      proximaCita,
-    }
-  })
+        : null
 
-  // Generate next cursor
-  let nextCursor: string | null = null
-  if (hasMore) {
-    const lastItem = resultItems[resultItems.length - 1]
-    const cursorData = {
-      idPaciente: lastItem.idPaciente,
-      createdAt: lastItem.createdAt.toISOString(),
-      apellidos: lastItem.persona.apellidos,
-      nombres: lastItem.persona.nombres,
-    }
-    nextCursor = Buffer.from(JSON.stringify(cursorData)).toString("base64")
-  }
+      const proximaCita = p.citas[0]
+        ? {
+            idCita: p.citas[0].idCita,
+            inicio: p.citas[0].inicio.toISOString(),
+            tipo: p.citas[0].tipo,
+            profesional: `${p.citas[0].profesional.persona.nombres} ${p.citas[0].profesional.persona.apellidos}`,
+            esHoy: isTodayInTZ(p.citas[0].inicio),
+          }
+        : null
 
-  return {
-    items: dtos,
-    nextCursor,
-    hasMore,
-  }
-}
-
-export async function createPaciente(data: {
-  nombres: string
-  apellidos: string
-  fechaNacimiento?: Date
-  genero?: string
-  direccion?: string
-  documento?: {
-    tipo: string
-    numero: string
-    paisEmision?: string
-  }
-  telefono?: string
-  email?: string
-  notas?: string
-}) {
-  return await prisma.$transaction(async (tx) => {
-    // Create Persona
-    const persona = await tx.persona.create({
-      data: {
-        nombres: data.nombres,
-        apellidos: data.apellidos,
-        fechaNacimiento: data.fechaNacimiento,
-        genero: data.genero as Genero | null,
-        direccion: data.direccion,
-      },
+      return {
+        idPaciente: p.idPaciente,
+        personaId: p.personaId,
+        nombres: p.persona.nombres,
+        apellidos: p.persona.apellidos,
+        nombreCompleto: `${p.persona.nombres} ${p.persona.apellidos}`,
+        fechaNacimiento: p.persona.fechaNacimiento?.toISOString() ?? null,
+        edad,
+        genero: p.persona.genero,
+        documento: p.persona.documento
+          ? {
+              tipo: p.persona.documento.tipo,
+              numero: p.persona.documento.numero,
+            }
+          : null,
+        contactoPrincipal,
+        estaActivo: p.estaActivo,
+        createdAt: p.createdAt.toISOString(),
+        proximaCita,
+      }
     })
 
-    // Create Documento if provided
-    if (data.documento) {
-      await tx.documento.create({
-        data: {
-          personaId: persona.idPersona,
-          tipo: data.documento.tipo as TipoDocumento,
-          numero: data.documento.numero,
-          paisEmision: data.documento.paisEmision ?? "PY",
-        },
-      })
+    // Generate next cursor
+    let nextCursor: number | null = null
+    if (hasMore) {
+      const lastItem = resultItems[resultItems.length - 1]
+      nextCursor = lastItem.idPaciente
     }
-
-    // Create contacts
-    if (data.telefono) {
-      const { normalizePhonePY } = await import("@/lib/normalize");
-      const telNorm = normalizePhonePY(data.telefono);
-      if (telNorm) {
-        await pacienteRepo.createContactoTelefono(tx, {
-          personaId: persona.idPersona,
-          valorRaw: data.telefono,
-          valorNorm: telNorm,
-          whatsappCapaz: true,
-          smsCapaz: true,
-          prefer: {},
-        });
-      }
-    }
-
-    if (data.email) {
-      const { normalizeEmail } = await import("@/lib/normalize");
-      const emailNorm = normalizeEmail(data.email);
-      if (emailNorm) {
-        await pacienteRepo.createContactoEmail(tx, {
-          personaId: persona.idPersona,
-          valorRaw: data.email,
-          valorNorm: emailNorm,
-          prefer: {},
-        });
-      }
-    }
-
-    // Create Paciente
-    const paciente = await tx.paciente.create({
-      data: {
-        personaId: persona.idPersona,
-        notas: data.notas,
-      },
-    })
 
     return {
-      idPaciente: paciente.idPaciente,
-      personaId: persona.idPersona,
+      items: dtos,
+      nextCursor,
+      hasMore,
+      totalCount,
     }
-  })
+  },
 }
+

@@ -103,6 +103,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
     const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden crear medicaciones")
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      await ensureConsulta(citaId, cita.profesionalId, session.user.id)
+      await ensureConsulta(citaId, cita.profesionalId, userId)
       const nuevaConsulta = await prisma.consulta.findUnique({
         where: { citaId },
         include: {
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           startAt: input.startAt ? new Date(input.startAt) : null,
           endAt: input.endAt ? new Date(input.endAt) : null,
           isActive: true,
-          createdByUserId: session.user.id,
+          createdByUserId: userId,
         },
         include: {
           createdBy: {
@@ -205,7 +206,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         startAt: input.startAt ? new Date(input.startAt) : null,
         endAt: input.endAt ? new Date(input.endAt) : null,
         isActive: true,
-        createdByUserId: session.user.id,
+        createdByUserId: userId,
       },
       include: {
         createdBy: {

@@ -29,6 +29,7 @@ export const {
   // helpers
   auth, signIn, signOut,
 } = NextAuth({
+  trustHost: true, // ✅ Trust the host (necesario para localhost y producción)
   session: { strategy: "jwt" },
   pages: { signIn: "/signin" }, // or /login — make sure it matches your route
   providers: [

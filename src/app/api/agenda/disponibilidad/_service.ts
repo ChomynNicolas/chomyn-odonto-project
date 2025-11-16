@@ -11,6 +11,33 @@ type ProfesionalDisponibilidad = {
   };
 } | null;
 
+// Valida y convierte Prisma.JsonValue a ProfesionalDisponibilidad
+function parseProfesionalDisponibilidad(
+  json: Prisma.JsonValue | null | undefined
+): ProfesionalDisponibilidad {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    return null;
+  }
+  const obj = json as Record<string, unknown>;
+  if (!obj.dow || typeof obj.dow !== "object" || Array.isArray(obj.dow)) {
+    return null;
+  }
+  const dow = obj.dow as Record<string, unknown>;
+  const parsedDow: Record<string, [string, string][]> = {};
+  for (const [key, value] of Object.entries(dow)) {
+    if (Array.isArray(value)) {
+      const segments = value.filter((seg): seg is [string, string] => 
+        Array.isArray(seg) && seg.length === 2 && 
+        typeof seg[0] === "string" && typeof seg[1] === "string"
+      );
+      if (segments.length > 0) {
+        parsedDow[key] = segments;
+      }
+    }
+  }
+  return Object.keys(parsedDow).length > 0 ? { dow: parsedDow } : null;
+}
+
 const prisma = new PrismaClient();
 
 // Estados de cita que bloquean la agenda
@@ -200,7 +227,8 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   }
 
   // 2) Ventanas laborales (preferencia disponibilidad; si no, 08–16 local)
-  const working = buildWorkingWindowsUtc(ymd, profesional?.disponibilidad ?? null);
+  const disponibilidad = parseProfesionalDisponibilidad(profesional?.disponibilidad ?? null);
+  const working = buildWorkingWindowsUtc(ymd, disponibilidad);
 
   // 3) Citas activas que intersecten el día
   const whereCita: Prisma.CitaWhereInput = {

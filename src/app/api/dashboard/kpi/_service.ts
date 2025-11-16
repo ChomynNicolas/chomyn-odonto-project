@@ -406,11 +406,9 @@ function buildCitaWhereClause(filters: KpiFilters, startDate: Date, endDate: Dat
   // Filtros demográficos del paciente
   if (filters.genero?.length || filters.edadMin !== undefined || filters.edadMax !== undefined) {
     where.paciente = {
-      persona: {},
-    }
-
-    if (filters.genero?.length) {
-      where.paciente.persona.genero = { in: filters.genero as Genero[] }
+      persona: {
+        ...(filters.genero?.length ? { genero: { in: filters.genero as Genero[] } } : {}),
+      },
     }
 
     // Edad se calcula en aplicación, no en query (complejo en SQL)
@@ -512,22 +510,26 @@ function calculateAgendaMetrics(citas: CitaWithHistorial[]): AgendaMetrics {
 
   // Puntualidad: promedio de (startedAt - inicio) en minutos
   const puntualidades = citas
-    .filter((c) => c.startedAt)
+    .filter((c): c is typeof c & { startedAt: Date } => c.startedAt !== null)
     .map((c) => differenceInMinutes(new Date(c.startedAt), new Date(c.inicio)))
   const puntualidadMinutos =
     puntualidades.length > 0 ? puntualidades.reduce((a, b) => a + b, 0) / puntualidades.length : 0
 
   // Espera: promedio de (startedAt - checkedInAt) en minutos
   const esperas = citas
-    .filter((c) => c.startedAt && c.checkedInAt)
+    .filter((c): c is typeof c & { startedAt: Date; checkedInAt: Date } => 
+      c.startedAt !== null && c.checkedInAt !== null
+    )
     .map((c) => differenceInMinutes(new Date(c.startedAt), new Date(c.checkedInAt)))
     .filter((m) => m >= 0)
   const esperaMinutos = esperas.length > 0 ? esperas.reduce((a, b) => a + b, 0) / esperas.length : 0
 
   // Duración real vs estimada
   const duracionesReales = citas
-    .filter((c) => c.completedAt && c.startedAt)
-    .map((c) => differenceInMinutes(new Date(c.startedAt), new Date(c.completedAt)))
+    .filter((c): c is typeof c & { startedAt: Date; completedAt: Date } => 
+      c.completedAt !== null && c.startedAt !== null
+    )
+    .map((c) => differenceInMinutes(new Date(c.completedAt), new Date(c.startedAt)))
     .filter((m) => m >= 0)
   const realPromedio =
     duracionesReales.length > 0 ? duracionesReales.reduce((a, b) => a + b, 0) / duracionesReales.length : 0
@@ -687,14 +689,8 @@ async function calculateProduccionKpis(
           lte: endDate,
         },
       },
+      ...(filters.profesionalIds?.length ? { performedById: { in: filters.profesionalIds } } : {}),
     },
-  }
-
-  if (filters.profesionalIds?.length) {
-    where.consulta = {
-      ...where.consulta,
-      performedById: { in: filters.profesionalIds },
-    }
   }
 
   if (filters.procedimientoIds?.length) {
@@ -722,7 +718,7 @@ async function calculateProduccionKpis(
         precio = proc.quantity * proc.unitPriceCents
       }
 
-      if (precio === null && proc.catalogo?.defaultPriceCents !== null) {
+      if (precio === null && proc.catalogo && proc.catalogo.defaultPriceCents !== null) {
         precio = proc.quantity * proc.catalogo.defaultPriceCents
       }
 
@@ -767,7 +763,7 @@ async function calculateProduccionKpis(
       if (precio === null && proc.unitPriceCents !== null) {
         precio = proc.quantity * proc.unitPriceCents
       }
-      if (precio === null && proc.catalogo?.defaultPriceCents !== null) {
+      if (precio === null && proc.catalogo && proc.catalogo.defaultPriceCents !== null) {
         precio = proc.quantity * proc.catalogo.defaultPriceCents
       }
 

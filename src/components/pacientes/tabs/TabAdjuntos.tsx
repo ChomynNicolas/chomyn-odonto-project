@@ -3,10 +3,20 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import Image from "next/image";
 import { usePacienteAdjuntos } from "@/hooks/usePacienteAdjuntosQuery";
 import { formatDateTime } from "@/lib/format";
 
 const TIPOS = ["Todos", "CEDULA", "RADIOGRAFIA", "OTRO"] as const;
+
+type AdjuntoItem = {
+  id: string
+  tipo: string
+  secureUrl: string
+  originalFilename: string | null
+  createdAt: string
+  descripcion?: string | null
+}
 
 export default function TabAdjuntos() {
   const { id } = useParams<{ id: string }>();
@@ -28,19 +38,20 @@ export default function TabAdjuntos() {
     );
   }
   if (isError) {
+    const errorMessage = error instanceof Error ? error.message : "Error al cargar adjuntos."
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
-        {(error as any)?.message || "Error al cargar adjuntos."}{" "}
+        {errorMessage}{" "}
         <button onClick={() => refetch()} className="underline underline-offset-2">Reintentar</button>
       </div>
     );
   }
   if (!data) return null;
 
-  let items = data.items;
-  if (tipo !== "Todos") items = items.filter(a => a.tipo === tipo);
-  if (from) items = items.filter(a => a.fecha >= from);
-  if (to) items = items.filter(a => a.fecha <= to);
+  let items: AdjuntoItem[] = data.adjuntos;
+  if (tipo !== "Todos") items = items.filter((a: AdjuntoItem) => a.tipo === tipo);
+  if (from) items = items.filter((a: AdjuntoItem) => a.createdAt >= from);
+  if (to) items = items.filter((a: AdjuntoItem) => a.createdAt <= to);
 
   return (
     <div className="space-y-4">
@@ -49,10 +60,15 @@ export default function TabAdjuntos() {
           <label className="text-sm text-muted-foreground">Tipo</label>
           <select
             value={tipo}
-            onChange={(e) => setTipo(e.target.value as any)}
+            onChange={(e) => {
+              const value = e.target.value
+              if (TIPOS.includes(value as (typeof TIPOS)[number])) {
+                setTipo(value as (typeof TIPOS)[number])
+              }
+            }}
             className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900"
           >
-            {TIPOS.map(t => <option key={t}>{t}</option>)}
+            {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -67,15 +83,26 @@ export default function TabAdjuntos() {
         <p className="text-sm text-muted-foreground">Sin archivos.</p>
       ) : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {items.map(a => (
-            <figure key={a.id} className="rounded-lg border border-border p-2">
-              <img src={a.url} alt={a.nombre} className="h-32 w-full rounded-md object-cover" />
-              <figcaption className="mt-2 text-xs">
-                <div className="font-medium">{a.nombre}</div>
-                <div className="text-muted-foreground">{a.tipo} · {formatDateTime(a.fecha)}</div>
-              </figcaption>
-            </figure>
-          ))}
+          {items.map((a: AdjuntoItem) => {
+            const nombre = a.originalFilename || a.descripcion || `Adjunto ${a.id}`
+            return (
+              <figure key={a.id} className="rounded-lg border border-border p-2">
+                <div className="relative h-32 w-full overflow-hidden rounded-md">
+                  <Image
+                    src={a.secureUrl}
+                    alt={nombre}
+                    fill
+                    sizes="(max-width: 768px) 50vw, 25vw"
+                    className="object-cover"
+                  />
+                </div>
+                <figcaption className="mt-2 text-xs">
+                  <div className="font-medium">{nombre}</div>
+                  <div className="text-muted-foreground">{a.tipo} · {formatDateTime(a.createdAt)}</div>
+                </figcaption>
+              </figure>
+            )
+          })}
         </div>
       )}
     </div>

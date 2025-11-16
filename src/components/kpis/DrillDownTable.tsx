@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { ExportColumn } from "@/lib/kpis/export-csv"
 import ExportButton from "./ExportButton"
@@ -12,13 +12,31 @@ interface DrillDownTableProps {
   columns: Array<{
     key: string
     label: string
-    format?: (value: unknown) => string
+    format?: (value: unknown) => ReactNode
     sortable?: boolean
   }>
   exportColumns: ExportColumn[]
   exportFilename: string
   privacyMode?: boolean
   userId?: number
+}
+
+/**
+ * Convierte un valor desconocido a un ReactNode válido
+ */
+function toReactNode(value: unknown): ReactNode {
+  if (value === null || value === undefined) {
+    return "—"
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+  // Para objetos, intentamos convertirlos a string
+  try {
+    return String(value)
+  } catch {
+    return "—"
+  }
 }
 
 interface PaginationState {
@@ -174,7 +192,7 @@ export default function DrillDownTable({
                   <tr key={idx} className="hover:bg-accent/50 transition-colors">
                     {columns.map((col) => (
                       <td key={col.key} className="px-4 py-3 text-foreground">
-                        {col.format ? col.format(row[col.key]) : (row[col.key] ?? "—")}
+                        {col.format ? col.format(row[col.key]) : toReactNode(row[col.key])}
                       </td>
                     ))}
                   </tr>

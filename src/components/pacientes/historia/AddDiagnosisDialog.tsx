@@ -47,7 +47,7 @@ export function AddDiagnosisDialog({ open, onOpenChange, patientId, onSuccess }:
       onSuccess()
       onOpenChange(false)
       setFormData({ code: "", label: "", status: "ACTIVE", notes: "" })
-    } catch (error) {
+    } catch {
       toast.error("Error al agregar diagnóstico")
     } finally {
       setIsSubmitting(false)

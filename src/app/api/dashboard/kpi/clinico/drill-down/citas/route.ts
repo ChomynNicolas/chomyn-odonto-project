@@ -107,7 +107,11 @@ export async function GET(req: NextRequest) {
       include: {
         paciente: {
           include: {
-            persona: true,
+            persona: {
+              include: {
+                documento: true,
+              },
+            },
           },
         },
         profesional: {
@@ -129,10 +133,10 @@ export async function GET(req: NextRequest) {
         inicio: cita.inicio.toISOString(),
         fin: cita.fin.toISOString(),
         estado: cita.estado,
-        paciente: filters.privacyMode ? ofuscarNombre(pacienteNombre) : pacienteNombre,
+        paciente: filters.privacyMode ? ofuscarNombre(pacienteNombre, true) : pacienteNombre,
         pacienteDocumento: filters.privacyMode
-          ? ofuscarDocumento(cita.paciente.persona.numeroDocumento || "")
-          : cita.paciente.persona.numeroDocumento,
+          ? ofuscarDocumento(cita.paciente.persona.documento?.numero || "", true)
+          : cita.paciente.persona.documento?.numero || null,
         profesional: profesionalNombre,
         consultorio: cita.consultorio?.nombre || null,
         tipo: cita.tipo,

@@ -50,13 +50,13 @@ export default async function TabGestion({ role }: { role: Rol }) {
             <KpiCard
               label="Turnos Completados"
               value={data.agenda.turnosCompletados.current}
-              comparison={data.agenda.turnosCompletados.comparison}
+              comparison={data.agenda.turnosCompletados}
               variant="success"
             />
             <KpiCard
               label="Tasa de Reprogramación"
               value={`${data.agenda.reprogramacionRate.current.toFixed(1)}%`}
-              comparison={data.agenda.reprogramacionRate.comparison}
+              comparison={data.agenda.reprogramacionRate}
               variant={data.agenda.reprogramacionRate.current <= 15 ? "success" : "warning"}
             />
             <KpiCard
@@ -155,12 +155,12 @@ export default async function TabGestion({ role }: { role: Rol }) {
             Pipeline de Tratamientos
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <KpiCard label="Pendientes" value={data.produccion.pipelineTratamiento.pending} variant="neutral" />
-            <KpiCard label="Programados" value={data.produccion.pipelineTratamiento.scheduled} variant="neutral" />
+            <KpiCard label="Pendientes" value={data.produccion.pipelineTratamiento.pending} variant="default" />
+            <KpiCard label="Programados" value={data.produccion.pipelineTratamiento.scheduled} variant="default" />
             <KpiCard label="En Progreso" value={data.produccion.pipelineTratamiento.inProgress} variant="warning" />
             <KpiCard label="Completados" value={data.produccion.pipelineTratamiento.completed} variant="success" />
             <KpiCard label="Cancelados" value={data.produccion.pipelineTratamiento.cancelled} variant="danger" />
-            <KpiCard label="Diferidos" value={data.produccion.pipelineTratamiento.deferred} variant="neutral" />
+            <KpiCard label="Diferidos" value={data.produccion.pipelineTratamiento.deferred} variant="default" />
           </div>
         </section>
 

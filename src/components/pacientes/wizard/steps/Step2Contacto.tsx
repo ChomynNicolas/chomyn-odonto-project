@@ -11,27 +11,53 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo } from "react"
-import type { PacienteCreateDTOClient } from "@/lib/schema/paciente.schema"
+import type { PacienteCreateFormInput } from "@/lib/schema/paciente.schema"
 import {
   esMovilPY,
   normalizarTelefono,
   normalizarEmail,
-  validarTelefonoPY,
+  validarTelefono,
+  detectarCodigoPais,
+  CODIGOS_PAIS,
 } from "@/lib/schema/paciente.schema"
 
+type PreferenciaContacto = "WHATSAPP" | "LLAMADA" | "EMAIL" | "SMS"
+
 interface Step2ContactoProps {
-  form: UseFormReturn<PacienteCreateDTOClient>
+  form: UseFormReturn<PacienteCreateFormInput>
 }
 
 export function Step2Contacto({ form }: Step2ContactoProps) {
   const telefono = form.watch("telefono") || ""
   const email = form.watch("email") || ""
+  const codigoPais = form.watch("codigoPaisTelefono") || "+595"
+
+  // Detectar código de país automáticamente cuando el usuario escribe
+  useEffect(() => {
+    if (telefono && telefono.trim()) {
+      const detectedCode = detectarCodigoPais(telefono)
+      if (detectedCode && detectedCode !== codigoPais) {
+        form.setValue("codigoPaisTelefono", detectedCode, { shouldValidate: false })
+      }
+    }
+  }, [telefono, codigoPais, form])
 
   // Derivados para ayudas de UI
-  const telefonoNormalizado = useMemo(() => (telefono ? normalizarTelefono(telefono) : ""), [telefono])
-  const telefonoValido = useMemo(() => (telefono ? validarTelefonoPY(telefono) : true), [telefono])
-  const movilDetectado = useMemo(() => (telefono ? esMovilPY(telefono) : false), [telefono])
+  const telefonoNormalizado = useMemo(
+    () => (telefono ? normalizarTelefono(telefono, codigoPais) : ""),
+    [telefono, codigoPais]
+  )
+  const validacionTelefono = useMemo(
+    () => (telefono ? validarTelefono(telefono, codigoPais) : { valido: true }),
+    [telefono, codigoPais]
+  )
+  const telefonoValido = validacionTelefono.valido
+  const movilDetectado = useMemo(
+    () => (telefono && codigoPais === "+595" ? esMovilPY(telefono) : false),
+    [telefono, codigoPais]
+  )
 
   // Auto-sincroniza preferencias según datos presentes
   useEffect(() => {
@@ -64,35 +90,86 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
     }
   }, [telefono, email, movilDetectado, telefonoNormalizado, telefonoValido, form])
 
+  // Obtener placeholder según código de país
+  const getPlaceholder = () => {
+    if (codigoPais === "+595") {
+      return "0992361378 o +595992361378"
+    }
+    return `${codigoPais}XXXXXXXXXX`
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Teléfono (requerido) */}
+        {/* Teléfono (requerido) con selector de código de país */}
         <FormField
           control={form.control}
           name="telefono"
           render={({ field }) => (
             <FormItem>
               <FormLabel htmlFor="telefono">Teléfono *</FormLabel>
-              <FormControl>
-                <Input
-                  id="telefono"
-                  {...field}
-                  type="tel"
-                  inputMode="tel"
-                  placeholder="+595 981 123456"
-                  autoComplete="tel"
-                  onBlur={(e) => {
-                    const norm = normalizarTelefono(e.target.value)
-                    field.onChange(norm)
-                  }}
-                  aria-invalid={!telefonoValido}
+              <div className="flex gap-2">
+                {/* Selector de código de país */}
+                <FormField
+                  control={form.control}
+                  name="codigoPaisTelefono"
+                  render={({ field: codeField }) => (
+                    <FormItem className="w-[140px]">
+                      <FormControl>
+                        <Select
+                          value={codeField.value || "+595"}
+                          onValueChange={(value) => {
+                            codeField.onChange(value)
+                            // Re-validar teléfono cuando cambia el código
+                            if (telefono) {
+                              form.trigger("telefono")
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="codigoPaisTelefono" className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CODIGOS_PAIS.map((item) => (
+                              <SelectItem key={item.code} value={item.code}>
+                                {item.code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  )}
                 />
-              </FormControl>
+                {/* Input de número */}
+                <FormControl className="flex-1">
+                  <Input
+                    id="telefono"
+                    {...field}
+                    type="tel"
+                    inputMode="tel"
+                    placeholder={getPlaceholder()}
+                    autoComplete="tel"
+                    onBlur={(e) => {
+                      // Solo hacer trim, no normalizar aquí
+                      // La normalización se hará al enviar el formulario
+                      const value = e.target.value.trim()
+                      field.onChange(value)
+                    }}
+                    aria-invalid={!telefonoValido}
+                  />
+                </FormControl>
+              </div>
               <FormDescription>
-                Incluya código de país (+595). {movilDetectado ? "Se detectó móvil (WhatsApp/SMS habilitados)." : ""}
+                {codigoPais === "+595"
+                  ? `Formato: 09XXXXXXXX o +595XXXXXXXXX. ${movilDetectado ? "Se detectó móvil (WhatsApp/SMS habilitados)." : ""}`
+                  : `Ingrese el número con código de país ${codigoPais}`}
               </FormDescription>
-              {!telefonoValido ? <p className="text-xs text-red-600">Formato inválido (+595XXXXXXXXX).</p> : <FormMessage />}
+              {!telefonoValido && validacionTelefono.mensaje ? (
+                <p className="text-xs text-red-600">{validacionTelefono.mensaje}</p>
+              ) : (
+                <FormMessage />
+              )}
             </FormItem>
           )}
         />
@@ -111,9 +188,17 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
                   type="email"
                   placeholder="paciente@ejemplo.com"
                   autoComplete="email"
-                  onBlur={(e) => field.onChange(normalizarEmail(e.target.value))}
+                  onBlur={(e) => {
+                    const value = e.target.value.trim()
+                    if (value) {
+                      field.onChange(normalizarEmail(value))
+                    } else {
+                      field.onChange("")
+                    }
+                  }}
                 />
               </FormControl>
+              <FormDescription>Opcional. Formato: paciente@ejemplo.com</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -132,18 +217,18 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              {[
-                { value: "WHATSAPP", label: "WhatsApp", disabled: !(telefono && telefonoValido && movilDetectado) },
-                { value: "LLAMADA", label: "Llamada telefónica", disabled: !(telefono && telefonoValido) },
-                { value: "EMAIL", label: "Email", disabled: !(email && email.includes("@")) },
-                { value: "SMS", label: "SMS", disabled: !(telefono && telefonoValido && movilDetectado) },
-              ].map((item) => (
+              {([
+                { value: "WHATSAPP" as const, label: "WhatsApp", disabled: !(telefono && telefonoValido && movilDetectado) },
+                { value: "LLAMADA" as const, label: "Llamada telefónica", disabled: !(telefono && telefonoValido) },
+                { value: "EMAIL" as const, label: "Email", disabled: !(email && email.includes("@")) },
+                { value: "SMS" as const, label: "SMS", disabled: !(telefono && telefonoValido && movilDetectado) },
+              ] as const).map((item) => (
                 <FormField
                   key={item.value}
                   control={form.control}
                   name="preferenciasContacto"
                   render={({ field }) => {
-                    const checked = field.value?.includes(item.value as any)
+                    const checked = field.value?.includes(item.value)
                     return (
                       <FormItem className="flex flex-row items-start space-x-3 space-y-0 opacity-100">
                         <FormControl>
@@ -151,9 +236,9 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
                             checked={checked}
                             disabled={item.disabled}
                             onCheckedChange={(checked) => {
-                              const curr = new Set(field.value ?? [])
-                              if (checked) curr.add(item.value as any)
-                              else curr.delete(item.value as any)
+                              const curr = new Set<PreferenciaContacto>(field.value ?? [])
+                              if (checked) curr.add(item.value)
+                              else curr.delete(item.value)
                               const next = Array.from(curr)
                               field.onChange(next)
 

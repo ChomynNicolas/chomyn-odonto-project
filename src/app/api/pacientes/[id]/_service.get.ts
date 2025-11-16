@@ -38,7 +38,10 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
     alergias?: string | null
     medicacion?: string | null
     obraSocial?: string | null
-  }>(base.notas as unknown, {})
+  }>(
+    typeof base.notas === "string" ? base.notas : base.notas === null ? null : JSON.stringify(base.notas),
+    {}
+  )
 
   // Map citas
   const toCitaLite = (c: (typeof base.citas)[number]): CitaLite => ({
@@ -164,16 +167,25 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
       idPersona: base.persona.idPersona,
       nombres: base.persona.nombres,
       apellidos: base.persona.apellidos,
+      segundoApellido: base.persona.segundoApellido ?? null, // ⭐ Added
       nombreCompleto: nombreCompleto(base.persona),
       genero: base.persona.genero,
       fechaNacimiento: base.persona.fechaNacimiento ? base.persona.fechaNacimiento.toISOString() : null,
       edad: calculateAge(base.persona.fechaNacimiento),
       direccion: base.persona.direccion,
+      ciudad: base.persona.ciudad ?? null, // ⭐ Added
+      pais: base.persona.pais ?? null, // ⭐ Added
+      contactoEmergenciaNombre: base.persona.contactoEmergenciaNombre ?? null, // ⭐ Added
+      contactoEmergenciaTelefono: base.persona.contactoEmergenciaTelefono ?? null, // ⭐ Added
+      contactoEmergenciaRelacion: base.persona.contactoEmergenciaRelacion ?? null, // ⭐ Added
       documento: base.persona.documento
         ? {
             tipo: base.persona.documento.tipo,
             numero: base.persona.documento.numero,
             ruc: base.persona.documento.ruc,
+            paisEmision: base.persona.documento.paisEmision ?? null, // ⭐ Added
+            fechaEmision: base.persona.documento.fechaEmision ? base.persona.documento.fechaEmision.toISOString() : null, // ⭐ Added
+            fechaVencimiento: base.persona.documento.fechaVencimiento ? base.persona.documento.fechaVencimiento.toISOString() : null, // ⭐ Added
           }
         : null,
       contactos: base.persona.contactos.map((c) => ({
@@ -185,6 +197,8 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
         whatsappCapaz: c.whatsappCapaz,
         esPreferidoRecordatorio: c.esPreferidoRecordatorio,
         esPreferidoCobranza: c.esPreferidoCobranza,
+        createdAt: c.createdAt ? c.createdAt.toISOString() : undefined, // ⭐ Added
+        updatedAt: c.updatedAt ? c.updatedAt.toISOString() : undefined, // ⭐ Added
       })),
     },
 
@@ -193,11 +207,21 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
       relacion: r.relacion,
       esPrincipal: r.esPrincipal,
       autoridadLegal: r.autoridadLegal,
+      vigenteDesde: r.vigenteDesde.toISOString(), // ⭐ Added
+      vigenteHasta: r.vigenteHasta ? r.vigenteHasta.toISOString() : null, // ⭐ Added
+      notas: r.notas ?? null, // ⭐ Added
+      createdAt: r.createdAt.toISOString(), // ⭐ Added
+      updatedAt: r.updatedAt.toISOString(), // ⭐ Added
       persona: {
         idPersona: r.persona.idPersona,
         nombreCompleto: nombreCompleto(r.persona),
         documento: r.persona.documento ? { tipo: r.persona.documento.tipo, numero: r.persona.documento.numero } : null,
-        contactoPrincipal: r.persona.contactos[0]?.valorNorm ?? null,
+        contactos: r.persona.contactos.map((c) => ({ // ⭐ Changed: now array of all contacts
+          valorNorm: c.valorNorm,
+          tipo: c.tipo as "PHONE" | "EMAIL",
+          esPrincipal: c.esPrincipal,
+          label: c.label,
+        })),
       },
     })),
 
@@ -247,9 +271,6 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
               bpSyst: vitals[0].bpSyst,
               bpDiast: vitals[0].bpDiast,
               heartRate: vitals[0].heartRate,
-              createdBy: vitals[0].createdBy
-          ? { idUsuario: vitals[0].createdBy.idUsuario, nombreApellido: vitals[0].createdBy.nombreApellido }
-          : null,
             }
           : null,
         historial: vitals.slice(0, 5).map((v) => ({
@@ -258,9 +279,6 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
           bpSyst: v.bpSyst,
           bpDiast: v.bpDiast,
           heartRate: v.heartRate,
-          createdBy: v.createdBy
-      ? { idUsuario: v.createdBy.idUsuario, nombreApellido: v.createdBy.nombreApellido }
-      : null,
         })),
       },
     },

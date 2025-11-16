@@ -24,24 +24,29 @@ export type ApiSuccess<T = unknown> = {
  * Success response builder
  */
 export function ok<T>(data: T, meta?: unknown, status = 200): NextResponse {
-  return NextResponse.json({ ok: true, data, ...(meta && { meta }) } as ApiSuccess<T>, { status })
+  const response: ApiSuccess<T> = { ok: true, data }
+  if (meta !== undefined && meta !== null && typeof meta === "object") {
+    response.meta = meta
+  }
+  return NextResponse.json(response, { status })
 }
 
 /**
  * Error response builders
  */
 export const errors = {
-  validation: (message = "Datos inválidos", details?: unknown) =>
-    NextResponse.json(
-      {
-        ok: false,
-        code: "VALIDATION_ERROR",
-        error: message,
-        ...(details && { details }),
-        timestamp: new Date().toISOString(),
-      } as ApiError,
-      { status: 400 },
-    ),
+  validation: (message = "Datos inválidos", details?: unknown) => {
+    const error: ApiError = {
+      ok: false,
+      code: "VALIDATION_ERROR",
+      error: message,
+      timestamp: new Date().toISOString(),
+    }
+    if (details !== undefined && details !== null) {
+      error.details = details
+    }
+    return NextResponse.json(error, { status: 400 })
+  },
 
   unauthenticated: (message = "No autenticado") =>
     NextResponse.json(
@@ -120,17 +125,18 @@ export const errors = {
       { status: 429 },
     ),
 
-  internal: (message = "Error interno del servidor", details?: unknown) =>
-    NextResponse.json(
-      {
-        ok: false,
-        code: "INTERNAL_ERROR",
-        error: message,
-        ...(process.env.NODE_ENV !== "production" && details && { details }),
-        timestamp: new Date().toISOString(),
-      } as ApiError,
-      { status: 500 },
-    ),
+  internal: (message = "Error interno del servidor", details?: unknown) => {
+    const error: ApiError = {
+      ok: false,
+      code: "INTERNAL_ERROR",
+      error: message,
+      timestamp: new Date().toISOString(),
+    }
+    if (process.env.NODE_ENV !== "production" && details !== undefined && details !== null) {
+      error.details = details
+    }
+    return NextResponse.json(error, { status: 500 })
+  },
 
   db: (message = "Error de base de datos") =>
     NextResponse.json(
@@ -154,17 +160,18 @@ export const errors = {
       { status: 409 },
     ),
 
-  apiError: (status: number, code: string, message: string, details?: unknown) =>
-    NextResponse.json(
-      {
-        ok: false,
-        code,
-        error: message,
-        ...(details && { details }),
-        timestamp: new Date().toISOString(),
-      } as ApiError,
-      { status },
-    ),
+  apiError: (status: number, code: string, message: string, details?: unknown) => {
+    const error: ApiError = {
+      ok: false,
+      code,
+      error: message,
+      timestamp: new Date().toISOString(),
+    }
+    if (details !== undefined && details !== null) {
+      error.details = details
+    }
+    return NextResponse.json(error, { status })
+  },
 }
 
 /**

@@ -2,6 +2,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma as db } from "@/lib/prisma";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 export const revalidate = 0;
 
 const qs = z.object({
@@ -13,19 +14,18 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const { q, limit } = qs.parse(Object.fromEntries(sp.entries()));
 
-  const where = q
-    ? {
-        AND: [
-          { estaActivo: true },
-          {
-            OR: [
-              { persona: { nombres: { contains: q, mode: "insensitive" } } },
-              { persona: { apellidos: { contains: q, mode: "insensitive" } } },
-            ],
-          },
-        ],
-      }
-    : { estaActivo: true };
+  // Construir where con tipos explícitos para Prisma
+  const whereAND: Prisma.ProfesionalWhereInput[] = [{ estaActivo: true }];
+  
+  if (q) {
+    const orConditions: Prisma.ProfesionalWhereInput[] = [
+      { persona: { nombres: { contains: q, mode: "insensitive" } } },
+      { persona: { apellidos: { contains: q, mode: "insensitive" } } },
+    ];
+    whereAND.push({ OR: orConditions });
+  }
+
+  const where: Prisma.ProfesionalWhereInput = { AND: whereAND };
 
   const rows = await db.profesional.findMany({
     where,

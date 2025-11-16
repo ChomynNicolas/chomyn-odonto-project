@@ -11,7 +11,7 @@ const relaxedString = z
 /** Enums compartidos */
 export const GeneroEnum = z.enum(["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"])
 export const TipoDocumentoEnum = z.enum(["CI", "DNI", "PASAPORTE", "RUC", "OTRO"])
-export const RelacionPacienteEnum = z.enum(["PADRE", "MADRE", "TUTOR", "CONYUGE", "FAMILIAR", "OTRO"])
+export const RelacionPacienteEnum = z.enum(["PADRE", "MADRE", "TUTOR", "CONYUGE", "HIJO", "FAMILIAR", "EMPRESA", "OTRO"])
 
 /** Sub-esquemas compartidos */
 export const PreferenciasContactoSchema = z
@@ -49,13 +49,15 @@ const EmailOptionalSchema = z
 /** Esquema principal de creación (compartido front/back) */
 export const PacienteCreateSchema = z.object({
   nombreCompleto: z
-    .string({ required_error: "El nombre es requerido" })
+    .string()
+    .min(1, "El nombre es requerido")
     .min(2, "El nombre debe tener al menos 2 caracteres")
     .transform(trim),
   genero: GeneroEnum, // Unificado: usar NO_ESPECIFICADO cuando aplique
   tipoDocumento: TipoDocumentoEnum.optional().default("CI"),
   dni: z
-    .string({ required_error: "El número de documento es requerido" })
+    .string()
+    .min(1, "El número de documento es requerido")
     .min(3, "Documento demasiado corto")
     .max(32)
     .transform(trim),
@@ -107,7 +109,7 @@ const ContactoSchema = z.object({
   label: z.string().optional().nullable(),
 })
 
-const DatosClinicosSchema = z.record(z.unknown()).optional().nullable()
+const DatosClinicosSchema = z.record(z.string(), z.unknown()).optional().nullable()
 
 const ResponsablePagoCreateSchema = z.object({
   personaId: z.number().int().positive().optional(),

@@ -1,7 +1,6 @@
 // React hook for managing patient attachments
 
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Attachment, AttachmentType } from "@/lib/types/patient"
 import { fetchAttachments, createAttachment, deleteAttachment, type FetchAttachmentsParams } from "@/lib/api/attachments-api"
 import { toast } from "sonner"
 

@@ -92,7 +92,12 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
               <SheetHeader>
                 <SheetTitle>Filtros de agenda</SheetTitle>
               </SheetHeader>
-              <FiltersForm filters={filters} onFiltersChange={onFiltersChange} currentUser={currentUser} />
+              <FiltersForm 
+                filters={filters} 
+                onFiltersChange={onFiltersChange} 
+                currentUser={currentUser}
+                onClose={() => setFiltersOpen(false)}
+              />
             </SheetContent>
           </Sheet>
 
@@ -169,20 +174,26 @@ function FiltersForm({
   filters,
   onFiltersChange,
   currentUser,
+  onClose,
 }: {
   filters: AgendaFilters
   onFiltersChange: (filters: AgendaFilters) => void
   currentUser?: CurrentUser
+  onClose?: () => void
 }) {
   const [localFilters, setLocalFilters] = React.useState(filters)
 
   const handleApply = () => {
     onFiltersChange(localFilters)
+    // Cerrar el Sheet después de aplicar los filtros
+    onClose?.()
   }
 
   const handleReset = () => {
     setLocalFilters({})
     onFiltersChange({})
+    // Cerrar el Sheet después de limpiar los filtros
+    onClose?.()
   }
 
   return (

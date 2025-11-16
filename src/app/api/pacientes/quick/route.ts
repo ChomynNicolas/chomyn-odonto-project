@@ -12,6 +12,10 @@ export async function POST(req: NextRequest) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado")
 
+  if (gate.userId === undefined) {
+    return jsonError(403, "RBAC_FORBIDDEN", "Usuario no identificado")
+  }
+
   try {
     const headers = Object.fromEntries(req.headers)
     const idemParsed = idempotencyHeaderSchema.safeParse({

@@ -1,8 +1,15 @@
 export function splitNombreCompleto(nombreCompleto: string) {
-  const parts = nombreCompleto.trim().split(/\s+/)
-  if (parts.length === 1) return { nombres: parts[0], apellidos: "" }
+  const parts = nombreCompleto.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) {
+    return { nombres: parts[0], apellidos: "", segundoApellido: null }
+  }
+  if (parts.length === 2) {
+    return { nombres: parts[0], apellidos: parts[1], segundoApellido: null }
+  }
+  // 3+ words: last 2 are last names (apellidos + segundoApellido)
+  const segundoApellido = parts.pop()!
   const apellidos = parts.pop()!
-  return { nombres: parts.join(" "), apellidos }
+  return { nombres: parts.join(" "), apellidos, segundoApellido }
 }
 
 export function mapGeneroToDB(g: string) {

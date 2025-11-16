@@ -47,7 +47,7 @@ export function AddAllergyDialog({ open, onOpenChange, patientId, onSuccess }: A
       onSuccess()
       onOpenChange(false)
       setFormData({ label: "", severity: "MODERATE", reaction: "" })
-    } catch (error) {
+    } catch {
       toast.error("Error al agregar alergia")
     } finally {
       setIsSubmitting(false)

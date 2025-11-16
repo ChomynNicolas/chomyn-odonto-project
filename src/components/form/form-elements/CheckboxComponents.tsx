@@ -20,16 +20,20 @@ export default function CheckboxComponents() {
           <Checkbox
             checked={isCheckedTwo}
             onChange={setIsCheckedTwo}
-            label="Checked"
           />
+          <span className="block text-sm font-medium text-gray-700 dark:text-gray-400">
+            Checked
+          </span>
         </div>
         <div className="flex items-center gap-3">
           <Checkbox
             checked={isCheckedDisabled}
             onChange={setIsCheckedDisabled}
             disabled
-            label="Disabled"
           />
+          <span className="block text-sm font-medium text-gray-700 dark:text-gray-400">
+            Disabled
+          </span>
         </div>
       </div>
     </ComponentCard>

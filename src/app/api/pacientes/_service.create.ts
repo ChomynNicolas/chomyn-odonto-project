@@ -5,10 +5,10 @@ import { prisma } from "@/lib/prisma"
 import { normalizarTelefono, normalizarEmail, esMovilPY } from "@/lib/normalize"
 import { mapGeneroToDB, splitNombreCompleto } from "./_dto"
 import { withTxRetry } from "./_tx"
-import type { AllergySeverity } from "@prisma/client"
+import type { AllergySeverity, Prisma, RelacionPaciente } from "@prisma/client"
 
 export async function createPaciente(body: PacienteCreateBody, actorUserId: number) {
-  const { nombres, apellidos } = splitNombreCompleto(body.nombreCompleto)
+  const { nombres, apellidos, segundoApellido } = splitNombreCompleto(body.nombreCompleto)
   const generoDB = body.genero ? mapGeneroToDB(body.genero) : "NO_ESPECIFICADO"
 
   const parseFreeList = (s?: string) =>
@@ -32,6 +32,7 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
     const persona = await pacienteRepo.createPersonaConDocumento(tx, {
       nombres,
       apellidos,
+      segundoApellido,
       genero: generoDB,
       fechaNacimiento: body.fechaNacimiento ? new Date(body.fechaNacimiento) : null,
       direccion: body.direccion ?? null,
@@ -112,7 +113,7 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
         await pacienteRepo.linkResponsablePago(tx, {
           pacienteId: paciente.idPaciente,
           personaId: body.responsablePago.personaId,
-          relacion: body.responsablePago.relacion,
+          relacion: body.responsablePago.relacion as RelacionPaciente,
           esPrincipal: body.responsablePago.esPrincipal ?? true,
           // autoridadLegal se determina automáticamente según la relación
         })
@@ -141,22 +142,32 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
   if (alergiasArr.length > 0) {
     // dedupe por (allergyId|label) en memoria
     type AlergiaItem = { id?: number | null; label?: string | null; severity?: AllergySeverity; reaction?: string | null; notedAt?: string | Date | null; isActive?: boolean }
-    const key = (a: AlergiaItem) => (a.id ? `id:${a.id}` : `label:${(a.label ?? "").trim().toLowerCase()}`)
+    const key = (a: AlergiaItem): string => {
+      const id = "id" in a && a.id !== undefined && a.id !== null ? a.id : null
+      if (id !== null) {
+        return `id:${id}`
+      }
+      return `label:${(a.label ?? "").trim().toLowerCase()}`
+    }
     const map = new Map<string, AlergiaItem>()
     for (const a of alergiasArr) {
-      if (!a.id && !a.label) continue
+      const hasId = "id" in a && a.id !== undefined && a.id !== null
+      if (!hasId && (!a.label || !a.label.trim())) continue
       map.set(key(a), a)
     }
-    const toInsert = Array.from(map.values()).map((a) => ({
-      pacienteId: idPaciente,
-      allergyId: a.id ?? null,
-      label: (a.label ?? null),
-      severity: (a.severity as AllergySeverity) ?? "MODERATE",
-      reaction: a.reaction ?? null,
-      notedAt: a.notedAt ? new Date(a.notedAt) : new Date(),
-      isActive: a.isActive ?? true,
-      createdByUserId: actorUserId,
-    }))
+    const toInsert = Array.from(map.values()).map((a) => {
+      const allergyId = "id" in a && a.id !== undefined && a.id !== null ? a.id : null
+      return {
+        pacienteId: idPaciente,
+        allergyId,
+        label: a.label ?? null,
+        severity: (a.severity as AllergySeverity) ?? "MODERATE",
+        reaction: a.reaction ?? null,
+        notedAt: a.notedAt ? new Date(a.notedAt) : new Date(),
+        isActive: a.isActive ?? true,
+        createdByUserId: actorUserId,
+      }
+    })
 
     if (toInsert.length) {
       await prisma.patientAllergy.createMany({ data: toInsert, skipDuplicates: true })
@@ -174,24 +185,34 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
   // 7) Medicación (dedupe + createMany)
   if (medsArr.length > 0) {
     type MedicacionItem = { id?: number | null; label?: string | null; dose?: string | null; freq?: string | null; route?: string | null; startAt?: string | Date | null; endAt?: string | Date | null; isActive?: boolean }
-    const key = (m: MedicacionItem) => (m.id ? `id:${m.id}` : `label:${(m.label ?? "").trim().toLowerCase()}`)
+    const key = (m: MedicacionItem): string => {
+      const id = "id" in m && m.id !== undefined && m.id !== null ? m.id : null
+      if (id !== null) {
+        return `id:${id}`
+      }
+      return `label:${(m.label ?? "").trim().toLowerCase()}`
+    }
     const map = new Map<string, MedicacionItem>()
     for (const m of medsArr) {
-      if (!m.id && !m.label) continue
+      const hasId = "id" in m && m.id !== undefined && m.id !== null
+      if (!hasId && (!m.label || !m.label.trim())) continue
       map.set(key(m), m)
     }
-    const toInsert = Array.from(map.values()).map((m) => ({
-      pacienteId: idPaciente,
-      medicationId: m.id ?? null,
-      label: (m.label ?? null),
-      dose: m.dose ?? null,
-      freq: m.freq ?? null,
-      route: m.route ?? null,
-      startAt: m.startAt ? new Date(m.startAt) : null,
-      endAt: m.endAt ? new Date(m.endAt) : null,
-      isActive: m.isActive ?? true,
-      createdByUserId: actorUserId,
-    }))
+    const toInsert = Array.from(map.values()).map((m) => {
+      const medicationId = "id" in m && m.id !== undefined && m.id !== null ? m.id : null
+      return {
+        pacienteId: idPaciente,
+        medicationId,
+        label: m.label ?? null,
+        dose: m.dose ?? null,
+        freq: m.freq ?? null,
+        route: m.route ?? null,
+        startAt: m.startAt ? new Date(m.startAt) : null,
+        endAt: m.endAt ? new Date(m.endAt) : null,
+        isActive: m.isActive ?? true,
+        createdByUserId: actorUserId,
+      }
+    })
 
     if (toInsert.length) {
       await prisma.patientMedication.createMany({ data: toInsert, skipDuplicates: true })
@@ -228,7 +249,7 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
       entity: "Patient",
       entityId: idPaciente,
       actorId: actorUserId,
-      metadata: { nombreCompleto: body.nombreCompleto, documento: body.numeroDocumento } as Record<string, unknown>,
+      metadata: { nombreCompleto: body.nombreCompleto, documento: body.numeroDocumento } as Prisma.InputJsonValue,
     },
   }).catch((e) => console.error("[warn] audit create failed", e))
 

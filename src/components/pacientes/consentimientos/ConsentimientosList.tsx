@@ -16,8 +16,8 @@ import { UploadConsentDialog } from "./UploadConsentDialog"
 interface Consentimiento {
   id: number
   tipo: string
-  firmadoEn: Date
-  vigenteHasta: Date
+  firmadoEn: string | Date
+  vigenteHasta: string | Date
   activo: boolean
   archivo: {
     secureUrl: string
@@ -48,7 +48,10 @@ export function ConsentimientosList({ pacienteId, consentimientos, userRole, onR
   const permissions = getPermissions(userRole)
 
   const consentimientosActivos = consentimientos.filter((c) => c.activo)
-  const consentimientosVigentes = consentimientosActivos.filter((c) => isConsentimientoVigente(c.vigenteHasta))
+  const consentimientosVigentes = consentimientosActivos.filter((c) => {
+    const vigenteHasta = c.vigenteHasta instanceof Date ? c.vigenteHasta : new Date(c.vigenteHasta)
+    return isConsentimientoVigente(vigenteHasta)
+  })
 
   const openViewer = (consent: Consentimiento) => {
     if (!permissions.canViewConsentDetails) {
@@ -106,7 +109,10 @@ export function ConsentimientosList({ pacienteId, consentimientos, userRole, onR
           ) : (
             <div className="space-y-3">
               {consentimientosActivos.map((consent) => {
-                const vigente = isConsentimientoVigente(consent.vigenteHasta)
+                const vigenteHastaDate = consent.vigenteHasta instanceof Date ? consent.vigenteHasta : new Date(consent.vigenteHasta)
+                const vigente = isConsentimientoVigente(vigenteHastaDate)
+                const firmadoEnStr = consent.firmadoEn instanceof Date ? consent.firmadoEn.toISOString() : consent.firmadoEn
+                const vigenteHastaStr = consent.vigenteHasta instanceof Date ? consent.vigenteHasta.toISOString() : consent.vigenteHasta
                 return (
                   <div
                     key={consent.id}
@@ -125,7 +131,7 @@ export function ConsentimientosList({ pacienteId, consentimientos, userRole, onR
                           Firmado por: {consent.responsable.nombre} ({getVinculoLabel(consent.responsable.tipoVinculo)})
                         </p>
                         <p>
-                          Válido hasta: {formatDate(consent.vigenteHasta)} • Firmado: {formatDate(consent.firmadoEn)}
+                          Válido hasta: {formatDate(vigenteHastaStr)} • Firmado: {formatDate(firmadoEnStr)}
                         </p>
                       </div>
                     </div>
@@ -197,11 +203,11 @@ function ConsentimientoViewer({ consent }: { consent: Consentimiento }) {
           </div>
           <div>
             <p className="text-muted-foreground">Fecha de firma</p>
-            <p className="font-medium">{formatDate(consent.firmadoEn, true)}</p>
+            <p className="font-medium">{formatDate(consent.firmadoEn instanceof Date ? consent.firmadoEn.toISOString() : consent.firmadoEn, true)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Vigente hasta</p>
-            <p className="font-medium">{formatDate(consent.vigenteHasta, true)}</p>
+            <p className="font-medium">{formatDate(consent.vigenteHasta instanceof Date ? consent.vigenteHasta.toISOString() : consent.vigenteHasta, true)}</p>
           </div>
         </div>
       </div>

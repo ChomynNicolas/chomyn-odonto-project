@@ -6,14 +6,17 @@ import { ROLE_ICON_NAME, type RolNombre } from "@/components/icons/role-icon-map
 
 type Props = {
   name: string
-  role: RolNombre
+  role?: RolNombre
   variant?: "header" | "sidebar"
   className?: string
   loading?: boolean
   error?: boolean
 }
 
-function roleConfig(role: RolNombre) {
+function roleConfig(role: RolNombre | undefined) {
+  if (!role) {
+    return null
+  }
   switch (role) {
     case "ADMIN":
       return {
@@ -40,7 +43,7 @@ function roleConfig(role: RolNombre) {
 }
 
 export function UserIdentity({ name, role, variant = "header", className, loading, error }: Props) {
-  const { label, badgeClass, iconName, iconColor } = roleConfig(role)
+  const roleConfigData = roleConfig(role)
 
   return (
     <div
@@ -49,15 +52,25 @@ export function UserIdentity({ name, role, variant = "header", className, loadin
         variant === "header" ? "px-2 py-1.5" : "px-2 py-2",
         className,
       )}
-      aria-label={`Usuario: ${name}, Rol: ${label}`}
+      aria-label={roleConfigData ? `Usuario: ${name}, Rol: ${roleConfigData.label}` : `Usuario: ${name}`}
     >
-      <div
-        className={clsx("hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:flex", badgeClass)}
-        title={label}
-      >
-        <SvgMaskIcon name={iconName} sizeClassName="h-3.5 w-3.5" className={iconColor} aria-hidden />
-        <span className="hidden lg:inline">{label}</span>
-      </div>
+      {roleConfigData && (
+        <div
+          className={clsx(
+            "hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium sm:flex",
+            roleConfigData.badgeClass,
+          )}
+          title={roleConfigData.label}
+        >
+          <SvgMaskIcon
+            name={roleConfigData.iconName}
+            sizeClassName="h-3.5 w-3.5"
+            className={roleConfigData.iconColor}
+            aria-hidden
+          />
+          <span className="hidden lg:inline">{roleConfigData.label}</span>
+        </div>
+      )}
 
       <div
         className={clsx(

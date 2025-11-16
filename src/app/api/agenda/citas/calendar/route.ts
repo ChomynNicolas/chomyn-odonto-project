@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { PrismaClient, EstadoCita, Prisma } from "@prisma/client";
+import { PrismaClient, EstadoCita, TipoCita, Prisma } from "@prisma/client";
 import { requireSessionWithRoles } from "@/app/api/_lib/auth";
 
 export const revalidate = 0;
@@ -57,13 +57,21 @@ export async function GET(req: NextRequest) {
     if (consultorioId) where.consultorioId = consultorioId;
 
     if (estado) {
-      const estados = estado.split(",").map((s) => s.trim().toUpperCase());
-      where.estado = { in: estados };
+      const estados = estado.split(",").map((s) => s.trim().toUpperCase()).filter((s): s is EstadoCita => 
+        Object.values(EstadoCita).includes(s as EstadoCita)
+      );
+      if (estados.length > 0) {
+        where.estado = { in: estados };
+      }
     }
 
     if (tipo) {
-      const tipos = tipo.split(",").map((t) => t.trim().toUpperCase());
-      where.tipo = { in: tipos };
+      const tipos = tipo.split(",").map((t) => t.trim().toUpperCase()).filter((t): t is TipoCita => 
+        Object.values(TipoCita).includes(t as TipoCita)
+      );
+      if (tipos.length > 0) {
+        where.tipo = { in: tipos };
+      }
     }
 
     if (soloUrgencias === "true") {

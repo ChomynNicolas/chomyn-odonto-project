@@ -70,15 +70,32 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     const normalizedEmail = body.email ? normalizeEmail(body.email) : undefined
     const normalizedPhone = body.phone ? normalizePhonePY(body.phone) : undefined
 
+    // Map documentType from API to Prisma enum
+    const documentTypeMap: Record<string, "CI" | "DNI" | "PASAPORTE" | "RUC" | "OTRO"> = {
+      CI: "CI",
+      PASSPORT: "PASAPORTE",
+      RUC: "RUC",
+      OTHER: "OTRO",
+    }
+    const prismaDocumentType = body.documentType ? documentTypeMap[body.documentType] : undefined
+
+    // Map gender from API to Prisma enum
+    const genderMap: Record<string, "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"> = {
+      MALE: "MASCULINO",
+      FEMALE: "FEMENINO",
+      OTHER: "OTRO",
+    }
+    const prismaGender = body.gender ? genderMap[body.gender] : undefined
+
     // 5. Check for duplicates
-    if (body.documentType && body.documentNumber) {
+    if (prismaDocumentType && body.documentNumber) {
       const duplicate = await tx.persona.findFirst({
         where: {
           AND: [
             { idPersona: { not: current.personaId } },
             {
               documento: {
-                tipo: body.documentType,
+                tipo: prismaDocumentType,
                 numero: body.documentNumber.trim(),
               },
             },
@@ -95,7 +112,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     if (normalizedEmail) {
-      const duplicate = await tx.contacto.findFirst({
+      const duplicate = await tx.personaContacto.findFirst({
         where: {
           AND: [
             { personaId: { not: current.personaId } },
@@ -127,8 +144,12 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
         personaUpdateData.apellidos = body.lastName
         oldPersonaData.lastName = current.persona.apellidos
       }
-      if (body.gender !== undefined) {
-        personaUpdateData.genero = body.gender
+      if (body.secondLastName !== undefined) { // ⭐ Added
+        personaUpdateData.segundoApellido = body.secondLastName
+        oldPersonaData.secondLastName = current.persona.segundoApellido
+      }
+      if (prismaGender !== undefined) {
+        personaUpdateData.genero = prismaGender
         oldPersonaData.gender = current.persona.genero
       }
       if (body.dateOfBirth !== undefined) {
@@ -138,6 +159,26 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       if (body.address !== undefined) {
         personaUpdateData.direccion = body.address
         oldPersonaData.address = current.persona.direccion
+      }
+      if (body.city !== undefined) { // ⭐ Added
+        personaUpdateData.ciudad = body.city
+        oldPersonaData.city = current.persona.ciudad
+      }
+      if (body.country !== undefined) { // ⭐ Added
+        personaUpdateData.pais = body.country
+        oldPersonaData.country = current.persona.pais
+      }
+      if (body.emergencyContactName !== undefined) { // ⭐ Added
+        personaUpdateData.contactoEmergenciaNombre = body.emergencyContactName
+        oldPersonaData.emergencyContactName = current.persona.contactoEmergenciaNombre
+      }
+      if (body.emergencyContactPhone !== undefined) { // ⭐ Added
+        personaUpdateData.contactoEmergenciaTelefono = body.emergencyContactPhone
+        oldPersonaData.emergencyContactPhone = current.persona.contactoEmergenciaTelefono
+      }
+      if (body.emergencyContactRelation !== undefined) { // ⭐ Added
+        personaUpdateData.contactoEmergenciaRelacion = body.emergencyContactRelation
+        oldPersonaData.emergencyContactRelation = current.persona.contactoEmergenciaRelacion
       }
     }
 
@@ -150,27 +191,31 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 8. Update or create Documento if needed
-    if (canEditDemographics && (body.documentType || body.documentNumber || body.ruc)) {
+    if (canEditDemographics && (prismaDocumentType || body.documentNumber || body.ruc || body.documentIssueDate !== undefined || body.documentExpiryDate !== undefined)) {
       const documentData: Prisma.DocumentoUpdateInput = {}
 
-      if (body.documentType) documentData.tipo = body.documentType
+      if (prismaDocumentType) documentData.tipo = prismaDocumentType
       if (body.documentNumber) documentData.numero = body.documentNumber.trim()
       if (body.ruc !== undefined) documentData.ruc = body.ruc
-      if (body.documentCountry) documentData.pais = body.documentCountry
+      if (body.documentCountry) documentData.paisEmision = body.documentCountry
+      if (body.documentIssueDate !== undefined) documentData.fechaEmision = body.documentIssueDate ? new Date(body.documentIssueDate) : null // ⭐ Added
+      if (body.documentExpiryDate !== undefined) documentData.fechaVencimiento = body.documentExpiryDate ? new Date(body.documentExpiryDate) : null // ⭐ Added
 
       if (current.persona.documento) {
         await tx.documento.update({
           where: { idDocumento: current.persona.documento.idDocumento },
           data: documentData,
         })
-      } else if (body.documentType && body.documentNumber) {
+      } else if (prismaDocumentType && body.documentNumber) {
         await tx.documento.create({
           data: {
             personaId: current.personaId,
-            tipo: body.documentType,
+            tipo: prismaDocumentType,
             numero: body.documentNumber.trim(),
-            pais: body.documentCountry ?? "PY",
+            paisEmision: body.documentCountry ?? "PY",
             ruc: body.ruc ?? null,
+            fechaEmision: body.documentIssueDate ? new Date(body.documentIssueDate) : null, // ⭐ Added
+            fechaVencimiento: body.documentExpiryDate ? new Date(body.documentExpiryDate) : null, // ⭐ Added
           },
         })
       }
@@ -183,23 +228,24 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       if (normalizedPhone === null) {
         // Remove phone if exists
         if (existingPhone) {
-          await tx.contacto.update({
+          await tx.personaContacto.update({
             where: { idContacto: existingPhone.idContacto },
             data: { activo: false },
           })
         }
       } else if (existingPhone) {
         // Update existing
-        await tx.contacto.update({
+        await tx.personaContacto.update({
           where: { idContacto: existingPhone.idContacto },
           data: { valorNorm: normalizedPhone },
         })
       } else {
         // Create new
-        await tx.contacto.create({
+        await tx.personaContacto.create({
           data: {
             personaId: current.personaId,
             tipo: "PHONE",
+            valorRaw: normalizedPhone,
             valorNorm: normalizedPhone,
             esPrincipal: true,
             activo: true,
@@ -215,23 +261,24 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       if (normalizedEmail === null) {
         // Remove email if exists
         if (existingEmail) {
-          await tx.contacto.update({
+          await tx.personaContacto.update({
             where: { idContacto: existingEmail.idContacto },
             data: { activo: false },
           })
         }
       } else if (existingEmail) {
         // Update existing
-        await tx.contacto.update({
+        await tx.personaContacto.update({
           where: { idContacto: existingEmail.idContacto },
           data: { valorNorm: normalizedEmail },
         })
       } else {
         // Create new
-        await tx.contacto.create({
+        await tx.personaContacto.create({
           data: {
             personaId: current.personaId,
             tipo: "EMAIL",
+            valorRaw: normalizedEmail,
             valorNorm: normalizedEmail,
             esPrincipal: true,
             activo: true,
@@ -312,7 +359,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
           metadata: {
             diff,
             role: context.role,
-          },
+          } as Prisma.InputJsonValue,
         },
       })
     } catch (auditError) {

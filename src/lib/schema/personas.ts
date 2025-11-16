@@ -20,6 +20,7 @@ export type PersonaContactoItemDTO = z.infer<typeof PersonaContactoItemSchema>
 export const PersonaListItemSchema = z.object({
   idPersona: z.number().int().positive(),
   nombreCompleto: z.string().trim(),
+  fechaNacimiento: z.string().datetime().nullable().optional(),
   documento: z.object({
     tipo: TipoDocumentoEnum,
     numero: z.string().trim(),

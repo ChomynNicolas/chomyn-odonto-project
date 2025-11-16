@@ -11,7 +11,7 @@ function canRead(role?: string) {
   return role === "ADMIN" || role === "ODONT" || role === "RECEP";
 }
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     // Auth + RBAC
     const session = await auth();
@@ -20,7 +20,7 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
     if (!canRead(role)) return NextResponse.json(fail("No autorizado"), { status: 403 });
 
     // Params
-    const { id } = ParamIdSchema.parse(ctx.params);
+    const { id } = ParamIdSchema.parse(await ctx.params);
 
     // Servicio
     const data = await serviceGetProcedimientoDetalle(id);
@@ -40,7 +40,7 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
 
 const canPatch = (role?: string) => role === "ADMIN" || role === "ODONT";
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     // Auth
     const session = await auth();
@@ -50,7 +50,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     if (!canPatch(role)) return NextResponse.json(fail("No autorizado"), { status: 403 });
 
     // Params + Body (validación temprana para devolver 400 rápido)
-    const { id } = ParamIdSchema.parse(ctx.params);
+    const { id } = ParamIdSchema.parse(await ctx.params);
     const body = await req.json();
     PatchProcedimientoSchema.parse(body);
 

@@ -2,7 +2,8 @@ import { Suspense } from "react"
 import { ConsultasView } from "@/components/pacientes/consultas/ConsultasView"
 import { Skeleton } from "@/components/ui/skeleton"
 
-export default function ConsultasPage({ params }: { params: { id: string } }) {
+export default async function ConsultasPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   return (
     <div className="space-y-6">
       <div>
@@ -11,7 +12,7 @@ export default function ConsultasPage({ params }: { params: { id: string } }) {
       </div>
 
       <Suspense fallback={<ConsultasViewSkeleton />}>
-        <ConsultasView pacienteId={params.id} />
+        <ConsultasView pacienteId={id} />
       </Suspense>
     </div>
   )

@@ -19,22 +19,22 @@ const onlyDigits = (s: string) => s.replace(/\D+/g, "")
 
 /** where para nombres/apellidos (+ combinación Nombre + Apellidos si hay >= 2 tokens) */
 function buildNameWhere(q: string, tokens: string[]): Prisma.PersonaWhereInput {
-  return {
-    OR: [
-      { nombres: { contains: q, mode: "insensitive" } },
-      { apellidos: { contains: q, mode: "insensitive" } },
-      ...(tokens.length >= 2
-        ? [
-            {
-              AND: [
-                { nombres: { contains: tokens[0], mode: "insensitive" } },
-                { apellidos: { contains: tokens.slice(1).join(" "), mode: "insensitive" } },
-              ],
-            },
-          ]
-        : []),
-    ],
+  const orConditions: Prisma.PersonaWhereInput[] = [
+    { nombres: { contains: q, mode: "insensitive" } },
+    { apellidos: { contains: q, mode: "insensitive" } },
+  ]
+
+  // Si hay 2 o más tokens, agregar búsqueda combinada
+  if (tokens.length >= 2) {
+    orConditions.push({
+      AND: [
+        { nombres: { contains: tokens[0], mode: "insensitive" } },
+        { apellidos: { contains: tokens.slice(1).join(" "), mode: "insensitive" } },
+      ],
+    })
   }
+
+  return { OR: orConditions }
 }
 
 /** where para documento/RUC/teléfono/email (soporta dígitos-only y crudos) */
@@ -89,7 +89,11 @@ export async function searchPersonas(params: unknown): Promise<PersonasSearchRes
 
   const rows = await db.persona.findMany({
     where,
-    include: {
+    select: {
+      idPersona: true,
+      nombres: true,
+      apellidos: true,
+      fechaNacimiento: true,
       documento: { select: { tipo: true, numero: true, ruc: true } },
       contactos: {
         where: { activo: true },

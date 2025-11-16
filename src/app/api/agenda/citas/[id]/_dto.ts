@@ -1,6 +1,13 @@
 import { isMinorAt } from "@/lib/utils/consent-helpers"
 import { prisma } from "@/lib/prisma"
 
+/**
+ * Resumen del consentimiento informado vigente para un paciente menor.
+ * 
+ * @remarks
+ * Este objeto se incluye en CitaConsentimientoStatus cuando hay un consentimiento vigente.
+ * Contiene información sobre quién firmó el consentimiento y hasta cuándo es válido.
+ */
 export interface ConsentimientoResumen {
   firmadoEn: string // ISO string (serializado)
   vigenteHasta: string // ISO string (serializado)
@@ -8,6 +15,36 @@ export interface ConsentimientoResumen {
   responsableTipoVinculo: string
 }
 
+/**
+ * Estado del consentimiento informado para una cita específica.
+ * 
+ * @remarks
+ * Este objeto se calcula en el backend cada vez que se solicita el detalle de una cita.
+ * Determina si un paciente menor de edad tiene el consentimiento necesario para iniciar la consulta.
+ * 
+ * Flujo de estados:
+ * 1. Si el paciente es mayor de edad:
+ *    - esMenorAlInicio = false
+ *    - requiereConsentimiento = false
+ *    - consentimientoVigente = true (no requiere)
+ *    - bloqueaInicio = false
+ * 
+ * 2. Si el paciente es menor sin consentimiento:
+ *    - esMenorAlInicio = true
+ *    - requiereConsentimiento = true
+ *    - consentimientoVigente = false
+ *    - bloqueaInicio = true
+ *    - mensajeBloqueo = mensaje explicativo
+ * 
+ * 3. Si el paciente es menor con consentimiento vigente:
+ *    - esMenorAlInicio = true
+ *    - requiereConsentimiento = true
+ *    - consentimientoVigente = true
+ *    - bloqueaInicio = false
+ *    - consentimientoResumen = detalles del consentimiento
+ * 
+ * @see getCitaConsentimientoStatus para la lógica de cálculo
+ */
 export interface CitaConsentimientoStatus {
   esMenorAlInicio: boolean
   requiereConsentimiento: boolean
@@ -17,6 +54,29 @@ export interface CitaConsentimientoStatus {
   mensajeBloqueo?: string
 }
 
+/**
+ * Calcula el estado del consentimiento informado para una cita específica.
+ * 
+ * @param citaId - ID de la cita
+ * @returns Promise con el estado del consentimiento
+ * 
+ * @remarks
+ * Esta función:
+ * 1. Obtiene la cita con el paciente y sus consentimientos
+ * 2. Verifica si el paciente es menor de edad al momento de la cita
+ * 3. Si es menor, verifica si hay un consentimiento vigente
+ * 4. Retorna el estado completo del consentimiento
+ * 
+ * El consentimiento se considera vigente si:
+ * - Está activo (activo = true)
+ * - Es del tipo CONSENTIMIENTO_MENOR_ATENCION
+ * - Su fecha de vigencia (vigente_hasta) es >= fecha de inicio de la cita
+ * 
+ * Esta función se llama cada vez que se solicita el detalle de una cita,
+ * por lo que siempre refleja el estado actualizado del consentimiento.
+ * 
+ * @throws Error si la cita no existe
+ */
 export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaConsentimientoStatus> {
   // ⬇⬇⬇  NOMBRES DE RELACIÓN CORRECTOS SEGÚN TU SCHEMA  ⬇⬇⬇
   const cita = await prisma.cita.findUnique({

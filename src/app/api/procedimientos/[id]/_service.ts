@@ -1,7 +1,7 @@
 // src/app/api/procedimientos/[id]/_service.ts
 
 import { PatchProcedimientoSchema } from "./_schemas";
-import { repoDeleteProcedimiento, repoGetCatalogo, repoGetProcedimientoForUpdate, repoGetTreatmentStep, repoUpdateProcedimiento, type ProcedimientoForUpdate } from "./_repo";
+import { repoDeleteProcedimiento, repoGetCatalogo, repoGetProcedimientoForUpdate, repoGetTreatmentStep, repoUpdateProcedimiento } from "./_repo";
 import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from "../../_lib/errors";
 import type { Prisma } from "@prisma/client";
 
@@ -37,7 +37,7 @@ export async function servicePatchProcedimiento(opts: {
     resultNotes: string | null;
     createdAt: Date;
     updatedAt: Date;
-    ConsultaAdjunto: Array<{ idConsultaAdjunto: number }>;
+    ConsultaAdjunto: Array<{ idAdjunto: number }>;
     catalogo: { idProcedimiento: number; aplicaDiente: boolean; aplicaSuperficie: boolean; activo: boolean } | null;
     consulta: {
       citaId: number;
@@ -69,14 +69,14 @@ export async function servicePatchProcedimiento(opts: {
   if (patch.accion === "ANULAR") {
     // Regla ANULAR: neutraliza y conserva trazabilidad
     const neutralData: Prisma.ConsultaProcedimientoUpdateInput = {
-      procedureId: null,
+      catalogo: { disconnect: true },
       serviceType: null,
       toothNumber: null,
       toothSurface: null,
       quantity: 0,
       unitPriceCents: null,
       totalCents: null,
-      treatmentStepId: null,
+      treatmentStep: { disconnect: true },
       resultNotes: `${proc.resultNotes ? proc.resultNotes + " | " : ""}[ANULADO] ${new Date().toISOString()}`,
     };
     const res = await repoUpdateProcedimiento(opts.id, neutralData);
@@ -89,11 +89,11 @@ export async function servicePatchProcedimiento(opts: {
   // Cambios de catálogo / texto libre
   if (patch.procedureId !== undefined) {
     if (patch.procedureId === null) {
-      data.procedureId = null;
+      data.catalogo = { disconnect: true };
     } else {
       const cat = await repoGetCatalogo(patch.procedureId);
       if (!cat || !cat.activo) throw new BadRequestError("procedureId inválido o inactivo");
-      data.procedureId = patch.procedureId;
+      data.catalogo = { connect: { idProcedimiento: patch.procedureId } };
       // Validar diente/superficie si aplica más abajo con los valores resultantes
       // Actualizar el catálogo en proc para las validaciones siguientes
       proc.catalogo = cat;
@@ -131,7 +131,7 @@ export async function servicePatchProcedimiento(opts: {
   // Vinculación con TreatmentStep (validar paciente)
   if (patch.treatmentStepId !== undefined) {
     if (patch.treatmentStepId === null) {
-      data.treatmentStepId = null;
+      data.treatmentStep = { disconnect: true };
     } else {
       const step = await repoGetTreatmentStep(patch.treatmentStepId);
       if (!step) throw new BadRequestError("treatmentStepId inválido");
@@ -139,7 +139,7 @@ export async function servicePatchProcedimiento(opts: {
       if (step.plan.pacienteId !== pacienteProc) {
         throw new ConflictError("El step no pertenece al paciente del procedimiento");
       }
-      data.treatmentStepId = patch.treatmentStepId;
+      data.treatmentStep = { connect: { idTreatmentStep: patch.treatmentStepId } };
     }
   }
 

@@ -8,7 +8,7 @@ import { cancelarCita } from "./_service";
  * PATCH /api/agenda/citas/[id]/cancelar
  * Cancela una cita (no elimina) y registra auditoría.
  */
-export async function PATCH(req: NextRequest, context: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   // RBAC: RECEP, ODONT, ADMIN
   const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"]);
   if (!auth.authorized) {
@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, context: { params: { id: string } 
   }
 
   // Params
-  const parsedParams = paramsSchema.safeParse(await context.params); // ✅
+  const parsedParams = paramsSchema.safeParse(await context.params);
   if (!parsedParams.success) {
     return NextResponse.json(
       { ok: false, error: "BAD_REQUEST", details: parsedParams.error.flatten() },

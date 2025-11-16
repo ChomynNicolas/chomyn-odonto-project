@@ -12,7 +12,7 @@ export async function repoGetProcedimientoForUpdate(id: number) {
           cita: { select: { pacienteId: true, profesionalId: true } },
         },
       },
-      ConsultaAdjunto: { select: { idConsultaAdjunto: true }, take: 1 },
+      ConsultaAdjunto: { select: { idAdjunto: true }, take: 1 },
       catalogo: { select: { idProcedimiento: true, aplicaDiente: true, aplicaSuperficie: true, activo: true } },
     },
   });

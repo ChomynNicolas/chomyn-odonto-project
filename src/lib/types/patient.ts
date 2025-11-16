@@ -11,7 +11,7 @@ export type ContactType = "PHONE" | "EMAIL" | "MOBILE" | "WHATSAPP"
 export type RelationType = "PADRE" | "MADRE" | "TUTOR" | "CONYUGE" | "HIJO" | "HERMANO" | "OTRO"
 
 export type AppointmentStatus = "SCHEDULED" | "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "NO_SHOW"
-export type DiagnosisStatus = "ACTIVE" | "RESOLVED" | "CHRONIC" | "MONITORING"
+export type DiagnosisStatus = "ACTIVE" | "RESOLVED" | "CHRONIC" | "MONITORING" | "RULED_OUT"
 export type AllergySeverity = "MILD" | "MODERATE" | "SEVERE"
 export type MedicationStatus = "ACTIVE" | "SUSPENDED" | "COMPLETED"
 export type TreatmentPlanStatus = "DRAFT" | "ACTIVE" | "COMPLETED" | "CANCELLED"
@@ -37,7 +37,9 @@ export type ToothCondition =
   | "MISSING"
   | "IMPLANT"
   | "ROOT_CANAL"
-  | "FRACTURED"
+  | "BRIDGE"
+  | "EXTRACTION_NEEDED"
+  | "FRACTURED" // Legacy support - not in Prisma enum but used in frontend
 
 // Patient identification
 export interface PatientIdentification {
@@ -51,12 +53,15 @@ export interface PatientIdentification {
   documentType?: DocumentType
   documentNumber?: string
   documentCountry?: Country
+  documentIssueDate?: string // ⭐ Added
+  documentExpiryDate?: string // ⭐ Added
   ruc?: string
   address?: string
   city?: string
   country?: Country
   emergencyContactName?: string
   emergencyContactPhone?: string
+  emergencyContactRelation?: string // ⭐ Added
   createdAt: string
   updatedAt: string
 }
@@ -78,6 +83,9 @@ export interface ResponsibleParty {
   relation: RelationType
   isPrimary: boolean
   hasLegalAuthority: boolean
+  validFrom?: string // ⭐ Added
+  validUntil?: string // ⭐ Added
+  notes?: string // ⭐ Added
   person: {
     firstName: string
     lastName: string
@@ -114,7 +122,7 @@ export type Diagnosis = {
   id: number
   code?: string
   label: string
-  status: "ACTIVE" | "RESOLVED" | "CHRONIC" | "MONITORING" | "RULED_OUT"
+  status: DiagnosisStatus
   diagnosedAt: string // <- usamos diagnosedAt
   resolvedAt?: string
   notes?: string

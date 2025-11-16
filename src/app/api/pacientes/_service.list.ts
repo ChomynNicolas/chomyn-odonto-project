@@ -5,10 +5,14 @@ import { Prisma, Genero } from "@prisma/client";
 
 /** ---------------------------------------------------------
  *  Parseo de query desde URLSearchParams (re-uso Zod)
+ *  URLSearchParams siempre devuelve strings, Zod se encarga de la coerción
  * --------------------------------------------------------- */
 export function parsePacientesListQuery(searchParams: URLSearchParams): PacientesListQuery {
+  // Convert URLSearchParams to plain object (all values are strings)
   const obj: Record<string, string> = {};
-  searchParams.forEach((v, k) => (obj[k] = v));
+  searchParams.forEach((value, key) => {
+    obj[key] = value;
+  });
   return pacientesListQuerySchema.parse(obj);
 }
 

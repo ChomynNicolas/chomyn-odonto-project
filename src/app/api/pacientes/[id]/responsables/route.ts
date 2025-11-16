@@ -7,12 +7,13 @@ function jsonError(status: number, code: string, error: string, details?: unknow
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
 }
 
-export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado")
 
   try {
-    const pacienteId = Number(ctx.params.id)
+    const params = await ctx.params;
+    const pacienteId = Number(params.id)
     if (!Number.isFinite(pacienteId)) return jsonError(400, "VALIDATION_ERROR", "ID de paciente inválido")
 
     const responsables = await getResponsables(pacienteId)
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   }
 }
 
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado")
 
@@ -42,7 +43,8 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       return jsonError(400, "VALIDATION_ERROR", "Header de idempotencia inválido", idem.error.issues)
     }
 
-    const pacienteId = Number(ctx.params.id)
+    const params = await ctx.params;
+    const pacienteId = Number(params.id)
     if (!Number.isFinite(pacienteId)) return jsonError(400, "VALIDATION_ERROR", "ID de paciente inválido")
 
     const raw = await req.json()

@@ -45,7 +45,18 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
         include: {
           paciente: {
             include: {
-              persona: true,
+              persona: {
+                include: {
+                  contactos: {
+                    where: { activo: true },
+                    select: {
+                      tipo: true,
+                      valorNorm: true,
+                      esPrincipal: true,
+                    },
+                  },
+                },
+              },
             },
           },
           profesional: {
@@ -186,13 +197,57 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
     orderBy: { notedAt: "desc" },
   })
 
+  // Obtener plan de tratamiento activo del paciente
+  const planTratamiento = await prisma.treatmentPlan.findFirst({
+    where: {
+      pacienteId: consulta.cita.pacienteId,
+      isActive: true,
+    },
+    include: {
+      creadoPor: {
+        select: userMiniSelect,
+      },
+      steps: {
+        include: {
+          procedimientoCatalogo: {
+            select: {
+              idProcedimiento: true,
+              code: true,
+              nombre: true,
+            },
+          },
+        },
+        orderBy: { order: "asc" },
+      },
+    },
+  })
+
+  // Calcular edad del paciente
+  const calcularEdad = (fechaNacimiento: Date | null): number | null => {
+    if (!fechaNacimiento) return null
+    const today = new Date()
+    const birthDate = new Date(fechaNacimiento)
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+    return age
+  }
+
+  // Obtener teléfono principal del paciente
+  const telefonoPrincipal = consulta.cita.paciente.persona.contactos?.find(
+    (c) => c.tipo === "PHONE" && c.esPrincipal
+  )?.valorNorm || null
+
   const dto: ConsultaClinicaDTO = {
     citaId: consulta.citaId,
     pacienteId: consulta.cita.pacienteId,
     status: consulta.status,
     startedAt: consulta.startedAt?.toISOString() ?? null,
     finishedAt: consulta.finishedAt?.toISOString() ?? null,
-    reason: consulta.reason,
+    // ⚠️ DEPRECATED: reason field - use PatientAnamnesis.motivoConsulta instead
+    reason: null, // Always return null - motivoConsulta is now in PatientAnamnesis
     diagnosis: consulta.diagnosis,
     clinicalNotes: consulta.clinicalNotes,
     performedBy: {
@@ -206,6 +261,18 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
     citaEstado: consulta.cita.estado,
     citaInicio: consulta.cita.inicio.toISOString(),
     citaFin: consulta.cita.fin.toISOString(),
+
+    // Información del paciente
+    paciente: {
+      id: consulta.cita.pacienteId,
+      nombres: consulta.cita.paciente.persona.nombres,
+      apellidos: consulta.cita.paciente.persona.apellidos,
+      fechaNacimiento: consulta.cita.paciente.persona.fechaNacimiento?.toISOString() ?? null,
+      genero: consulta.cita.paciente.persona.genero,
+      direccion: consulta.cita.paciente.persona.direccion,
+      telefono: telefonoPrincipal,
+      edad: calcularEdad(consulta.cita.paciente.persona.fechaNacimiento),
+    },
 
     anamnesis: consulta.ClinicalHistoryEntry.map((e) => ({
       id: e.idClinicalHistoryEntry,
@@ -348,6 +415,43 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
       notedAt: a.notedAt.toISOString(),
       isActive: a.isActive,
     })),
+
+    planTratamiento: planTratamiento
+      ? {
+          id: planTratamiento.idTreatmentPlan,
+          titulo: planTratamiento.titulo,
+          descripcion: planTratamiento.descripcion,
+          isActive: planTratamiento.isActive,
+          createdAt: planTratamiento.createdAt.toISOString(),
+          updatedAt: planTratamiento.updatedAt.toISOString(),
+          createdBy: {
+            id: planTratamiento.creadoPor.idUsuario,
+            nombre: displayUser(planTratamiento.creadoPor),
+          },
+          steps: planTratamiento.steps.map((step) => ({
+            id: step.idTreatmentStep,
+            order: step.order,
+            procedureId: step.procedureId,
+            procedimientoCatalogo: step.procedimientoCatalogo
+              ? {
+                  id: step.procedimientoCatalogo.idProcedimiento,
+                  code: step.procedimientoCatalogo.code,
+                  nombre: step.procedimientoCatalogo.nombre,
+                }
+              : null,
+            serviceType: step.serviceType,
+            toothNumber: step.toothNumber,
+            toothSurface: step.toothSurface,
+            estimatedDurationMin: step.estimatedDurationMin,
+            estimatedCostCents: step.estimatedCostCents,
+            priority: step.priority,
+            status: step.status,
+            notes: step.notes,
+            createdAt: step.createdAt.toISOString(),
+            updatedAt: step.updatedAt.toISOString(),
+          })),
+        }
+      : null,
   }
 
   return dto
@@ -400,6 +504,36 @@ export async function ensureConsulta(citaId: number, performedById: number, crea
       status: ConsultaEstado.DRAFT,
     },
     update: {},
+  })
+}
+
+/**
+ * Actualiza el resumen de la consulta (diagnosis, clinicalNotes)
+ * ⚠️ DEPRECATED: reason field removed. Use PatientAnamnesis.motivoConsulta instead
+ */
+export async function updateConsultaResumen(
+  citaId: number,
+  data: {
+    diagnosis?: string | null
+    clinicalNotes?: string | null
+  }
+) {
+  // Construir objeto de actualización solo con campos presentes
+  const updateData: {
+    diagnosis?: string | null
+    clinicalNotes?: string | null
+  } = {}
+
+  if (data.diagnosis !== undefined) {
+    updateData.diagnosis = data.diagnosis
+  }
+  if (data.clinicalNotes !== undefined) {
+    updateData.clinicalNotes = data.clinicalNotes
+  }
+
+  return await prisma.consulta.update({
+    where: { citaId },
+    data: updateData,
   })
 }
 

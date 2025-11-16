@@ -66,6 +66,12 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const requestId = crypto.randomUUID()
 
+  // Validate userId is defined for rate limiting
+  if (gate.userId === undefined) {
+    safeLog("error", "User ID is undefined", { requestId })
+    return errors.forbidden("Usuario no identificado")
+  }
+
   // Rate limiting for mutations
   const rateLimitKey = `update:${gate.userId}`
   const rateLimit = checkRateLimit(rateLimitKey, 30, 60000) // 30 requests per minute
@@ -96,9 +102,19 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       }
     }
 
+    // Get client IP for audit
+    const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined
+
+    // Build update context (userId is already validated above)
+    const context = {
+      userId: gate.userId,
+      role: gate.role,
+      ip,
+    }
+
     safeLog("info", "Updating patient", { requestId, pacienteId: id, userId: gate.userId })
 
-    const result = await updatePaciente(id, body, gate.userId)
+    const result = await updatePaciente(id, body, context)
 
     safeLog("info", "Patient updated successfully", { requestId, pacienteId: id })
 
@@ -126,6 +142,12 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!gate.ok) return errors.forbidden()
 
   const requestId = crypto.randomUUID()
+
+  // Validate userId is defined for rate limiting
+  if (gate.userId === undefined) {
+    safeLog("error", "User ID is undefined", { requestId })
+    return errors.forbidden("Usuario no identificado")
+  }
 
   // Rate limiting for deletions
   const rateLimitKey = `delete:${gate.userId}`

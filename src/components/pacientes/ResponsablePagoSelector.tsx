@@ -14,22 +14,55 @@ import { cn } from "@/lib/utils" // si no tienes cn, reemplaza por una función 
 import { RelacionPacienteEnum } from "@/lib/schema/paciente"
 import type { PersonaListItemDTO } from "@/lib/schema/personas"
 import { PatientQuickCreateModal } from "./PatientQuickCreateModal"
+import { z } from "zod"
+
+/**
+ * Calcula la edad en años cumplidos a partir de una fecha de nacimiento.
+ * Maneja Date, string ISO, o null/undefined.
+ * @param fechaNacimiento - Fecha de nacimiento (Date, string ISO, o null/undefined)
+ * @returns Edad en años cumplidos, o null si la fecha no es válida
+ */
+function calcularEdad(fechaNacimiento: Date | string | null | undefined): number | null {
+  if (!fechaNacimiento) return null
+
+  let fecha: Date
+  if (typeof fechaNacimiento === "string") {
+    fecha = new Date(fechaNacimiento)
+    if (Number.isNaN(fecha.getTime())) return null
+  } else {
+    fecha = fechaNacimiento
+  }
+
+  const hoy = new Date()
+  let edad = hoy.getFullYear() - fecha.getFullYear()
+  const mes = hoy.getMonth() - fecha.getMonth()
+
+  if (mes < 0 || (mes === 0 && hoy.getDate() < fecha.getDate())) {
+    edad--
+  }
+
+  return edad
+}
+
+/**
+ * Determina si una persona es mayor o igual a 18 años.
+ * Si no tiene fecha de nacimiento válida, retorna false (no elegible).
+ */
+function esMayorDeEdad(persona: PersonaListItemDTO): boolean {
+  const edad = calcularEdad(persona.fechaNacimiento)
+  return edad !== null && edad >= 18
+}
 
 /** Valor que este selector entrega al formulario */
 export type ResponsablePagoValue = {
   personaId: number
-  relacion: (typeof RelacionPacienteEnum._def.values)[number]
+  relacion: z.infer<typeof RelacionPacienteEnum>
   esPrincipal: boolean
 } | null
 
 type Props = {
   value: ResponsablePagoValue
   onChange: (v: ResponsablePagoValue) => void
-
-  /** Para invalidación del listado cuando se usa alta rápida (tu KEY) */
-  qForList?: string
-  soloActivos?: boolean
-  limit?: number
 
   disabled?: boolean
   className?: string
@@ -38,7 +71,17 @@ type Props = {
   descriptionId?: string
 }
 
-const RELACION_OPTS = RelacionPacienteEnum.options as unknown as string[] // ["PADRE","MADRE","TUTOR","CONYUGE","FAMILIAR","OTRO"]
+// Valores del enum para uso en runtime (extraídos del enum de Zod)
+const RELACION_OPTS: z.infer<typeof RelacionPacienteEnum>[] = [
+  "PADRE",
+  "MADRE",
+  "TUTOR",
+  "CONYUGE",
+  "HIJO",
+  "FAMILIAR",
+  "EMPRESA",
+  "OTRO",
+]
 
 /** ---------- util: debounced value ---------- */
 function useDebounced<T>(value: T, delay = 300) {
@@ -93,9 +136,6 @@ function PersonaBadge({ p }: { p: PersonaListItemDTO }) {
 export default function ResponsablePagoSelector({
   value,
   onChange,
-  qForList = "",
-  soloActivos = true,
-  limit = 20,
   disabled,
   className,
   descriptionId,
@@ -105,7 +145,7 @@ export default function ResponsablePagoSelector({
   const [error, setError] = useState<string | null>(null)
 
   // valores controlados (cuando ya hay persona elegida)
-  const [relacion, setRelacion] = useState<(typeof RELACION_OPTS)[number]>(value?.relacion ?? "OTRO")
+  const [relacion, setRelacion] = useState<z.infer<typeof RelacionPacienteEnum>>(value?.relacion ?? "OTRO")
   const [esPrincipal, setEsPrincipal] = useState<boolean>(value?.esPrincipal ?? true)
 
   // datos de la persona seleccionada (para mostrar badge)
@@ -150,9 +190,24 @@ export default function ResponsablePagoSelector({
   }, [value])
 
   const items = data?.items ?? []
-  const empty = enabled && !isFetching && items.length === 0 && !error
+  // Filtrar menores de edad y personas sin fecha de nacimiento válida
+  const itemsElegibles = items.filter(esMayorDeEdad)
+  const empty = enabled && !isFetching && itemsElegibles.length === 0 && !error
+
+  // Helper para obtener el personaId del valor seleccionado (type guard explícito)
+  const getSelectedPersonaId = (): number | null => {
+    if (value === null) return null
+    return value.personaId
+  }
+  const selectedPersonaId = getSelectedPersonaId()
 
   function handlePick(p: PersonaListItemDTO) {
+    // Validación de seguridad: no permitir seleccionar menores de edad
+    if (!esMayorDeEdad(p)) {
+      setError("El responsable debe ser mayor de 18 años.")
+      return
+    }
+    setError(null)
     setSelectedPersona(p)
     onChange({ personaId: p.idPersona, relacion, esPrincipal })
     setOpenList(false)
@@ -175,27 +230,62 @@ export default function ResponsablePagoSelector({
   }, [relacion, esPrincipal])
 
   /** Quick-create: cuando el modal crea un paciente */
-  async function handleQuickCreated(idPacienteStr: string) {
+  async function handleQuickCreated(idPaciente: number) {
     try {
-      const idPaciente = Number(idPacienteStr)
       const personaId = await resolvePersonaIdFromPacienteId(idPaciente)
 
+      // Obtener datos completos del paciente para validar edad de la persona
+      const res = await fetch(`/api/pacientes/${idPaciente}`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.ok || !data?.data?.persona) {
+        throw new Error("No se pudo obtener los datos del responsable creado")
+      }
+
+      const personaData = data.data.persona
+
+      // Construir PersonaListItemDTO para validar edad
+      const personaCreada: PersonaListItemDTO = {
+        idPersona: personaData.idPersona,
+        nombreCompleto: personaData.nombreCompleto,
+        fechaNacimiento: personaData.fechaNacimiento,
+        documento: personaData.documento
+          ? {
+              tipo: personaData.documento.tipo,
+              numero: personaData.documento.numero,
+              ruc: personaData.documento.ruc ?? undefined,
+            }
+          : { tipo: "OTRO", numero: "" },
+        contactos: personaData.contactos
+          ?.filter((c: { tipo: string }) => c.tipo === "PHONE" || c.tipo === "EMAIL")
+          .map((c: { tipo: string; valorNorm: string }) => ({
+            tipo: c.tipo as "PHONE" | "EMAIL",
+            valor: c.valorNorm,
+          })),
+      }
+
+      // Validar que sea mayor de edad
+      if (!esMayorDeEdad(personaCreada)) {
+        setError("El responsable creado debe ser mayor de 18 años. No se puede asignar como responsable.")
+        setQuickOpen(false)
+        return
+      }
+
+      setError(null)
       onChange({ personaId, relacion, esPrincipal })
       setQuickOpen(false)
       setOpenList(false)
 
-      // Visual rápido (placeholder); se actualizará al volver a la ficha/listado
-      setSelectedPersona({
-        idPersona: personaId,
-        nombreCompleto: "Responsable creado",
-        documento: { tipo: "OTRO", numero: "" },
-        contactos: [],
-      })
+      // Usar datos reales de la persona
+      setSelectedPersona(personaCreada)
 
       // ⬅️ NUEVO: foco al control de relación (mejor accesibilidad)
       setTimeout(() => relacionTriggerRef.current?.focus(), 0)
-    } catch (e: any) {
-      setError(e?.message ?? "No se pudo obtener el responsable creado")
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : "No se pudo obtener el responsable creado"
+      setError(errorMessage)
     }
   }
 
@@ -213,7 +303,7 @@ export default function ResponsablePagoSelector({
                 <Label className="text-xs text-muted-foreground">Relación</Label>
                 <Select
                   value={relacion}
-                  onValueChange={(v) => setRelacion(v as (typeof RELACION_OPTS)[number])}
+                  onValueChange={(v) => setRelacion(v as z.infer<typeof RelacionPacienteEnum>)}
                   disabled={disabled}
                 >
                   <SelectTrigger ref={relacionTriggerRef} className="mt-1">
@@ -284,19 +374,25 @@ export default function ResponsablePagoSelector({
                 className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md"
               >
                 {error && <div className="px-2 py-3 text-sm text-destructive">Error: {error}</div>}
-                {!error && empty && <div className="px-2 py-3 text-sm text-muted-foreground">Sin resultados…</div>}
+                {!error && empty && (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                    Sin resultados elegibles. Solo se muestran personas mayores de 18 años.
+                  </div>
+                )}
                 {!error &&
-                  items.map((p) => {
+                  itemsElegibles.map((p) => {
                     const doc = [p.documento?.tipo, p.documento?.numero].filter(Boolean).join(" ")
                     const ruc = p.documento?.ruc ? ` • RUC ${p.documento.ruc}` : ""
                     const contact =
                       p.contactos?.find((c) => c.tipo === "PHONE")?.valor ??
                       p.contactos?.find((c) => c.tipo === "EMAIL")?.valor ??
                       ""
+                    const isSelected = selectedPersonaId === p.idPersona
                     return (
                       <button
                         key={p.idPersona}
                         role="option"
+                        aria-selected={isSelected}
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handlePick(p)}
@@ -311,6 +407,13 @@ export default function ResponsablePagoSelector({
                       </button>
                     )
                   })}
+                {/* Mostrar advertencia si hay resultados pero todos son menores de edad */}
+                {!error && items.length > 0 && itemsElegibles.length === 0 && (
+                  <div className="px-2 py-3 text-sm text-amber-600">
+                    Se encontraron {items.length} resultado{items.length !== 1 ? "s" : ""}, pero ninguno es mayor de 18
+                    años.
+                  </div>
+                )}
                 {data?.hasMore && (
                   <div className="px-2 py-2 text-xs text-muted-foreground">Hay más resultados… afiná la búsqueda</div>
                 )}
@@ -324,7 +427,7 @@ export default function ResponsablePagoSelector({
               <Label className="text-xs text-muted-foreground">Relación</Label>
               <Select
                 value={relacion}
-                onValueChange={(v) => setRelacion(v as (typeof RELACION_OPTS)[number])}
+                onValueChange={(v) => setRelacion(v as z.infer<typeof RelacionPacienteEnum>)}
                 disabled={disabled}
               >
                 <SelectTrigger className="mt-1">
@@ -374,9 +477,6 @@ export default function ResponsablePagoSelector({
         open={quickOpen}
         onOpenChange={() => setQuickOpen(false)}
         onCreated={handleQuickCreated}
-        qForList={qForList}
-        soloActivos={soloActivos}
-        limit={limit}
       />
     </div>
   )

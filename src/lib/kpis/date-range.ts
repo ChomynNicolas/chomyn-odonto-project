@@ -5,7 +5,7 @@
 import { startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, differenceInDays } from "date-fns"
 import { toZonedTime, fromZonedTime } from "date-fns-tz"
 import { BUSINESS_TZ } from "@/lib/date-utils"
-import type { DateRangePreset } from "@/app/api/kpis/clinico/_schemas"
+import { DateRangePreset } from "@/app/api/dashboard/kpi/_schemas"
 
 export interface DateRange {
   start: Date

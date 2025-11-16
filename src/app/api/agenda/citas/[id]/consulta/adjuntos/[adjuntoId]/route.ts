@@ -43,7 +43,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       data: {
         isActive: false,
         deletedAt: new Date(),
-        deletedByUserId: session.user.id,
+        deletedByUserId: session.user.id ? Number.parseInt(session.user.id, 10) : null,
       },
     })
 

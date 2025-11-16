@@ -320,11 +320,13 @@ export function MedicacionesModule({ citaId, consulta, canEdit, onUpdate }: Medi
                           <User className="h-3 w-3" />
                           <span>{med.createdBy.nombre}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          <span>{formatDate(med.startAt || med.createdAt, true)}</span>
-                          <span className="text-xs">({formatRelativeTime(med.startAt || med.createdAt)})</span>
-                        </div>
+                        {med.startAt && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{formatDate(med.startAt, true)}</span>
+                            <span className="text-xs">({formatRelativeTime(med.startAt)})</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

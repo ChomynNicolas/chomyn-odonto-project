@@ -14,8 +14,9 @@ export const revalidate = 0
 export const fetchCache = "force-no-store"
 export const runtime = "nodejs"
 
-export default async function PatientPrintPage({ params }: { params: { id: string } }) {
-  const patientId = Number(params.id)
+export default async function PatientPrintPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const patientId = Number(id)
   if (!Number.isFinite(patientId)) {
     redirect("/pacientes") // id inválido
   }
@@ -38,10 +39,11 @@ export default async function PatientPrintPage({ params }: { params: { id: strin
   const dto = await getPrintablePatientData(patientId, { scope: decision.scope })
 
   // 4) Auditoría (segura, sin romper UX)
+  const requestHeaders = await headers()
   await auditPatientPrint({
     actorId: user.id,
     entityId: patientId,
-    headers: headers(),
+    headers: requestHeaders,
     path: `/pacientes/${patientId}/print`,
     metadata: { scope: decision.scope }, // NO datos clínicos
   })

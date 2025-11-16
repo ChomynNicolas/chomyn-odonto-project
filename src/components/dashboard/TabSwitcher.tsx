@@ -37,7 +37,7 @@ const TABS: Array<{
   },
 ]
 
-export default function TabSwitcher({ role: _role, currentTab }: { role: Rol; currentTab: DashboardTab }) {
+export default function TabSwitcher({ currentTab }: { role: Rol; currentTab: DashboardTab }) {
   const router = useRouter()
   const sp = useSearchParams()
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 })

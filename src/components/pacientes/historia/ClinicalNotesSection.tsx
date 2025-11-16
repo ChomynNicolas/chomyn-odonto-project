@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -27,11 +27,7 @@ export function ClinicalNotesSection({ patientId, onAddNote }: ClinicalNotesSect
   const [notes, setNotes] = useState<ClinicalNote[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    fetchNotes()
-  }, [patientId])
-
-  const fetchNotes = async () => {
+  const fetchNotes = useCallback(async () => {
     try {
       setIsLoading(true)
       const res = await fetch(`/api/pacientes/${patientId}/historia/notas`)
@@ -44,7 +40,11 @@ export function ClinicalNotesSection({ patientId, onAddNote }: ClinicalNotesSect
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [patientId])
+
+  useEffect(() => {
+    fetchNotes()
+  }, [fetchNotes])
 
   if (isLoading) {
     return (

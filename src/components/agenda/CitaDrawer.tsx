@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { SheetClose } from "@/components/ui/sheet"
 import { PacientePeek } from "@/components/pacientes/PacientePeek"
 import { apiCancelCita, apiGetCitaDetalle } from "@/lib/api/agenda/citas"
 import { apiTransitionCita } from "@/lib/api/agenda/citas"
@@ -44,12 +45,12 @@ import Image from "next/image"
 
 interface CitaDrawerProps {
   idCita: number
-  onClose: () => void
   currentUser?: CurrentUser
   onAfterChange?: () => void
+  onClose?: () => void
 }
 
-export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: CitaDrawerProps) {
+export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: CitaDrawerProps) {
   const [loading, setLoading] = React.useState(true)
   const [err, setErr] = React.useState<string | null>(null)
   const [dto, setDto] = React.useState<CitaDetalleDTO | null>(null)
@@ -65,19 +66,49 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
   const [uploadConsentOpen, setUploadConsentOpen] = React.useState(false)
   const [rescheduleOpen, setRescheduleOpen] = React.useState(false)
 
-  const loadData = React.useCallback(async () => {
+  /**
+   * Carga los datos de la cita desde el servidor.
+   * 
+   * @param forceRefresh - Si es true, fuerza un refresh completo ignorando cache
+   * 
+   * @remarks
+   * Este método:
+   * 1. Obtiene el detalle completo de la cita (incluyendo consentimientoStatus)
+   * 2. Actualiza el estado local del componente
+   * 3. El consentimientoStatus se calcula en el backend cada vez que se llama
+   * 
+   * Flujo de estados de consentimiento:
+   * - Si el paciente es mayor: consentimientoStatus.consentimientoVigente = true, bloqueaInicio = false
+   * - Si el paciente es menor sin consentimiento: bloqueaInicio = true
+   * - Si el paciente es menor con consentimiento vigente: bloqueaInicio = false
+   */
+  const loadData = React.useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true)
       setErr(null)
-      const data = await apiGetCitaDetalle(idCita)
-      // Validar que el estado de la cita no haya cambiado inesperadamente
-      // Solo si ya tenemos datos previos
+      // Forzar refresh completo para obtener el estado actualizado de consentimiento
+      const data = await apiGetCitaDetalle(idCita, forceRefresh)
+      
+      // Actualizar estado de forma atómica
       setDto((prevDto) => {
-        if (prevDto && data.estado !== prevDto.estado && prevDto.estado !== "SCHEDULED") {
-          console.warn(
-            `[CitaDrawer] Estado de cita cambió inesperadamente: ${prevDto.estado} → ${data.estado}. Esto no debería ocurrir al subir un consentimiento.`,
+        // Log para debugging: verificar cambios de estado
+        if (prevDto && data.estado !== prevDto.estado) {
+          console.log(
+            `[CitaDrawer] Estado de cita cambió: ${prevDto.estado} → ${data.estado}`,
           )
         }
+        
+        // Log para debugging: verificar cambios en consentimiento
+        if (
+          prevDto &&
+          prevDto.consentimientoStatus?.consentimientoVigente !==
+          data.consentimientoStatus?.consentimientoVigente
+        ) {
+          console.log(
+            `[CitaDrawer] Estado de consentimiento cambió: ${prevDto.consentimientoStatus?.consentimientoVigente} → ${data.consentimientoStatus?.consentimientoVigente}`,
+          )
+        }
+        
         return data
       })
     } catch (e: unknown) {
@@ -105,6 +136,29 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
       setRescheduleOpen(true)
       return
     }
+
+    // Validación preventiva: bloquear START y CHECKIN si falta consentimiento para menor
+    if ((action === "START" || action === "CHECKIN") && esMenor && consentimientoStatus) {
+      if (action === "START" && consentimientoStatus.bloqueaInicio) {
+        setConsentErrorMessage(
+          consentimientoStatus.mensajeBloqueo ||
+            "El paciente es menor de edad y requiere un consentimiento informado vigente firmado por su responsable antes de iniciar la consulta.",
+        )
+        setConsentErrorOpen(true)
+        return
+      }
+      // Para CHECKIN, mostrar advertencia pero permitir (el bloqueo real es en START)
+      if (action === "CHECKIN" && !consentimientoStatus.consentimientoVigente) {
+        // Usar dynamic import para toast (evitar bloquear la UI)
+        import("sonner").then(({ toast }) => {
+          toast.warning("Advertencia: Consentimiento pendiente", {
+            description: "El paciente es menor y aún no tiene consentimiento. Debe subirlo antes de iniciar la consulta.",
+            duration: 5000,
+          })
+        })
+      }
+    }
+
     try {
       setActionLoading(action)
       await apiTransitionCita(idCita, action, note) // otras acciones
@@ -152,8 +206,19 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
     }
   }
 
-  // Verificar si el paciente es menor (usando fecha de nacimiento si consentimientoStatus no está disponible)
-  // IMPORTANTE: Este hook debe estar antes de los early returns
+  /**
+   * Determina si el paciente es menor de edad al momento de la cita.
+   * 
+   * @remarks
+   * Prioridad de verificación:
+   * 1. Usa consentimientoStatus.esMenorAlInicio si está disponible (calculado en backend)
+   * 2. Fallback: calcula desde fechaNacimiento usando isMinorAt
+   * 
+   * Este valor se usa para:
+   * - Mostrar/ocultar la sección de consentimiento
+   * - Bloquear/habilitar el botón "Iniciar consulta"
+   * - Mostrar advertencias en CHECKIN
+   */
   const esMenor = React.useMemo(() => {
     if (!dto) return false
     const consentimientoStatus = dto.consentimientoStatus
@@ -203,9 +268,22 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
               <p className="text-xs text-muted-foreground mt-0.5">Error al cargar</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-9 w-9">
-            <X className="h-4 w-4" />
-          </Button>
+          <SheetClose asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-full h-9 w-9"
+              onClick={(e) => {
+                // Fallback: si SheetClose no funciona, usar onClose directamente
+                if (onClose) {
+                  e.preventDefault()
+                  onClose()
+                }
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </SheetClose>
         </div>
         <div className="p-4 lg:p-5 space-y-3">
           <Alert variant="destructive" className="border-2">
@@ -214,7 +292,13 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
               {err ?? "No se pudo cargar los detalles"}
             </AlertDescription>
           </Alert>
-          <Button onClick={loadData} variant="outline" className="w-full bg-transparent text-sm">
+          <Button
+            onClick={() => {
+              void loadData()
+            }}
+            variant="outline"
+            className="w-full bg-transparent text-sm"
+          >
             Reintentar
           </Button>
         </div>
@@ -225,7 +309,7 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
   const estadoUI = getEstadoUI(dto.estado)
   const consultorioColor = dto.consultorio?.colorHex ?? undefined
   const accionesPermitidas = getAccionesPermitidas(dto.estado, currentUser?.role)
-  const canUploadConsent = currentUser?.role === "ADMIN" || currentUser?.role === "ODONT"
+  const canUploadConsent = currentUser?.role === "ADMIN" || currentUser?.role === "ODONT" || currentUser?.role === "RECEP"
   const consentimientoStatus: CitaConsentimientoStatus | undefined = dto.consentimientoStatus
 
   return (
@@ -257,47 +341,39 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
                 {privacyMode ? "████████████" : dto.paciente.nombre}
               </h3>
               {dto.motivo && !privacyMode && (
-                <p className="mt-0.5 lg:mt-1 text-xs text-muted-foreground font-medium line-clamp-2">{dto.motivo}</p>
+                <p className="mt-0.5 lg:mt-1 text-xs text-muted-foreground   line-clamp-2">{dto.motivo}</p>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2 lg:gap-x-3 gap-y-0.5 lg:gap-y-1 text-xs">
+            <div className="flex flex-wrap items-center gap-x-2 lg:gap-x-3 gap-y-0.5 lg:gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1 lg:gap-1.5 font-semibold">
                 <Calendar className="h-3 w-3 lg:h-3.5 lg:w-3.5 text-primary shrink-0" />
                 <span className="truncate">{fmtTimeRange(dto.inicio, dto.fin)}</span>
               </span>
-              <span className="inline-flex items-center gap-1 lg:gap-1.5 text-muted-foreground">
+              <span className="inline-flex items-center gap-1 lg:gap-1.5 ">
                 <Clock className="h-3 w-3 lg:h-3.5 lg:w-3.5 shrink-0" />
                 <span>{dto.duracionMinutos} min</span>
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2 lg:gap-x-3 gap-y-0.5 lg:gap-y-1 text-xs">
-              <span className="inline-flex items-center gap-1 lg:gap-1.5 text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-2 lg:gap-x-3 gap-y-0.5 lg:gap-y-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 lg:gap-1.5 ">
                 <Stethoscope className="h-3 w-3 lg:h-3.5 lg:w-3.5 shrink-0" />
-                <span className="font-medium truncate">{dto.profesional.nombre}</span>
+                <span className=" truncate">{dto.profesional.nombre}</span>
               </span>
               {dto.consultorio && (
-                <span className="inline-flex items-center gap-1 lg:gap-1.5 text-muted-foreground">
+                <span className="inline-flex items-center gap-1 lg:gap-1.5 ">
                   <span
-                    className="inline-block h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full ring-2 ring-background shadow-sm shrink-0"
+                    className="inline-block h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full ring-2  ring-background shadow-sm shrink-0"
                     style={{ backgroundColor: consultorioColor }}
                   />
-                  <MapPin className="h-3 w-3 lg:h-3.5 lg:w-3.5 shrink-0" />
-                  <span className="font-medium truncate">{dto.consultorio.nombre}</span>
+                  <MapPin className="h-3 w-3 lg:h-3.5 lg:w-3.5 shrink-0 " />
+                  <span className="font-medium truncate text-muted-foreground">{dto.consultorio.nombre}</span>
                 </span>
               )}
             </div>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="rounded-full h-8 w-8 lg:h-9 lg:w-9 shrink-0 hover:bg-muted"
-          >
-            <X className="h-4 w-4" />
-          </Button>
         </div>
 
         <div className="mt-2 flex items-center gap-2 rounded-xl bg-muted/60 backdrop-blur-sm px-2.5 lg:px-3 py-1.5 lg:py-2 border">
@@ -461,7 +537,8 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
             </section>
           )}
 
-          {esMenor && (dto.estado === "CONFIRMED" || dto.estado === "CHECKED_IN") && (
+          {/* Sección de consentimiento: mostrar desde SCHEDULED si es menor */}
+          {esMenor && (dto.estado === "SCHEDULED" || dto.estado === "CONFIRMED" || dto.estado === "CHECKED_IN") && (
             <section>
               <SectionHeader icon={<FileWarning className="h-3 w-3 lg:h-3.5 lg:w-3.5" />} title="Consentimiento" />
               <div className="mt-2 space-y-1.5 lg:space-y-2">
@@ -511,23 +588,37 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
                     </div>
                     <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
                       {dto.estado === "CHECKED_IN"
-                        ? "Debe cargar consentimiento antes de iniciar consulta."
-                        : consentimientoStatus?.mensajeBloqueo || "Se requiere consentimiento firmado."}
+                        ? "Debe cargar consentimiento antes de iniciar consulta. La acción 'Iniciar consulta' estará bloqueada hasta que se suba el documento."
+                        : dto.estado === "SCHEDULED" || dto.estado === "CONFIRMED"
+                          ? "Se requiere consentimiento firmado antes de iniciar la consulta. Puede subirlo ahora o cuando el paciente llegue."
+                          : consentimientoStatus?.mensajeBloqueo || "Se requiere consentimiento firmado."}
                     </p>
                   </div>
                 )}
 
-                {canUploadConsent && (dto.estado === "CHECKED_IN" || !consentimientoStatus?.consentimientoVigente) && (
-                  <Button
-                    size="sm"
-                    variant={consentimientoStatus?.consentimientoVigente ? "outline" : "default"}
-                    onClick={() => setUploadConsentOpen(true)}
-                    className="w-full gap-1.5 font-bold text-xs h-7 lg:h-8"
-                  >
-                    <Upload className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
-                    {consentimientoStatus?.consentimientoVigente ? "Actualizar" : "Cargar consentimiento"}
-                  </Button>
-                )}
+                {/* Mostrar botón de subir consentimiento si:
+                    - El usuario puede subir (ADMIN/ODONT)
+                    - Y (está en CHECKED_IN O no hay consentimiento vigente)
+                    - O está en SCHEDULED/CONFIRMED sin consentimiento (para subirlo anticipadamente)
+                */}
+                {canUploadConsent &&
+                  (dto.estado === "CHECKED_IN" ||
+                    !consentimientoStatus?.consentimientoVigente ||
+                    (dto.estado === "SCHEDULED" || dto.estado === "CONFIRMED")) && (
+                    <Button
+                      size="sm"
+                      variant={consentimientoStatus?.consentimientoVigente ? "outline" : "default"}
+                      onClick={() => setUploadConsentOpen(true)}
+                      className="w-full gap-1.5 font-bold text-xs h-7 lg:h-8"
+                    >
+                      <Upload className="h-3 w-3 lg:h-3.5 lg:w-3.5" />
+                      {consentimientoStatus?.consentimientoVigente
+                        ? "Actualizar consentimiento"
+                        : dto.estado === "CHECKED_IN"
+                          ? "Cargar consentimiento (requerido)"
+                          : "Cargar consentimiento"}
+                    </Button>
+                  )}
               </div>
             </section>
           )}
@@ -573,23 +664,61 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
       <div className="fixed sm:sticky bottom-0 left-0 right-0 border-t bg-background/98 backdrop-blur-md shadow-2xl sm:shadow-none px-3 py-2.5 lg:px-3.5 lg:py-3 space-y-1.5 lg:space-y-2 z-50">
         {accionesPermitidas.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {accionesPermitidas.map((accion) => (
-              <Button
-                key={accion.action}
-                variant={accion.variant}
-                size="sm"
-                onClick={() => handleAction(accion.action)}
-                disabled={actionLoading !== null}
-                className="gap-1.5 font-bold text-xs flex-1 sm:flex-none min-w-0 h-8 lg:h-9"
-              >
-                {actionLoading === accion.action ? (
-                  <Loader2 className="h-3 w-3 lg:h-3.5 lg:w-3.5 animate-spin shrink-0" />
-                ) : (
-                  accion.icon && <span className="shrink-0 text-xs lg:text-sm">{accion.icon}</span>
-                )}
-                <span className="truncate">{accion.label}</span>
-              </Button>
-            ))}
+            {accionesPermitidas.map((accion) => {
+              /**
+               * Determina si la acción "START" está bloqueada por falta de consentimiento.
+               * 
+               * Lógica de bloqueo:
+               * - Solo aplica a la acción "START" (Iniciar consulta)
+               * - Solo si el paciente es menor de edad
+               * - Solo si consentimientoStatus indica que bloquea inicio (bloqueaInicio === true)
+               * 
+               * @remarks
+               * El backend también valida esto en validateConsentForStart, pero esta validación
+               * previa en el frontend mejora la UX al deshabilitar el botón antes de intentar la acción.
+               */
+              const bloqueadoPorConsentimiento =
+                esMenor &&
+                consentimientoStatus &&
+                accion.action === "START" &&
+                consentimientoStatus.bloqueaInicio
+
+              // Debug: Log cuando el botón está bloqueado (solo en desarrollo)
+              if (process.env.NODE_ENV === "development" && bloqueadoPorConsentimiento) {
+                console.log("[CitaDrawer] Botón START bloqueado:", {
+                  esMenor,
+                  bloqueaInicio: consentimientoStatus.bloqueaInicio,
+                  consentimientoVigente: consentimientoStatus.consentimientoVigente,
+                  mensaje: consentimientoStatus.mensajeBloqueo,
+                })
+              }
+
+              return (
+                <Button
+                  key={accion.action}
+                  variant={accion.variant}
+                  size="sm"
+                  onClick={() => handleAction(accion.action)}
+                  disabled={actionLoading !== null || bloqueadoPorConsentimiento}
+                  className={cn(
+                    "gap-1.5 font-bold text-xs flex-1 sm:flex-none min-w-0 h-8 lg:h-9",
+                    bloqueadoPorConsentimiento && "opacity-50 cursor-not-allowed",
+                  )}
+                  title={
+                    bloqueadoPorConsentimiento
+                      ? consentimientoStatus.mensajeBloqueo || "Consentimiento requerido para iniciar consulta"
+                      : undefined
+                  }
+                >
+                  {actionLoading === accion.action ? (
+                    <Loader2 className="h-3 w-3 lg:h-3.5 lg:w-3.5 animate-spin shrink-0" />
+                  ) : (
+                    accion.icon && <span className="shrink-0 text-xs lg:text-sm">{accion.icon}</span>
+                  )}
+                  <span className="truncate">{accion.label}</span>
+                </Button>
+              )
+            })}
           </div>
         )}
         
@@ -638,13 +767,21 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
         )}
 
         <div className="flex items-center justify-end">
-          <Button
-            variant="outline"
-            onClick={onClose}
-            className="font-bold bg-transparent text-xs w-full sm:w-auto h-8 lg:h-9"
-          >
-            Cerrar
-          </Button>
+          <SheetClose asChild>
+            <Button
+              variant="outline"
+              className="font-bold bg-transparent text-xs w-full sm:w-auto h-8 lg:h-9"
+              onClick={(e) => {
+                // Fallback: si SheetClose no funciona, usar onClose directamente
+                if (onClose) {
+                  e.preventDefault()
+                  onClose()
+                }
+              }}
+            >
+              Cerrar
+            </Button>
+          </SheetClose>
         </div>
       </div>
 
@@ -668,16 +805,39 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
           citaId={dto.idCita} // Asociar el consentimiento a esta cita
           onSuccess={async () => {
             setUploadConsentOpen(false)
-            // Recargar datos para actualizar el estado de consentimiento
-            // IMPORTANTE: No cambiar el estado de la cita, solo actualizar los datos
+            
+            // Guardar el estado previo para mostrar mensaje si estaba bloqueado
+            const estabaBloqueado = consentimientoStatus?.bloqueaInicio
+            
             try {
-              await loadData()
+              // IMPORTANTE: Forzar refresh completo para obtener el consentimientoStatus actualizado
+              // El backend recalcula el estado de consentimiento cada vez que se llama a getCitaConsentimientoStatus
+              await loadData(true) // forceRefresh = true
+              
+              // Pequeño delay para asegurar que el estado se actualice en la UI
+              await new Promise((resolve) => setTimeout(resolve, 100))
+              
               // Notificar al calendario para que se actualice
               onAfterChange?.()
+              
+              // Mostrar mensaje de éxito si estaba bloqueado antes
+              if (estabaBloqueado) {
+                const { toast } = await import("sonner")
+                toast.success("Consentimiento registrado", {
+                  description: "El consentimiento ha sido subido exitosamente. Ahora puede iniciar la consulta.",
+                  duration: 4000,
+                })
+              }
             } catch (error) {
               console.error("[CitaDrawer] Error recargando datos después de subir consentimiento:", error)
               // Aún así notificar al calendario para que se actualice
               onAfterChange?.()
+              
+              const { toast } = await import("sonner")
+              toast.error("Error al actualizar", {
+                description: "El consentimiento se subió correctamente, pero hubo un problema al actualizar la vista. Por favor, recarga la página.",
+                duration: 5000,
+              })
             }
           }}
         />
@@ -722,7 +882,7 @@ export function CitaDrawer({ idCita, onClose, currentUser, onAfterChange }: Cita
 
 /* ---------- Subcomponentes / utilidades ---------- */
 
-function HeaderSkeleton({ onClose }: { onClose: () => void }) {
+function HeaderSkeleton({ onClose }: { onClose?: () => void }) {
   return (
     <div className="border-b p-3 lg:p-4 flex items-start justify-between">
       <div className="min-w-0 space-y-1.5 flex-1">
@@ -730,9 +890,23 @@ function HeaderSkeleton({ onClose }: { onClose: () => void }) {
         <Skeleton className="h-5 w-44" />
         <Skeleton className="h-3.5 w-52" />
       </div>
-      <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9">
-        <X className="h-4 w-4" />
-      </Button>
+      <SheetClose asChild>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-9 w-9"
+          onClick={(e) => {
+            // Fallback: si SheetClose no funciona, usar onClose directamente
+            // Nota: onClose puede no estar disponible en el skeleton, pero es seguro
+            if (onClose) {
+              e.preventDefault()
+              onClose()
+            }
+          }}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </SheetClose>
     </div>
   )
 }
@@ -926,21 +1100,21 @@ function getAccionesPermitidas(
           label: "Iniciar consulta",
           variant: "default",
           icon: "●",
-          roles: ["ADMIN", "ODONT"],
+          roles: ["ADMIN", "ODONT", "RECEP"],
         },
         {
           action: "CANCEL",
           label: "Cancelar",
           variant: "destructive",
           icon: "✕",
-          roles: ["ADMIN", "ODONT"],
+          roles: ["ADMIN", "ODONT", "RECEP"],
         },
         {
           action: "NO_SHOW",
           label: "No asistió",
           variant: "outline",
           icon: "⊘",
-          roles: ["ADMIN", "ODONT"],
+          roles: ["ADMIN", "ODONT", "RECEP"],
         },
       )
       break
@@ -952,14 +1126,14 @@ function getAccionesPermitidas(
           label: "Completar",
           variant: "default",
           icon: "✓✓",
-          roles: ["ADMIN", "ODONT"],
+          roles: ["ADMIN", "ODONT", "RECEP"],
         },
         {
           action: "CANCEL",
           label: "Cancelar",
           variant: "destructive",
           icon: "✕",
-          roles: ["ADMIN", "ODONT"],
+          roles: ["ADMIN", "ODONT", "RECEP"],
         },
       )
       break

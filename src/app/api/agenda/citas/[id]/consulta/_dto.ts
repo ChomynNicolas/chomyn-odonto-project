@@ -8,6 +8,7 @@ import type {
   PerioBleeding,
   AdjuntoTipo,
   AllergySeverity,
+  TreatmentStepStatus,
 } from "@prisma/client"
 
 // ============================================================================
@@ -19,6 +20,7 @@ export interface ConsultaClinicaDTO {
   status: ConsultaEstado
   startedAt: string | null
   finishedAt: string | null
+  /** @deprecated Use PatientAnamnesis.motivoConsulta instead. This field always returns null. */
   reason: string | null
   diagnosis: string | null
   clinicalNotes: string | null
@@ -34,6 +36,18 @@ export interface ConsultaClinicaDTO {
   citaInicio?: string
   citaFin?: string
 
+  // Información del paciente (para anamnesis)
+  paciente?: {
+    id: number
+    nombres: string
+    apellidos: string
+    fechaNacimiento: string | null
+    genero: import("@prisma/client").Genero | null
+    direccion: string | null
+    telefono: string | null
+    edad?: number | null // Calculada desde fechaNacimiento
+  }
+
   // Módulos
   anamnesis: AnamnesisDTO[]
   diagnosticos: DiagnosticoDTO[]
@@ -44,6 +58,7 @@ export interface ConsultaClinicaDTO {
   periodontograma: PeriodontogramaDTO | null
   vitales: VitalesDTO[]
   alergias: AlergiasDTO[]
+  planTratamiento: PlanTratamientoDTO | null
 }
 
 // ============================================================================
@@ -213,6 +228,44 @@ export interface AlergiasDTO {
   reaction: string | null
   notedAt: string
   isActive: boolean
+}
+
+// ============================================================================
+// PLAN DE TRATAMIENTO
+// ============================================================================
+export interface PlanTratamientoDTO {
+  id: number
+  titulo: string
+  descripcion: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  createdBy: {
+    id: number
+    nombre: string
+  }
+  steps: TreatmentStepDTO[]
+}
+
+export interface TreatmentStepDTO {
+  id: number
+  order: number
+  procedureId: number | null
+  procedimientoCatalogo: {
+    id: number
+    code: string
+    nombre: string
+  } | null
+  serviceType: string | null
+  toothNumber: number | null
+  toothSurface: DienteSuperficie | null
+  estimatedDurationMin: number | null
+  estimatedCostCents: number | null
+  priority: number | null
+  status: TreatmentStepStatus
+  notes: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 // ============================================================================

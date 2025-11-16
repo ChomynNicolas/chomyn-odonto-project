@@ -102,17 +102,36 @@ export type UpdateDiagnosisInput = z.infer<typeof updateDiagnosisSchema>
 // ============================================================================
 // PROCEDIMIENTOS
 // ============================================================================
-export const createProcedureSchema = z.object({
-  procedureId: z.number().int().positive().optional(),
-  serviceType: z.string().max(200).optional(),
-  toothNumber: z.number().int().min(1).max(85).optional(),
-  toothSurface: z.nativeEnum(DienteSuperficie).optional(),
-  quantity: z.number().int().positive().default(1),
-  unitPriceCents: z.number().int().nonnegative().optional(),
-  totalCents: z.number().int().nonnegative().optional(),
-  resultNotes: z.string().max(2000).optional(),
-  treatmentStepId: z.number().int().positive().optional(),
-})
+export const createProcedureSchema = z
+  .object({
+    procedureId: z.number().int().positive().optional(),
+    serviceType: z.string().max(200).optional(),
+    toothNumber: z.number().int().min(1).max(85).optional(),
+    toothSurface: z.nativeEnum(DienteSuperficie).optional(),
+    quantity: z.number().int().positive().default(1),
+    unitPriceCents: z.number().int().nonnegative().optional(),
+    totalCents: z.number().int().nonnegative().optional(),
+    resultNotes: z.string().max(2000).optional(),
+    treatmentStepId: z.number().int().positive().optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Validación condicional: debe haber procedureId O serviceType no vacío
+    const hasProcedureId = data.procedureId !== undefined && data.procedureId !== null
+    const hasServiceType = data.serviceType !== undefined && data.serviceType !== null && data.serviceType.trim() !== ""
+
+    if (!hasProcedureId && !hasServiceType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe seleccionar un procedimiento del catálogo o ingresar un nombre manual",
+        path: ["procedureId"], // Asociar el error al campo procedureId
+      })
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe seleccionar un procedimiento del catálogo o ingresar un nombre manual",
+        path: ["serviceType"], // También al campo serviceType
+      })
+    }
+  })
 
 export const updateProcedureSchema = z.object({
   quantity: z.number().int().positive().optional(),
@@ -228,6 +247,28 @@ export const updateVitalesSchema = createVitalesSchema.partial()
 
 export type CreateVitalesInput = z.infer<typeof createVitalesSchema>
 export type UpdateVitalesInput = z.infer<typeof updateVitalesSchema>
+
+// ============================================================================
+// RESUMEN DE CONSULTA (diagnosis, clinicalNotes)
+// ============================================================================
+// ⚠️ DEPRECATED: reason field removed. Motivo de consulta debe obtenerse de PatientAnamnesis.motivoConsulta
+export const updateConsultaResumenSchema = z.object({
+  // reason field removed - use PatientAnamnesis.motivoConsulta instead
+  diagnosis: z
+    .string()
+    .max(2000, "El diagnóstico no puede exceder 2000 caracteres")
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+  clinicalNotes: z
+    .string()
+    .max(5000, "Las notas clínicas no pueden exceder 5000 caracteres")
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+})
+
+export type UpdateConsultaResumenInput = z.infer<typeof updateConsultaResumenSchema>
 
 // ============================================================================
 // ESTADO DE CONSULTA

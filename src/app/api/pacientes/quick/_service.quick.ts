@@ -46,8 +46,9 @@ function isPrismaUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestEr
 
 export async function quickCreatePaciente(
   input: PacienteQuickCreateDTO,
+  actorUserId: number,
 ): Promise<QuickCreateResult> {
-  const { nombres, apellidos } = splitNombreCompleto(input.nombreCompleto)
+  const { nombres, apellidos, segundoApellido } = splitNombreCompleto(input.nombreCompleto)
   const generoDB = input.genero
 
   const phoneNorm = normalizePhonePY(input.telefono)
@@ -71,6 +72,7 @@ export async function quickCreatePaciente(
       const persona = await pacienteRepo.createPersonaConDocumento(tx, {
         nombres,
         apellidos,
+        segundoApellido,
         genero: generoDB,
         fechaNacimiento: toDateUTCFromYYYYMMDD(input.fechaNacimiento)!,
         direccion: null,
@@ -103,10 +105,23 @@ export async function quickCreatePaciente(
         notasJson: {},
       })
 
-      // Auditoría opcional…
-
       return { idPaciente: paciente.idPaciente, idPersona: persona.idPersona }
     })
+
+    // Audit log (no bloqueante)
+    await prisma.auditLog.create({
+      data: {
+        action: "PATIENT_CREATE",
+        entity: "Patient",
+        entityId: idPaciente,
+        actorId: actorUserId,
+        metadata: { 
+          nombreCompleto: `${nombres} ${apellidos}`.trim(),
+          documento: input.dni,
+          tipoDocumento: input.tipoDocumento,
+        } as Prisma.InputJsonValue,
+      },
+    }).catch((e) => console.error("[warn] audit create failed", e))
 
     const item = await pacienteRepo.getPacienteUI(idPaciente)
     return { idPaciente, idPersona, item }

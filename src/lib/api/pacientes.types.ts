@@ -1,10 +1,5 @@
 import { z } from "zod"
 
-export {
-  PacienteUpdateDTOSchema,
-  PacienteListFiltersSchema,
-} from "@/app/api/pacientes/_schemas"
-
 
 // ============= Sort & Pagination =============
 export const SortPacientesSchema = z.enum(["createdAt_asc", "createdAt_desc", "nombre_asc", "nombre_desc"])
@@ -50,12 +45,87 @@ export interface PacienteListItemDTO {
   } | null
 }
 
+// ============= PacienteItem (for legacy components) =============
+// Tipo compatible con componentes que esperan estructura con `persona`
+export interface PacienteItem {
+  idPaciente: number
+  estaActivo: boolean
+  persona: {
+    nombres: string
+    apellidos: string
+    fechaNacimiento: string | null
+    genero: string | null
+    documento: {
+      numero: string
+      ruc?: string | null
+    } | null
+    contactos: Array<{
+      tipo: "PHONE" | "EMAIL"
+      valorNorm: string
+      activo: boolean
+    }>
+  }
+}
+
 export interface PacientesResponse {
   items: PacienteListItemDTO[]
   nextCursor: string | null
   hasMore: boolean
   total?: number
 }
+
+// ============= Zod Schema for API Response Validation =============
+export const PacienteListItemDTOSchema = z.object({
+  idPaciente: z.number().int().positive(),
+  personaId: z.number().int().positive(),
+  nombres: z.string(),
+  apellidos: z.string(),
+  nombreCompleto: z.string(),
+  fechaNacimiento: z.string().nullable(),
+  edad: z.number().int().nullable(),
+  genero: z.string().nullable(),
+  documento: z
+    .object({
+      tipo: z.string(),
+      numero: z.string(),
+    })
+    .nullable(),
+  contactoPrincipal: z
+    .object({
+      tipo: z.enum(["PHONE", "EMAIL"]),
+      valor: z.string(),
+      whatsappCapaz: z.boolean().optional(),
+    })
+    .nullable(),
+  estaActivo: z.boolean(),
+  createdAt: z.string(),
+  proximaCita: z
+    .object({
+      idCita: z.number().int().positive(),
+      inicio: z.string(),
+      tipo: z.string(),
+      profesional: z.string(),
+      esHoy: z.boolean(),
+    })
+    .nullable(),
+})
+
+export const PacientesResponseSchema = z
+  .object({
+    items: z.array(PacienteListItemDTOSchema),
+    nextCursor: z.union([z.string(), z.number(), z.null()]),
+    hasMore: z.boolean(),
+    totalCount: z.number().int().nonnegative().optional(),
+    total: z.number().int().nonnegative().optional(),
+  })
+  .transform((data) => ({
+    items: data.items,
+    nextCursor: data.nextCursor === null ? null : String(data.nextCursor),
+    hasMore: data.hasMore,
+    total: data.total ?? data.totalCount,
+  }))
+
+export const zPacientesResponse = PacientesResponseSchema
 
 // ============= Create DTO =============
 export const PacienteCreateDTOSchema = z.object({

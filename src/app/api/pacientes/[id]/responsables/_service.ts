@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { pacienteRepo } from "@/app/api/pacientes/_repo"
-import { RelacionPaciente } from "@prisma/client"
+import { RelacionPaciente, TipoDocumento } from "@prisma/client"
 
 export class LinkResponsableError extends Error {
   code: "NOT_FOUND" | "VALIDATION_ERROR" | "UNIQUE_CONFLICT" | "INTERNAL_ERROR"
@@ -72,6 +72,21 @@ export async function linkResponsablePago(params: {
 /**
  * Crea una persona nueva y la vincula como responsable del paciente
  */
+/**
+ * Mapea tipos de documento del frontend a valores del enum TipoDocumento
+ */
+function mapTipoDocumento(tipo: string): TipoDocumento {
+  const tipoMap: Record<string, TipoDocumento> = {
+    DNI: TipoDocumento.DNI,
+    CEDULA: TipoDocumento.CI, // "CEDULA" se mapea a "CI"
+    CI: TipoDocumento.CI,
+    PASAPORTE: TipoDocumento.PASAPORTE,
+    RUC: TipoDocumento.RUC,
+    OTRO: TipoDocumento.OTRO,
+  }
+  return tipoMap[tipo] ?? TipoDocumento.OTRO
+}
+
 export async function createResponsableWithPersona(params: {
   pacienteId: number
   data: {
@@ -87,10 +102,27 @@ export async function createResponsableWithPersona(params: {
 
   await ensurePacienteExists(pacienteId)
 
-  // Separar nombre completo en nombres y apellidos
-  const partesNombre = data.nombreCompleto.trim().split(/\s+/)
-  const nombres = partesNombre[0] || "Responsable"
-  const apellidos = partesNombre.slice(1).join(" ") || ""
+  // Separar nombre completo en nombres, apellidos y segundo apellido
+  const partesNombre = data.nombreCompleto.trim().split(/\s+/).filter(Boolean)
+  let nombres: string
+  let apellidos: string
+  let segundoApellido: string | null = null
+
+  if (partesNombre.length === 1) {
+    nombres = partesNombre[0] || "Responsable"
+    apellidos = ""
+  } else if (partesNombre.length === 2) {
+    nombres = partesNombre[0]
+    apellidos = partesNombre[1]
+  } else {
+    // 3+ words: last 2 are last names
+    segundoApellido = partesNombre.pop()!
+    apellidos = partesNombre.pop()!
+    nombres = partesNombre.join(" ")
+  }
+
+  // Mapear tipo de documento a enum
+  const tipoDocumento = mapTipoDocumento(data.tipoDocumento)
 
   // Crear persona y vincular en una transacción
   const result = await prisma.$transaction(async (tx) => {
@@ -99,6 +131,7 @@ export async function createResponsableWithPersona(params: {
       data: {
         nombres,
         apellidos,
+        segundoApellido,
         genero: "NO_ESPECIFICADO",
       },
     })
@@ -108,7 +141,7 @@ export async function createResponsableWithPersona(params: {
       await tx.documento.create({
         data: {
           personaId: persona.idPersona,
-          tipo: data.tipoDocumento,
+          tipo: tipoDocumento,
           numero: data.numeroDocumento.trim(),
         },
       })
@@ -116,7 +149,7 @@ export async function createResponsableWithPersona(params: {
 
     // 3. Crear contacto si se proporciona teléfono
     if (data.telefono) {
-      await tx.contacto.create({
+      await tx.personaContacto.create({
         data: {
           personaId: persona.idPersona,
           tipo: "PHONE",

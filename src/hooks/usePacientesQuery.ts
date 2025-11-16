@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { PacientesResponse, PacienteListFilters, PacienteCreateDTO } from "@/lib/api/pacientes.types"
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import type { PacientesResponse, PacienteListFilters, PacienteCreateDTO, PacienteListItemDTO, PacienteItem } from "@/lib/api/pacientes.types"
 
 export function usePacientesQuery(filters: PacienteListFilters) {
   return useQuery({
@@ -23,6 +23,95 @@ export function usePacientesQuery(filters: PacienteListFilters) {
     gcTime: 10 * 60_000, // mantiene caché al volver
     refetchOnWindowFocus: false,
   })
+}
+
+/**
+ * Mapea PacienteListItemDTO a PacienteItem para compatibilidad con componentes legacy
+ */
+function mapPacienteListItemToPacienteItem(dto: PacienteListItemDTO): PacienteItem {
+  return {
+    idPaciente: dto.idPaciente,
+    estaActivo: dto.estaActivo,
+    persona: {
+      nombres: dto.nombres,
+      apellidos: dto.apellidos,
+      fechaNacimiento: dto.fechaNacimiento,
+      genero: dto.genero,
+      documento: dto.documento
+        ? {
+            numero: dto.documento.numero,
+            ruc: null, // RUC no está disponible en PacienteListItemDTO
+          }
+        : null,
+      contactos: dto.contactoPrincipal
+        ? [
+            {
+              tipo: dto.contactoPrincipal.tipo,
+              valorNorm: dto.contactoPrincipal.valor,
+              activo: true, // Asumimos activo si existe
+            },
+          ]
+        : [],
+    },
+  }
+}
+
+/**
+ * Hook para obtener pacientes con paginación infinita
+ * Retorna un array plano de todos los items de todas las páginas
+ */
+export function usePacientes(params: { q?: string; soloActivos?: boolean; limit?: number }) {
+  const filters: PacienteListFilters = {
+    q: params.q,
+    estaActivo: params.soloActivos ? true : undefined,
+    limit: params.limit ?? 20,
+  }
+
+  const query = useInfiniteQuery({
+    queryKey: ["pacientes", "infinite", filters],
+    queryFn: async ({ pageParam }) => {
+      const fetchFilters: PacienteListFilters = {
+        ...filters,
+        cursor: pageParam as string | undefined,
+      }
+
+      const urlParams = new URLSearchParams()
+      if (fetchFilters.q) urlParams.set("q", fetchFilters.q)
+      if (fetchFilters.estaActivo !== undefined) urlParams.set("estaActivo", String(fetchFilters.estaActivo))
+      if (fetchFilters.limit) urlParams.set("limit", String(fetchFilters.limit))
+      if (fetchFilters.cursor) urlParams.set("cursor", fetchFilters.cursor)
+
+      const response = await fetch(`/api/pacientes?${urlParams}`, { cache: "no-store" })
+      if (!response.ok) throw new Error("Error al cargar pacientes")
+      return (await response.json()) as PacientesResponse
+    },
+    getNextPageParam: (lastPage) => {
+      return lastPage.nextCursor ?? undefined
+    },
+    initialPageParam: undefined as string | undefined,
+    staleTime: 60_000, // 1 min fresco
+    gcTime: 10 * 60_000, // mantiene caché al volver
+    refetchOnWindowFocus: false,
+  })
+
+  // Aplanar todas las páginas en un solo array de items
+  const items: PacienteItem[] =
+    query.data?.pages.flatMap((page) => page.items.map(mapPacienteListItemToPacienteItem)) ?? []
+
+  // Determinar si hay más páginas
+  const hasMore = query.data?.pages[query.data.pages.length - 1]?.hasMore ?? false
+
+  return {
+    items,
+    hasMore,
+    fetchNextPage: query.fetchNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+    isFetching: query.isFetching,
+  }
 }
 
 export function useCreatePacienteMutation() {

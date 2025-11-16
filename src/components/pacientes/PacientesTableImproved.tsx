@@ -2,7 +2,7 @@ import React, { useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
 import Button from "../ui/button/Button";
 import Badge from "../ui/badge/Badge";
-import PatientQuickCreateModal from "./PatientQuickCreateModal";
+import { PatientQuickCreateModal } from "./PatientQuickCreateModal";
 import Banner from "../ui/Banner";
 import PacientesSkeleton from "./PacientesSkeleton";
 import { usePacientes } from "@/hooks/usePacientesQuery";
@@ -32,8 +32,7 @@ const FILTER_STATUS: Record<string, (p: PacienteItem) => boolean> = {
 const FILTER_NAMES = Object.keys(FILTER_STATUS);
 
 /**
- * Compute a patient’s age from their date of birth.  This helper is
- * memoized via useMemo in the table rows to avoid recalculations.
+ * Compute a patient's age from their date of birth.
  */
 function getAge(birthDate?: string | Date | null): number | null {
   if (!birthDate) return null;
@@ -226,7 +225,7 @@ function TableDesktop({ data }: { data: PacienteItem[] }) {
         </thead>
         <tbody className="divide-y divide-border bg-card">
           {data.map((p) => {
-            const age = useMemo(() => getAge(p.persona.fechaNacimiento), [p.persona.fechaNacimiento]);
+            const age = getAge(p.persona.fechaNacimiento);
             return (
               <tr key={p.idPaciente} className="hover:bg-muted/30">
                 <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">{renderNombre(p)}</td>
@@ -237,7 +236,7 @@ function TableDesktop({ data }: { data: PacienteItem[] }) {
                 <td className="px-4 py-3 whitespace-nowrap">{renderGenero(p)}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <Badge
-                    variant={p.estaActivo !== false ? "success" : "destructive"}
+                    color={p.estaActivo !== false ? "success" : "error"}
                     className="text-xs"
                   >
                     {p.estaActivo !== false ? "Activo" : "Inactivo"}
@@ -287,7 +286,7 @@ function ListMobile({ data }: { data: PacienteItem[] }) {
                 </p>
               </div>
               <Badge
-                variant={p.estaActivo !== false ? "success" : "destructive"}
+                color={p.estaActivo !== false ? "success" : "error"}
                 className="text-xs h-fit"
               >
                 {p.estaActivo !== false ? "Activo" : "Inactivo"}
@@ -349,9 +348,6 @@ export default function PacientesTableImproved() {
     isFetching,
   } = usePacientes({ q: deferredQ, soloActivos, limit });
 
-  // Feedback banner after creating a patient via quick create
-  const handleCreated = (id: string) => setCreatedId(id);
-
   const showSkeleton = isLoading && !items.length;
   const showEmpty = !isLoading && !isError && items.length === 0;
 
@@ -391,7 +387,9 @@ export default function PacientesTableImproved() {
             Reintentar
           </button>
           {process.env.NODE_ENV !== 'production' && (
-            <span className="ml-2 opacity-70">{(error as any)?.message || 'Error'}</span>
+            <span className="ml-2 opacity-70">
+              {error instanceof Error ? error.message : 'Error'}
+            </span>
           )}
         </div>
       )}
@@ -443,11 +441,8 @@ export default function PacientesTableImproved() {
       {/* Quick create modal */}
       <PatientQuickCreateModal
         open={openQuick}
-        onClose={() => setOpenQuick(false)}
-        onCreated={(id) => setCreatedId(id)}
-        qForList={deferredQ}
-        soloActivos={soloActivos}
-        limit={limit}
+        onOpenChange={setOpenQuick}
+        onCreated={(id) => setCreatedId(String(id))}
       />
     </section>
   );

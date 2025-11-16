@@ -109,6 +109,11 @@ export const consentimientoRepo = {
         responsable: {
           include: {
             documento: true,
+            PacienteResponsable: {
+              where: { pacienteId: data.pacienteId },
+              select: { relacion: true },
+              take: 1,
+            },
           },
         },
         cita: {
@@ -229,7 +234,7 @@ export const consentimientoRepo = {
       data: {
         activo: false,
         observaciones: observaciones,
-        updatedAt: new Date(),
+        // updated_at is automatically updated by Prisma @updatedAt decorator
       },
     })
   },

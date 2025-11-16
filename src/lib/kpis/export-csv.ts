@@ -8,14 +8,14 @@ import { ofuscarNombre, ofuscarDocumento, ofuscarTelefono } from "./privacy"
 export interface ExportColumn {
   key: string
   label: string
-  format?: (value: any) => string
+  format?: (value: unknown) => string
   sensitive?: boolean // Si es PII que debe ofuscarse en modo privacidad
 }
 
 export interface ExportOptions {
   filename: string
   columns: ExportColumn[]
-  data: any[]
+  data: Record<string, unknown>[]
   privacyMode?: boolean
 }
 
@@ -42,11 +42,11 @@ export function generateCSV(options: ExportOptions): string {
         // Ofuscar si es sensible y modo privacidad está activo
         if (col.sensitive && privacyMode && typeof value === "string") {
           if (col.key.includes("nombre") || col.key.includes("paciente")) {
-            value = ofuscarNombre(value)
+            value = ofuscarNombre(value, privacyMode)
           } else if (col.key.includes("documento") || col.key.includes("ci")) {
-            value = ofuscarDocumento(value)
+            value = ofuscarDocumento(value, privacyMode)
           } else if (col.key.includes("telefono") || col.key.includes("celular")) {
-            value = ofuscarTelefono(value)
+            value = ofuscarTelefono(value, privacyMode)
           }
         }
 

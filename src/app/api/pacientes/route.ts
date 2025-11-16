@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { listPacientes } from "./_repo"
+import { ZodError } from "zod"
+import { listPacientes, parsePacientesListQuery } from "./_service.list"
 import { createPaciente } from "./_service.create"
-import { errors, ok } from "../_http";
+import { errors, ok, checkRateLimit } from "./_http";
 import { requireRole } from "./_rbac";
 import { PacienteCreateBodySchema } from "./_schemas";
-import { checkRateLimit } from "./_http";
 
 // In-memory idempotency cache (in production, use Redis)
 type PacienteCreated = Awaited<ReturnType<typeof createPaciente>>
@@ -25,27 +25,50 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
 
-    const filters = {
-      q: searchParams.get("q") ?? undefined,
-      createdFrom: searchParams.get("createdFrom") ?? undefined,
-      createdTo: searchParams.get("createdTo") ?? undefined,
-      estaActivo:
-        searchParams.get("estaActivo") === "true"
-          ? true
-          : searchParams.get("estaActivo") === "false"
-            ? false
-            : undefined,
-      sort: (searchParams.get("sort") as string) ?? "createdAt_desc",
-      cursor: searchParams.get("cursor") ?? undefined,
-      limit: Number.parseInt(searchParams.get("limit") ?? "20"),
+    // Map sort format from "createdAt_desc" to "createdAt desc" for compatibility
+    const sortParam = searchParams.get("sort") ?? "createdAt_desc"
+    const sortMap: Record<string, "createdAt asc" | "createdAt desc" | "nombre asc" | "nombre desc"> = {
+      "createdAt_asc": "createdAt asc",
+      "createdAt_desc": "createdAt desc",
+      "nombre_asc": "nombre asc",
+      "nombre_desc": "nombre desc",
     }
+    const sort = sortMap[sortParam] ?? "createdAt desc"
+
+    // Map estaActivo to soloActivos for compatibility
+    const estaActivo = searchParams.get("estaActivo")
+    if (estaActivo === "true" || estaActivo === "false") {
+      searchParams.set("soloActivos", estaActivo === "true" ? "true" : "false")
+    }
+
+    // Override sort if it was mapped
+    if (sortParam !== sort) {
+      searchParams.set("sort", sort)
+    }
+
+    // Parse and validate query parameters
+    // This will throw ZodError if validation fails
+    const filters = parsePacientesListQuery(searchParams)
 
     const result = await listPacientes(filters)
 
     return NextResponse.json(result)
   } catch (error) {
+    // Handle Zod validation errors with proper 400 response
+    if (error instanceof ZodError) {
+      console.error("[API] Validation error listing pacientes:", error.issues)
+      return errors.validation(
+        "Parámetros de consulta inválidos",
+        error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      )
+    }
+
+    // Handle other errors as 500
     console.error("[API] Error listing pacientes:", error)
-    return NextResponse.json({ error: "Error al listar pacientes" }, { status: 500 })
+    return errors.internal("Error al listar pacientes", process.env.NODE_ENV !== "production" ? String(error) : undefined)
   }
 }
 

@@ -5,7 +5,19 @@ import { useParams } from "next/navigation";
 import { usePacienteTurnos } from "@/hooks/usePacienteTurnosQuery";
 import { formatDateTime } from "@/lib/format";
 
-function Table({ title, rows }: { title: string; rows: any[] }) {
+type TurnoItem = {
+  id: number
+  fecha: string
+  fin: string
+  motivo: string | null
+  tipo: string
+  estado: string
+  profesional: string
+  consultorio: string | null
+  duracionMin: number
+}
+
+function Table({ title, rows }: { title: string; rows: TurnoItem[] }) {
   return (
     <div className="rounded-lg border border-border">
       <div className="border-b border-border bg-muted/40 px-4 py-2 text-sm font-medium">{title}</div>
@@ -74,9 +86,10 @@ export default function TabTurnos() {
     );
   }
   if (isError) {
+    const errorMessage = error instanceof Error ? error.message : "Error al cargar turnos."
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
-        {(error as any)?.message || "Error al cargar turnos."}{" "}
+        {errorMessage}{" "}
         <button onClick={() => refetch()} className="underline underline-offset-2">Reintentar</button>
       </div>
     );

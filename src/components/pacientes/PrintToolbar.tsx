@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Printer, Download } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 
 interface PrintToolbarProps {
   patientId: string
@@ -11,15 +11,13 @@ interface PrintToolbarProps {
 
 export function PrintToolbar({ patientId }: PrintToolbarProps) {
   const router = useRouter()
-  const { toast } = useToast()
 
   const handlePrint = () => {
     window.print()
   }
 
   const handleDownloadPDF = async () => {
-    toast({
-      title: "Generando PDF",
+    toast("Generando PDF", {
       description: "La descarga comenzará en breve...",
     })
 
@@ -43,16 +41,13 @@ export function PrintToolbar({ patientId }: PrintToolbarProps) {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
 
-      toast({
-        title: "PDF descargado",
+      toast.success("PDF descargado", {
         description: "El archivo se ha descargado correctamente.",
       })
     } catch (error) {
-      console.error("[v0] Error downloading PDF:", error)
-      toast({
-        title: "Error",
+      console.error("Error downloading PDF:", error)
+      toast.error("Error", {
         description: "No se pudo generar el PDF. Intente nuevamente.",
-        variant: "destructive",
       })
     }
   }

@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useRef, useState, useCallback } from "react"
+import { useRef, useState, useCallback, useEffect } from "react"
 import FullCalendar from "@fullcalendar/react"
 import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
@@ -69,6 +69,8 @@ export default function CitasCalendar({
   // Drawer de detalle
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
+  // Estado para controlar el montaje del Sheet (permite animación de cierre)
+  const [shouldMountSheet, setShouldMountSheet] = useState(false)
 
   const [nuevaCitaOpen, setNuevaCitaOpen] = useState(false)
   const [nuevaCitaDefaults, setNuevaCitaDefaults] = useState<{
@@ -78,12 +80,29 @@ export default function CitasCalendar({
 
   const openDrawer = useCallback((eventId: number) => {
     setSelectedEventId(eventId)
-    setDrawerOpen(true)
+    setShouldMountSheet(true) // Montar el Sheet
+    setDrawerOpen(true) // Abrir el Sheet (React batch las actualizaciones)
   }, [])
 
+  // Función centralizada para cerrar el drawer de forma consistente
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false)
+    // Nota: selectedEventId y shouldMountSheet se limpian en el useEffect
+    // después de que la animación de cierre termine completamente
   }, [])
+
+  // Limpiar estados después de que el drawer se cierre completamente
+  // La animación de cierre dura 300ms, esperamos 400ms para asegurar que termine
+  useEffect(() => {
+    if (!drawerOpen && shouldMountSheet) {
+      const timer = setTimeout(() => {
+        // Limpiar todo después de que la animación termine
+        setSelectedEventId(null)
+        setShouldMountSheet(false)
+      }, 400)
+      return () => clearTimeout(timer)
+    }
+  }, [drawerOpen, shouldMountSheet])
 
   function roundToMinutes(d: Date, stepMin = 15) {
     const ms = stepMin * 60_000
@@ -204,18 +223,28 @@ export default function CitasCalendar({
         </div>
       </div>
 
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className={cn("w-full p-0", "sm:max-w-md", "md:max-w-lg")}>
-          {selectedEventId && (
-            <CitaDrawer
-              idCita={selectedEventId}
-              onClose={closeDrawer}
-              currentUser={currentUser}
-              onAfterChange={handleAfterChange}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
+      {shouldMountSheet && (
+        <Sheet 
+          open={drawerOpen} 
+          onOpenChange={(open) => {
+            // Manejar el cambio de estado del Sheet de forma robusta
+            setDrawerOpen(open)
+            // Nota: selectedEventId y shouldMountSheet se limpian automáticamente
+            // en el useEffect cuando drawerOpen cambia a false, después de la animación
+          }}
+        >
+          <SheetContent side="right" className={cn("w-full p-0", "sm:max-w-md", "md:max-w-lg")}>
+            {selectedEventId && (
+              <CitaDrawer
+                idCita={selectedEventId}
+                currentUser={currentUser}
+                onAfterChange={handleAfterChange}
+                onClose={closeDrawer}
+              />
+            )}
+          </SheetContent>
+        </Sheet>
+      )}
 
       <NuevaCitaSheet
         key={nuevaCitaDefaults.inicio?.getTime() ?? 0}

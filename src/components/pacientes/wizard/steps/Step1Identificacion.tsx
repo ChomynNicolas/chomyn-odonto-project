@@ -15,17 +15,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { useMemo } from "react"
 import { calcularEdad } from "@/lib/kpis/edad-grupos"
-import type { PacienteCreateDTOClient } from "@/lib/schema/paciente.schema"
+import type { PacienteCreateFormInput } from "@/lib/schema/paciente.schema"
 import { validarDocumento } from "@/lib/schema/paciente.schema"
+import { CiudadAutocomplete } from "../CiudadAutocomplete"
 
 interface Step1IdentificacionProps {
-  form: UseFormReturn<PacienteCreateDTOClient>
+  form: UseFormReturn<PacienteCreateFormInput>
 }
 
 export function Step1Identificacion({ form }: Step1IdentificacionProps) {
   const fechaNacimiento = form.watch("fechaNacimiento")
   const tipoDocumento = form.watch("tipoDocumento")
   const numeroDocumento = form.watch("numeroDocumento")
+  const pais = form.watch("pais")
 
   const edad = useMemo(() => {
     if (!fechaNacimiento) return null
@@ -75,10 +77,10 @@ export function Step1Identificacion({ form }: Step1IdentificacionProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel htmlFor="genero">Género *</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} >
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger id="genero">
-                    <SelectValue placeholder="Seleccione" />
+                    <SelectValue placeholder="Seleccione el género" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -87,6 +89,7 @@ export function Step1Identificacion({ form }: Step1IdentificacionProps) {
                   <SelectItem value="X">Prefiere no declarar</SelectItem>
                 </SelectContent>
               </Select>
+              <FormDescription>Seleccione una opción válida</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -272,12 +275,17 @@ export function Step1Identificacion({ form }: Step1IdentificacionProps) {
             <FormItem>
               <FormLabel htmlFor="ciudad">Ciudad *</FormLabel>
               <FormControl>
-                <Input
+                <CiudadAutocomplete
                   id="ciudad"
-                  {...field}
-                  placeholder="Ej: Asunción"
-                  onBlur={(e) => field.onChange(e.target.value.trim())}
-                  autoComplete="address-level2"
+                  value={field.value}
+                  onChange={(value) => field.onChange(value)}
+                  onBlur={field.onBlur}
+                  pais={pais}
+                  placeholder={
+                    pais === "PY"
+                      ? "Escribe tu ciudad y elige una sugerencia (si existe)"
+                      : "Escribe el nombre de tu ciudad"
+                  }
                 />
               </FormControl>
               <FormMessage />

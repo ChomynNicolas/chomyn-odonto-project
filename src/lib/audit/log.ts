@@ -1,6 +1,7 @@
 // src/lib/audit/log.ts
 import { prisma } from "@/lib/prisma"
 import { AuditAction } from "@/lib/audit/actions"
+import type { Prisma } from "@prisma/client"
 
 /**
  * Extrae IP, user-agent y referer desde Headers (opcional)
@@ -61,7 +62,7 @@ export async function writeAudit(opts: {
       entity,
       entityId,
       ip: ipFinal,              // <-- guarda IP si viene
-      metadata: safeMeta as any,
+      metadata: safeMeta as Prisma.InputJsonValue,
     },
   })
 }

@@ -17,7 +17,7 @@ export function CellsDesktop({ p }: { p: PacienteItem }) {
       <td className="px-4 py-3 whitespace-nowrap">{age ?? "—"}</td>
       <td className="px-4 py-3 whitespace-nowrap">{renderGenero(p)}</td>
       <td className="px-4 py-3 whitespace-nowrap">
-        <Badge variant={p.estaActivo !== false ? "success" : "destructive"} className="text-xs">
+        <Badge color={p.estaActivo !== false ? "success" : "error"} className="text-xs">
           {p.estaActivo !== false ? "Activo" : "Inactivo"}
         </Badge>
       </td>
@@ -45,7 +45,7 @@ export function CardMobile({ p }: { p: PacienteItem }) {
           <h3 className="truncate text-sm font-medium">{renderNombre(p)}</h3>
           <p className="truncate text-xs text-muted-foreground">{renderDocumento(p)} • {renderTelefono(p)}</p>
         </div>
-        <Badge variant={p.estaActivo !== false ? "success" : "destructive"} className="text-xs h-fit">
+        <Badge color={p.estaActivo !== false ? "success" : "error"} className="text-xs h-fit">
           {p.estaActivo !== false ? "Activo" : "Inactivo"}
         </Badge>
       </div>

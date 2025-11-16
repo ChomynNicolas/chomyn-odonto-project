@@ -1,11 +1,23 @@
 // src/lib/mappers/patient.ts
-import type { PacienteFichaCompletaDTO, CitaLite } from "@/app/api/pacientes/[id]/_dto"
+import type { PacienteFichaCompletaDTO } from "@/app/api/pacientes/[id]/_dto"
 import type {
+  AllergySeverity,
+  AppointmentStatus,
+  AttachmentType,
+  ContactType,
+  DiagnosisStatus,
+  DocumentType,
+  Gender,
   OdontogramSnapshot,
   PatientRecord,
   PeriodontogramSnapshot,
+  RelationType,
   ToothCondition,
   ToothRecord,
+  TreatmentPlan,
+  TreatmentPlanStatus,
+  TreatmentStep,
+  TreatmentStepStatus,
   VitalSigns,
 } from "@/lib/types/patient"
 
@@ -90,13 +102,21 @@ function splitApellidos(raw?: string | null): { lastName: string; secondLastName
   return { lastName, secondLastName }
 }
 
-const splitNombre = (nombreApellido?: string) => {
-  if (!nombreApellido) return undefined
-  const [first, ...rest] = nombreApellido.trim().split(/\s+/)
-  return { firstName: first ?? "", lastName: rest.join(" ") || undefined }
+// Type for vital signs from DTO
+type VitalSignsDTO = {
+  id: number
+  measuredAt: string
+  heightCm?: number | null
+  weightKg?: number | null
+  bmi?: number | null
+  bpSyst?: number | null
+  bpDiast?: number | null
+  heartRate?: number | null
+  temperature?: number | null
+  notes?: string | null
 }
 
-function mapVital(v: any): VitalSigns {
+function mapVital(v: VitalSignsDTO): VitalSigns {
   return {
     id: v.id,
     recordedAt: v.measuredAt, // <- renombrado
@@ -108,18 +128,15 @@ function mapVital(v: any): VitalSigns {
     heartRate: v.heartRate ?? null,
     temperature: v.temperature ?? null,
     notes: v.notes ?? null,
-    // si el backend aún no manda createdBy, quedará undefined (UI ya es defensiva)
-    recordedBy: v.createdBy?.nombreApellido ? splitNombre(v.createdBy.nombreApellido) : undefined,
+    // recordedBy no está disponible en el DTO actual
+    recordedBy: undefined,
   }
 }
 
 export function mapVitalsFromDTO(dto: PacienteFichaCompletaDTO): VitalSigns[] {
   const arr: VitalSigns[] = []
   const ultimo = dto.clinico.vitales.ultimo
-    ? mapVital({
-        ...dto.clinico.vitales.ultimo,
-        createdBy: dto.clinico.vitales.ultimo.createdBy, // si lo agregas en backend
-      })
+    ? mapVital(dto.clinico.vitales.ultimo)
     : null
 
   if (ultimo) arr.push(ultimo)
@@ -131,24 +148,55 @@ export function mapVitalsFromDTO(dto: PacienteFichaCompletaDTO): VitalSigns[] {
   return arr
 }
 
-function citaLiteToAppointment(c: CitaLite) {
+// Helper function to map CitaLite or similar structure to Appointment
+function citaLiteToAppointment(c: {
+  idCita: number
+  inicio: string
+  fin: string
+  estado: string
+  profesional: { idProfesional: number; nombre: string }
+  consultorio: { idConsultorio: number; nombre: string } | null
+  motivo?: string | null
+}) {
   const [pf, ...pl] = (c.profesional?.nombre ?? "").trim().split(/\s+/)
+  
+  // Calculate duration in minutes from inicio and fin
+  const duration = c.inicio && c.fin
+    ? Math.round((new Date(c.fin).getTime() - new Date(c.inicio).getTime()) / (1000 * 60))
+    : 30 // Default to 30 minutes if not available
+  
+  // Map appointment status from string to AppointmentStatus
+  const getAppointmentStatus = (estado: string): AppointmentStatus => {
+    const statusMap: Record<string, AppointmentStatus> = {
+      SCHEDULED: "SCHEDULED",
+      CONFIRMED: "CONFIRMED",
+      IN_PROGRESS: "IN_PROGRESS",
+      COMPLETED: "COMPLETED",
+      CANCELLED: "CANCELLED",
+      NO_SHOW: "NO_SHOW",
+    }
+    return statusMap[estado.toUpperCase()] ?? "SCHEDULED"
+  }
+  
   return {
-    id: c.idCita,
+    id: String(c.idCita),
     scheduledAt: c.inicio,
-    status: c.estado,
+    duration,
+    status: getAppointmentStatus(c.estado),
+    notes: c.motivo ?? undefined, // Use motivo if available
     professional: {
-      id: c.profesional.idProfesional,
+      id: String(c.profesional.idProfesional),
       firstName: pf ?? "",
       lastName: pl.join(" "),
     },
-    room: c.consultorio ? { id: c.consultorio.idConsultorio, name: c.consultorio.nombre } : undefined,
+    office: c.consultorio ? { id: String(c.consultorio.idConsultorio), name: c.consultorio.nombre } : undefined,
   }
 }
 
 export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientRecord {
   const firstName = (dto.persona.nombres ?? "").trim()
-  const { lastName, secondLastName } = splitApellidos(dto.persona.apellidos)
+  const lastName = (dto.persona.apellidos ?? "").trim()
+  const secondLastName = dto.persona.segundoApellido ?? undefined // ⭐ Use segundoApellido from DTO
 
   // appointments: combinar proxima + proximasSemana + ultimas
   const appointments = [
@@ -181,9 +229,22 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
       return "application/octet-stream"
     }
 
+    // Map tipo from string to AttachmentType
+    const attachmentTypeMap: Record<string, AttachmentType> = {
+      XRAY: "XRAY",
+      INTRAORAL_PHOTO: "INTRAORAL_PHOTO",
+      EXTRAORAL_PHOTO: "EXTRAORAL_PHOTO",
+      IMAGE: "IMAGE",
+      DOCUMENT: "DOCUMENT",
+      PDF: "PDF",
+      LAB_REPORT: "LAB_REPORT",
+      OTHER: "OTHER",
+    }
+    const type: AttachmentType = attachmentTypeMap[a.tipo] ?? "OTHER"
+
     return {
       id: String(a.id),
-      type: a.tipo as any, // Map from Prisma type to frontend type
+      type, // Map from Prisma type to frontend type
       fileName: a.originalFilename || a.descripcion || `adjunto-${a.id}`,
       fileSize: a.bytes || 0,
       mimeType: getMimeType(a.format, a.resourceType),
@@ -204,16 +265,31 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     }
   })
 
+  // Map severity from string to AllergySeverity
+  const severityMap: Record<string, AllergySeverity> = {
+    MILD: "MILD",
+    MODERATE: "MODERATE",
+    SEVERE: "SEVERE",
+  }
+  const getSeverity = (severity: string): AllergySeverity => {
+    return severityMap[severity] ?? "MILD"
+  }
+
   const allergies = dto.clinico.alergias.map((x) => ({
     id: x.id,
     allergen: x.label,
     label: x.label,
-    severity: x.severity as any,
+    severity: getSeverity(x.severity),
     reaction: x.reaction ?? undefined,
     isActive: x.isActive,
     diagnosedAt: x.notedAt,
     notedAt: x.notedAt,
   }))
+
+  // Map medication status: "INACTIVE" -> "SUSPENDED" to match MedicationStatus
+  const getMedicationStatus = (isActive: boolean): "ACTIVE" | "SUSPENDED" | "COMPLETED" => {
+    return isActive ? "ACTIVE" : "SUSPENDED"
+  }
 
   const medications = dto.clinico.medicacion.map((m) => ({
     id: m.id,
@@ -228,14 +304,26 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     startAt: m.startAt ?? undefined,
     endedAt: m.endAt ?? undefined,
     endAt: m.endAt ?? undefined,
-    status: m.isActive ? "ACTIVE" : "INACTIVE",
+    status: getMedicationStatus(m.isActive),
   }))
+
+  // Map diagnosis status from string to DiagnosisStatus
+  const getDiagnosisStatus = (status: string): DiagnosisStatus => {
+    const statusMap: Record<string, DiagnosisStatus> = {
+      ACTIVE: "ACTIVE",
+      RESOLVED: "RESOLVED",
+      CHRONIC: "CHRONIC",
+      MONITORING: "MONITORING",
+      RULED_OUT: "RULED_OUT",
+    }
+    return statusMap[status.toUpperCase()] ?? "ACTIVE"
+  }
 
   const diagnoses = dto.clinico.diagnosticos.map((d) => ({
     id: d.id,
     code: d.code ?? undefined,
     label: d.label,
-    status: d.status, // ACTIVE | RESOLVED | ...
+    status: getDiagnosisStatus(d.status),
     diagnosedAt: d.notedAt, // <- renombramos aquí
     resolvedAt: d.resolvedAt ?? undefined,
     notes: d.notes ?? undefined,
@@ -245,23 +333,44 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
   // vitales: opcional – compactamos “último” primero
   const vitalSigns = mapVitalsFromDTO(dto)
 
-  const treatmentPlans = [
+  // Map treatment plan status
+  const getTreatmentPlanStatus = (isActive: boolean): TreatmentPlanStatus => {
+    return isActive ? "ACTIVE" : "COMPLETED"
+  }
+
+  // Map treatment step status
+  const getTreatmentStepStatus = (status: string): TreatmentStepStatus => {
+    const statusMap: Record<string, TreatmentStepStatus> = {
+      PENDING: "PENDING",
+      IN_PROGRESS: "IN_PROGRESS",
+      COMPLETED: "COMPLETED",
+      CANCELLED: "CANCELLED",
+    }
+    return statusMap[status] ?? "PENDING"
+  }
+
+  const treatmentPlans: TreatmentPlan[] = [
     ...(dto.planes.activo
       ? [
           {
-            id: dto.planes.activo.id,
+            id: String(dto.planes.activo.id),
             title: dto.planes.activo.titulo,
-            description: dto.planes.activo.descripcion ?? undefined,
-            isActive: true,
-            createdAt: dto.planes.activo.createdAt,
+            status: "ACTIVE" as TreatmentPlanStatus,
+            startDate: dto.planes.activo.createdAt,
+            endDate: undefined,
+            estimatedCost: undefined,
             steps: dto.planes.activo.pasos.map((s) => ({
-              id: s.id,
+              id: String(s.id),
               order: s.order,
-              serviceType: s.serviceType ?? undefined,
-              toothNumber: s.toothNumber ?? undefined,
-              status: s.status,
-              estimatedCostCents: s.estimatedCostCents ?? undefined,
+              status: getTreatmentStepStatus(s.status),
+              procedure: {
+                code: s.serviceType ?? "",
+                name: s.serviceType ?? "",
+              },
+              tooth: s.toothNumber ? String(s.toothNumber) : undefined,
+              surface: undefined,
               notes: s.notes ?? undefined,
+              estimatedCost: s.estimatedCostCents ? s.estimatedCostCents / 100 : undefined,
             })),
           },
         ]
@@ -270,47 +379,105 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     ...dto.planes.historial
       .filter((h) => !dto.planes.activo || h.id !== dto.planes.activo.id)
       .map((h) => ({
-        id: h.id,
+        id: String(h.id),
         title: h.titulo,
-        isActive: h.isActive,
-        createdAt: h.createdAt,
-        steps: [] as any[],
+        status: getTreatmentPlanStatus(h.isActive),
+        startDate: h.createdAt,
+        endDate: undefined,
+        estimatedCost: undefined,
+        steps: [] as TreatmentStep[],
       })),
   ]
 
+  // Map gender from string to Gender type
+  const genderMap: Record<string, Gender> = {
+    MASCULINO: "MALE",
+    FEMENINO: "FEMALE",
+    OTRO: "OTHER",
+    NO_ESPECIFICADO: "OTHER",
+  }
+  const gender: Gender = dto.persona.genero ? genderMap[dto.persona.genero] ?? "OTHER" : "OTHER"
+
+  // Map document type
+  const documentTypeMap: Record<string, DocumentType> = {
+    CI: "CI",
+    DNI: "CI",
+    PASAPORTE: "PASSPORT",
+    RUC: "RUC",
+    OTRO: "OTHER",
+  }
+  const documentType: DocumentType | undefined = dto.persona.documento?.tipo
+    ? documentTypeMap[dto.persona.documento.tipo] ?? "OTHER"
+    : undefined
+
   return {
     // Demográficos base
-    id: dto.idPaciente,
+    id: String(dto.idPaciente),
     status: dto.estaActivo ? "ACTIVE" : "INACTIVE",
     firstName,
     lastName,
     secondLastName,
-    dateOfBirth: dto.persona.fechaNacimiento ?? undefined,
-    gender: dto.persona.genero ?? "NO_ESPECIFICADO",
+    dateOfBirth: dto.persona.fechaNacimiento ?? "",
+    gender,
     address: dto.persona.direccion ?? undefined,
-    city: undefined,
+    city: dto.persona.ciudad ?? undefined, // ⭐ Added
+    documentType,
     documentNumber: dto.persona.documento?.numero,
+    documentCountry: dto.persona.documento?.paisEmision ?? undefined, // ⭐ Added
+    documentIssueDate: dto.persona.documento?.fechaEmision ?? undefined, // ⭐ Added
+    documentExpiryDate: dto.persona.documento?.fechaVencimiento ?? undefined, // ⭐ Added
+    ruc: dto.persona.documento?.ruc ?? undefined,
+    country: dto.persona.pais ?? "PY", // ⭐ Added
+    emergencyContactName: dto.persona.contactoEmergenciaNombre ?? undefined, // ⭐ Added
+    emergencyContactPhone: dto.persona.contactoEmergenciaTelefono ?? undefined, // ⭐ Added
+    emergencyContactRelation: dto.persona.contactoEmergenciaRelacion ?? undefined, // ⭐ Added
+    createdAt: dto.createdAt,
+    updatedAt: dto.updatedAt,
 
     // Contacto / responsables
-    contacts: dto.persona.contactos.map((c) => ({
-      type: c.tipo,
+    contacts: dto.persona.contactos.map((c, index) => ({
+      id: `contact-${dto.idPaciente}-${index}`, // Generate ID from index
+      type: c.tipo as ContactType, // "PHONE" | "EMAIL" is compatible with ContactType
       value: c.valorNorm,
-      label: c.label ?? undefined,
       isPrimary: c.esPrincipal,
-      isActive: c.activo,
+      isWhatsAppCapable: c.whatsappCapaz ?? undefined,
+      isSmsCapable: undefined, // Not available in DTO
+      notes: c.label ?? undefined,
     })),
-    responsibleParties: dto.responsables.map((r) => ({
-      id: r.idPacienteResponsable,
-      relation: r.relacion,
-      isPrimary: r.esPrincipal,
-      legalAuthority: r.autoridadLegal,
-      person: {
-        id: r.persona.idPersona,
-        fullName: r.persona.nombreCompleto,
-        doc: r.persona.documento ?? undefined,
-        mainContact: r.persona.contactoPrincipal ?? undefined,
-      },
-    })),
+    responsibleParties: dto.responsables.map((r) => {
+      // Split nombreCompleto into firstName and lastName
+      const nombreParts = r.persona.nombreCompleto.trim().split(/\s+/)
+      const firstName = nombreParts[0] ?? ""
+      const lastName = nombreParts.slice(1).join(" ") || ""
+
+      // Map document type
+      const docType = r.persona.documento?.tipo
+        ? documentTypeMap[r.persona.documento.tipo] ?? undefined
+        : undefined
+
+      return {
+        id: String(r.idPacienteResponsable),
+        relation: r.relacion as RelationType, // Cast to RelationType
+        isPrimary: r.esPrincipal,
+        hasLegalAuthority: r.autoridadLegal, // Changed from legalAuthority
+        validFrom: r.vigenteDesde, // ⭐ Added
+        validUntil: r.vigenteHasta ?? undefined, // ⭐ Added
+        notes: r.notas ?? undefined, // ⭐ Added
+        person: {
+          firstName,
+          lastName,
+          documentType: docType,
+          documentNumber: r.persona.documento?.numero,
+          contacts: r.persona.contactos.map((c) => ({ // ⭐ Added: map contacts from DTO
+            id: `contact-${r.idPacienteResponsable}-${c.tipo}-${c.valorNorm}`,
+            type: c.tipo as ContactType,
+            value: c.valorNorm,
+            isPrimary: c.esPrincipal,
+            notes: c.label ?? undefined,
+          })),
+        },
+      }
+    }),
 
     // Clínico
     allergies,

@@ -10,13 +10,13 @@ function jsonError(status: number, code: string, error: string) {
   return NextResponse.json({ ok: false, code, error }, { status });
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   // Roles permitidos: ADMIN | RECEP | ODONT
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
   if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
 
   try {
-    const { id } = pathParamsSchema.parse(ctx.params);
+    const { id } = pathParamsSchema.parse(await ctx.params);
     const query = reactivateQuerySchema.parse(Object.fromEntries(req.nextUrl.searchParams));
     // body no se usa actualmente, pero se parsea para validación futura
     await reactivateBodySchema.parse(await safeReadJson(req)); // motivo opcional

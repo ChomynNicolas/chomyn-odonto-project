@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { useForm } from "react-hook-form"
+import { useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import {
-  PacienteCreateFormSchema,
-  type PacienteCreateDTO,
+  PacienteCreateSchema,
   GeneroEnum,
   TipoDocumentoEnum,
 } from "@/lib/schema/paciente"
@@ -17,25 +17,25 @@ import { Button } from "@/components/ui/button"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import PreferenciasContacto from "./PreferenciasContacto"
-import AdjuntosDropzone, { FileItem } from "./AdjuntosDropzone"
+import AdjuntosDropzone from "./AdjuntosDropzone"
 import { Info } from "lucide-react"
 import ResponsablePagoSelector, { type ResponsablePagoValue } from "./ResponsablePagoSelector"
 
 type Intent = "open" | "schedule"
 
 
-type PacienteFormDTO = Omit<PacienteCreateDTO, "adjuntos"> & {
-  adjuntos: FileItem[]
-}
-
 function Required({ children }: { children: React.ReactNode }) {
   return <span className="after:ml-0.5 after:text-destructive after:content-['*']">{children}</span>
 }
 
+// Infer form type directly from schema to avoid type resolution issues
+// Use z.output for form type (after transforms) since zodResolver applies transforms
+type FormData = z.output<typeof PacienteCreateSchema>
+
 type Props = {
-  defaultValues?: Partial<PacienteCreateDTO>
+  defaultValues?: Partial<FormData>
   /** onSubmit recibe el intent elegido por la botonera sticky */
-  onSubmit: (data: PacienteCreateDTO, intent: Intent) => void | Promise<void>
+  onSubmit: (data: FormData, intent: Intent) => void | Promise<void>
   /** deshabilita mientras se envia al servidor */
   busy?: boolean
 }
@@ -43,8 +43,10 @@ type Props = {
 export default function PacienteForm({ defaultValues, onSubmit, busy = false }: Props) {
   const [intent, setIntent] = React.useState<Intent>("open")
 
-  const form = useForm<PacienteFormDTO>({
-    resolver: zodResolver(PacienteCreateFormSchema),
+  // Explicitly type the form to avoid TypeScript inference issues
+  // zodResolver applies transforms, so we use the output type
+  const form = useForm<FormData>({
+    resolver: zodResolver(PacienteCreateSchema) as Resolver<FormData>,
     defaultValues: {
       nombreCompleto: "",
       genero: "NO_ESPECIFICADO",
@@ -66,7 +68,9 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
     mode: "onBlur",
   })
 
-  const [uploadingAdjuntos, setUploadingAdjuntos] = React.useState(false)
+  // Detectar si hay adjuntos subiendo desde el estado de los adjuntos
+  const adjuntos = form.watch("adjuntos") ?? []
+  const uploadingAdjuntos = adjuntos.some((a) => a.estado === "subiendo")
   const isSubmitting = form.formState.isSubmitting || busy || uploadingAdjuntos
 
   const todayYMD = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -91,22 +95,29 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
 
   /** ── Contadores de error por sección para mostrar en el trigger ───────────── */
   const errors = form.formState.errors
+  const errorKeys = Object.keys(errors)
   const countId = ["nombreCompleto", "genero", "fechaNacimiento", "tipoDocumento", "dni", "ruc", "telefono", "email", "domicilio", "obraSocial"]
-    .filter((k) => (errors as any)[k])
+    .filter((k) => errorKeys.includes(k))
     .length
-  const countClin = ["antecedentesMedicos", "alergias", "medicacion"].filter((k) => (errors as any)[k]).length
+  const countClin = ["antecedentesMedicos", "alergias", "medicacion"].filter((k) => errorKeys.includes(k)).length
 
   /** ── Guardar con intent ───────────────────────────────────────────────────── */
-  const handleSubmit = async (values: PacienteCreateDTO) => {
+  const handleSubmit = async (values: FormData) => {
+    // zodResolver already applied transforms, so values are already in the correct format
     await onSubmit(values, intent)
   }
 
-  const generoLabel: Record<(typeof GeneroEnum)["enum"], string> = {
+  type GeneroType = z.infer<typeof GeneroEnum>
+  const generoOptions: GeneroType[] = ["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"]
+  const generoLabel: Record<string, string> = {
     MASCULINO: "Masculino",
     FEMENINO: "Femenino",
     OTRO: "Otro",
     NO_ESPECIFICADO: "No especificado / Prefiere no declarar",
   }
+
+  type TipoDocumentoType = z.infer<typeof TipoDocumentoEnum>
+  const tipoDocumentoOptions: TipoDocumentoType[] = ["CI", "DNI", "PASAPORTE", "RUC", "OTRO"]
 
   /** ── UI ───────────────────────────────────────────────────────────────────── */
   return (
@@ -147,7 +158,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                           <Required>Nombre completo</Required>
                         </FormLabel>
                         <FormControl>
-                          <Input name="nombreCompleto" placeholder="Ej: Ana López" aria-invalid={!!errors.nombreCompleto} {...field} />
+                          <Input placeholder="Ej: Ana López" aria-invalid={!!errors.nombreCompleto} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -164,15 +175,16 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         </FormLabel>
                         <FormControl>
                           <select
-                            name="genero"
                             className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             aria-invalid={!!errors.genero}
-                            value={field.value}
-                            onChange={(e) => field.onChange(e.target.value)}
+                            value={field.value ?? "NO_ESPECIFICADO"}
+                            onChange={(e) => field.onChange(e.target.value as GeneroType)}
+                            onBlur={field.onBlur}
+                            ref={field.ref}
                           >
-                            {GeneroEnum.options.map((g) => (
+                            {generoOptions.map((g) => (
                               <option key={g} value={g}>
-                                {generoLabel[g]}
+                                {generoLabel[g] ?? g}
                               </option>
                             ))}
                           </select>
@@ -204,11 +216,15 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         <FormControl>
                           <Input
                             type="date"
-                            name="fechaNacimiento"
                             max={todayYMD}
                             aria-invalid={!!errors.fechaNacimiento}
-                            value={field.value instanceof Date ? field.value.toISOString().slice(0, 10) : ""}
-                            onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                            value={field.value instanceof Date ? field.value.toISOString().slice(0, 10) : field.value ? String(field.value).slice(0, 10) : ""}
+                            onChange={(e) => {
+                              const dateValue = e.target.value
+                              field.onChange(dateValue ? new Date(dateValue) : undefined)
+                            }}
+                            onBlur={field.onBlur}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <FormMessage />
@@ -226,13 +242,14 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         </FormLabel>
                         <FormControl>
                           <select
-                            name="tipoDocumento"
                             className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             aria-invalid={!!errors.tipoDocumento}
-                            value={field.value}
-                            onChange={(e) => field.onChange(e.target.value)}
+                            value={field.value ?? "CI"}
+                            onChange={(e) => field.onChange(e.target.value as TipoDocumentoType)}
+                            onBlur={field.onBlur}
+                            ref={field.ref}
                           >
-                            {TipoDocumentoEnum.options.map((t) => (
+                            {tipoDocumentoOptions.map((t) => (
                               <option key={t} value={t}>
                                 {t}
                               </option>
@@ -254,7 +271,6 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         </FormLabel>
                         <FormControl>
                           <Input
-                            name="dni"
                             inputMode="numeric"
                             placeholder="Ej: 5123456"
                             aria-invalid={!!errors.dni}
@@ -286,7 +302,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                           </Tooltip>
                         </div>
                         <FormControl>
-                          <Input name="ruc" placeholder="Ej: 5123456-7" value={field.value ?? ""} onChange={field.onChange} />
+                          <Input placeholder="Ej: 5123456-7" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value || undefined)} onBlur={field.onBlur} ref={field.ref} />
                         </FormControl>
                         <FormDescription id="hint-ruc">Se usa para facturación.</FormDescription>
                         <FormMessage />
@@ -304,7 +320,6 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         </FormLabel>
                         <FormControl>
                           <Input
-                            name="telefono"
                             inputMode="tel"
                             placeholder="+59599123456"
                             aria-invalid={!!errors.telefono}
@@ -326,11 +341,12 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         <FormControl>
                           <Input
                             type="email"
-                            name="email"
                             placeholder="correo@dominio.com"
                             aria-invalid={!!errors.email}
                             value={field.value ?? ""}
-                            onChange={field.onChange}
+                            onChange={(e) => field.onChange(e.target.value || undefined)}
+                            onBlur={field.onBlur}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <FormMessage />
@@ -348,11 +364,12 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         </FormLabel>
                         <FormControl>
                           <Input
-                            name="domicilio"
                             placeholder="Calle, número, ciudad"
                             aria-invalid={!!errors.domicilio}
                             value={field.value ?? ""}
-                            onChange={field.onChange}
+                            onChange={(e) => field.onChange(e.target.value || undefined)}
+                            onBlur={field.onBlur}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <FormMessage />
@@ -367,7 +384,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                       <FormItem>
                         <FormLabel>Obra social / Seguro</FormLabel>
                         <FormControl>
-                          <Input name="obraSocial" placeholder="Ej: IPS, Sanitas..." value={field.value ?? ""} onChange={field.onChange} />
+                          <Input placeholder="Ej: IPS, Sanitas..." value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value || undefined)} onBlur={field.onBlur} ref={field.ref} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -378,21 +395,17 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
             </AccordionItem>
 
             {/* Responsable de pago */}
-<section aria-labelledby="sec-responsable" className="rounded-lg border border-border bg-card p-4 sm:p-6">
-  <ResponsablePagoSelector
-    value={form.watch("responsablePago") as ResponsablePagoValue}
-    onChange={(v) => form.setValue("responsablePago", v ?? undefined, { shouldDirty: true })}
-    // props opcionales para invalidación del listado si usas el modal desde aquí:
-    qForList=""
-    soloActivos={true}
-    limit={20}
-    descriptionId="rp-help"
-    disabled={isSubmitting} 
-  />
-  <p id="rp-help" className="mt-2 text-xs text-muted-foreground">
-    Buscá por documento o nombre. Si no existe, podés crear el responsable con “Crear responsable rápido”.
-  </p>
-</section>
+            <section aria-labelledby="sec-responsable" className="rounded-lg border border-border bg-card p-4 sm:p-6">
+              <ResponsablePagoSelector
+                value={form.watch("responsablePago") as ResponsablePagoValue}
+                onChange={(v) => form.setValue("responsablePago", v ?? undefined, { shouldDirty: true })}
+                descriptionId="rp-help"
+                disabled={isSubmitting}
+              />
+              <p id="rp-help" className="mt-2 text-xs text-muted-foreground">
+                Buscá por documento o nombre. Si no existe, podés crear el responsable con &quot;Crear responsable rápido&quot;.
+              </p>
+            </section>
 
 
             {/* ───────────────────────── Datos clínicos ───────────────────────── */}
@@ -417,11 +430,12 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                         <FormLabel>Antecedentes médicos</FormLabel>
                         <FormControl>
                           <Textarea
-                            name="antecedentesMedicos"
                             rows={3}
                             placeholder="Breve resumen clínico relevante"
                             value={field.value ?? ""}
-                            onChange={field.onChange}
+                            onChange={(e) => field.onChange(e.target.value || undefined)}
+                            onBlur={field.onBlur}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <FormMessage />
@@ -435,7 +449,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                       <FormItem>
                         <FormLabel>Alergias</FormLabel>
                         <FormControl>
-                          <Textarea name="alergias" rows={2} placeholder="Ej: penicilina, látex..." value={field.value ?? ""} onChange={field.onChange} />
+                          <Textarea rows={2} placeholder="Ej: penicilina, látex..." value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value || undefined)} onBlur={field.onBlur} ref={field.ref} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -448,7 +462,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
                       <FormItem>
                         <FormLabel>Medicación</FormLabel>
                         <FormControl>
-                          <Textarea name="medicacion" rows={2} placeholder="Ej: anticoagulantes, antihipertensivos..." value={field.value ?? ""} onChange={field.onChange} />
+                          <Textarea rows={2} placeholder="Ej: anticoagulantes, antihipertensivos..." value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value || undefined)} onBlur={field.onBlur} ref={field.ref} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -464,7 +478,7 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
               <AccordionContent className="border-t px-4 py-4 sm:px-6">
                 <fieldset disabled={isSubmitting}>
                   <PreferenciasContacto
-                    value={form.watch("preferenciasContacto")}
+                    value={form.watch("preferenciasContacto") ?? { whatsapp: true, llamada: false, email: false, sms: false }}
                     onChange={(pc) => form.setValue("preferenciasContacto", pc, { shouldDirty: true })}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">Se utilizará para recordatorios de turno y notificaciones.</p>
@@ -478,9 +492,14 @@ export default function PacienteForm({ defaultValues, onSubmit, busy = false }: 
               <AccordionContent className="border-t px-4 py-4 sm:px-6">
                 <fieldset disabled={isSubmitting}>
                   <AdjuntosDropzone
-                    files={form.watch("adjuntos") ?? []}
-                    onChange={(arr) => form.setValue("adjuntos", arr, { shouldDirty: true })}
-                    onBusyChange={setUploadingAdjuntos}
+                    adjuntos={form.watch("adjuntos") ?? []}
+                    onChangeAdjuntos={(adjuntos, files) => {
+                      form.setValue("adjuntos", adjuntos, { shouldDirty: true })
+                      // El Map de files se puede usar para subir archivos si es necesario
+                      // Por ahora solo actualizamos los adjuntos en el form
+                      void files // Marcar como usado para evitar error de lint
+                    }}
+                    disabled={isSubmitting}
                   />
                   <p className="mt-2 text-xs text-muted-foreground">Próximamente: Cloudinary/S3 con verificación y antivirus.</p>
                 </fieldset>

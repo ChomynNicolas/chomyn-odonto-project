@@ -1,6 +1,24 @@
 import { cloudinary } from "@/lib/cloudinary"
 
 /**
+ * Cloudinary URL options type
+ */
+type CloudinaryUrlOptions = {
+  secure?: boolean
+  resource_type?: string
+  sign_url?: boolean
+  type?: string
+  transformation?: Array<{
+    width?: number
+    height?: number
+    crop?: string
+    quality?: string | number
+    format?: string
+  }>
+  format?: string
+}
+
+/**
  * Clean publicId by removing version numbers if present
  * Cloudinary publicIds can include version numbers like "v1234567890/folder/file"
  * For signed URLs, we typically don't need the version
@@ -51,7 +69,7 @@ export async function generateAuthenticatedUrl(
   // Instead, we use the default type (upload) with sign_url: true
   // This works because signed URLs can access authenticated resources when properly configured
   
-  const urlOptions: any = {
+  const urlOptions: CloudinaryUrlOptions = {
     secure: true,
     resource_type: finalResourceType,
     sign_url: true,

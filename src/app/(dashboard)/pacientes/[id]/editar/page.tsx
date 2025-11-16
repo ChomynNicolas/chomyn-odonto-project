@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import PacienteForm from "@/components/pacientes/PacienteForm"
-import type { PacienteInput } from "@/components/pacientes/types"
+import type { PacienteCreateFormDTO } from "@/lib/schema/paciente"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -15,7 +15,7 @@ export default function EditarPacientePage() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [patientData, setPatientData] = useState<Partial<PacienteInput> | null>(null)
+  const [patientData, setPatientData] = useState<Partial<PacienteCreateFormDTO> | null>(null)
 
   useEffect(() => {
     async function fetchPatient() {
@@ -50,10 +50,22 @@ export default function EditarPacientePage() {
         type Contacto = { tipo: "PHONE" | "EMAIL"; valorNorm?: string | null }
         const contactos = (data.persona?.contactos ?? []) as Contacto[]
         
+        // Convert fechaNacimiento from string (ISO) to Date
+        let fechaNacimiento: Date | undefined = undefined
+        if (data.persona?.fechaNacimiento) {
+          const fecha = typeof data.persona.fechaNacimiento === "string" 
+            ? new Date(data.persona.fechaNacimiento) 
+            : data.persona.fechaNacimiento
+          if (!isNaN(fecha.getTime())) {
+            fechaNacimiento = fecha
+          }
+        }
+        
         setPatientData({
           nombreCompleto: nombreCompleto || "Sin nombre",
-          genero: data.persona?.genero || "NO_DECLARA",
-          fechaNacimiento: data.persona?.fechaNacimiento || undefined,
+          genero: data.persona?.genero || "NO_ESPECIFICADO",
+          tipoDocumento: data.persona?.documento?.tipo || "CI",
+          fechaNacimiento,
           dni: data.persona?.documento?.numero || "",
           ruc: data.persona?.documento?.ruc || "",
           telefono: contactos.find((c) => c.tipo === "PHONE")?.valorNorm || "",
@@ -72,7 +84,7 @@ export default function EditarPacientePage() {
     fetchPatient()
   }, [patientId])
 
-  const handleSubmit = async (values: PacienteInput) => {
+  const handleSubmit = async (values: PacienteCreateFormDTO, intent: "open" | "schedule") => {
     try {
       const response = await fetch(`/api/pacientes/${patientId}`, {
         method: "PUT",
@@ -86,7 +98,12 @@ export default function EditarPacientePage() {
         throw new Error(result.error || "No se pudo actualizar el paciente")
       }
 
-      router.push(`/pacientes/${patientId}`)
+      // Redirect based on intent
+      if (intent === "schedule") {
+        router.push(`/agenda?paciente=${patientId}`)
+      } else {
+        router.push(`/pacientes/${patientId}`)
+      }
     } catch (err) {
       console.error("[Edit Page] Error updating patient:", err)
       setError(err instanceof Error ? err.message : "Error al actualizar")
@@ -126,7 +143,7 @@ export default function EditarPacientePage() {
         <h1 className="text-2xl font-semibold text-foreground">Editar paciente</h1>
         <p className="text-sm text-muted-foreground">Actualiza la información completa del paciente</p>
       </header>
-      <PacienteForm defaultValues={patientData} onSubmit={handleSubmit} submitLabel="Guardar cambios" />
+      <PacienteForm defaultValues={patientData} onSubmit={handleSubmit} />
     </main>
   )
 }

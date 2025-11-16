@@ -4,7 +4,7 @@ import * as React from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -175,10 +175,16 @@ export function NuevaCitaSheet({
     }
   }, [horaInicioValue, fechaValue, setValue, setConflictos])
 
+  // Handler para limpiar estado cuando se cierra el Sheet
+  const handleClose = React.useCallback(() => {
+    setConflictos(null)
+    lastHoraInicioRef.current = null
+  }, [])
+
   React.useEffect(() => {
     if (!open) {
       // Limpiar estado al cerrar
-      setConflictos(null)
+      handleClose()
       return
     }
     
@@ -217,7 +223,7 @@ export function NuevaCitaSheet({
       tipo: (current.tipo as NuevaCitaForm["tipo"]) || "CONSULTA",
     });
     setConflictos(null) // Limpiar conflictos al abrir
-  }, [open, defaults?.inicio, reset, getValues, currentUser, mode, citaData, setConflictos]);
+  }, [open, defaults?.inicio, reset, getValues, currentUser, mode, citaData, handleClose]);
 
   // Limpiar ref cuando se cierra el sheet
   React.useEffect(() => {
@@ -381,7 +387,16 @@ export function NuevaCitaSheet({
   }, [setValue, setConflictos])
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet 
+      open={open} 
+      onOpenChange={(isOpen) => {
+        onOpenChange(isOpen)
+        // Limpiar estado cuando se cierra el Sheet (por cualquier método: X, fuera, ESC, etc.)
+        if (!isOpen) {
+          handleClose()
+        }
+      }}
+    >
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{mode === "reschedule" ? "Reprogramar cita" : "Nueva cita"}</SheetTitle>
@@ -685,16 +700,15 @@ export function NuevaCitaSheet({
                 mode === "reschedule" ? "Reprogramar cita" : "Crear cita"
               )}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setConflictos(null)
-                onOpenChange(false)
-              }}
-            >
-              Cancelar
-            </Button>
+            <SheetClose asChild>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+              >
+                Cancelar
+              </Button>
+            </SheetClose>
           </div>
         </form>
       </SheetContent>

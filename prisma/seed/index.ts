@@ -1,4 +1,4 @@
-import { PrismaClient, RolNombre, AdjuntoTipo, RelacionPaciente } from "@prisma/client"
+import { PrismaClient, RolNombre, AdjuntoTipo, RelacionPaciente, EstadoCita, ConsultaEstado, DienteSuperficie } from "@prisma/client"
 import { ALLOW_PROD_SEED, RESEED, COUNTS, PROB } from "./config"
 import { log } from "./logger"
 import { hashPassword, calculateAge } from "./utils"
@@ -102,7 +102,7 @@ async function main() {
     hashPassword("Odont123!"),
   ])
 
-  const admin = await ensureUsuario(prisma, {
+  await ensureUsuario(prisma, {
     usuario: "admin",
     email: "admin@clinica.com",
     nombreApellido: "Administrador General",
@@ -246,14 +246,14 @@ async function main() {
     await createPlanConSteps(prisma, {
       pacienteId: pac.idPaciente,
       createdByUserId: recep.idUsuario,
-      steps: [{ code: "CONS-INI" }, { code: "LIMP" }, { code: "OBT", toothNumber: 16, toothSurface: "O" as any }],
+      steps: [{ code: "CONS-INI" }, { code: "LIMP" }, { code: "OBT", toothNumber: 16, toothSurface: DienteSuperficie.O }],
     })
 
     // Buscar cita completada del paciente
     const cita = await prisma.cita.findFirst({
       where: {
         pacienteId: pac.idPaciente,
-        estado: "COMPLETED" as any,
+        estado: EstadoCita.COMPLETED,
       },
       orderBy: { inicio: "desc" },
     })
@@ -265,7 +265,7 @@ async function main() {
       citaId: cita.idCita,
       performedByProfessionalId: cita.profesionalId,
       createdByUserId: recep.idUsuario,
-      status: "FINAL" as any,
+      status: ConsultaEstado.FINAL,
       reason: "Consulta integral",
     })
 
@@ -281,7 +281,7 @@ async function main() {
       consultaCitaId: consulta.citaId,
       code: "OBT",
       toothNumber: 16,
-      toothSurface: "O" as any,
+      toothSurface: DienteSuperficie.O,
       quantity: 1,
       resultNotes: "Resina compuesta aplicada exitosamente",
     })

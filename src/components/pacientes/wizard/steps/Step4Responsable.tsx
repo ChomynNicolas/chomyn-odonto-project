@@ -5,10 +5,10 @@ import ResponsablePagoSelector from "@/components/pacientes/ResponsablePagoSelec
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { InfoIcon, Shield, ShieldCheck } from "lucide-react"
-import { PacienteCreateDTOClient } from "@/lib/schema/paciente.schema"
+import type { PacienteCreateFormInput } from "@/lib/schema/paciente.schema"
 
 interface Step4ResponsableProps {
-  form: UseFormReturn<PacienteCreateDTOClient>
+  form: UseFormReturn<PacienteCreateFormInput>
 }
 
 /**
@@ -51,7 +51,7 @@ export function Step4Responsable({ form }: Step4ResponsableProps) {
         <InfoIcon className="h-4 w-4" />
         <AlertDescription>
           Si el paciente es menor de edad o no es quien paga, podés asignar un responsable de pago. Buscá por CI/DNI/RUC
-          o nombre, o creá uno nuevo.
+          o nombre, o creá uno nuevo. Solo se pueden seleccionar personas mayores de 18 años como responsables.
         </AlertDescription>
       </Alert>
 
@@ -63,10 +63,6 @@ export function Step4Responsable({ form }: Step4ResponsableProps) {
             shouldDirty: true,
           })
         }}
-        qForList=""
-        soloActivos={true}
-        limit={20}
-        disabled={false}
         descriptionId="responsable-pago-description"
       />
 
@@ -106,6 +102,9 @@ export function Step4Responsable({ form }: Step4ResponsableProps) {
         <p className="font-medium text-foreground">
           Nota: Los responsables con relación Padre, Madre o Tutor tienen autoridad legal automática para firmar
           consentimientos de menores de edad.
+        </p>
+        <p className="font-medium text-foreground">
+          Requisito: El responsable debe ser mayor de 18 años. Solo se mostrarán personas elegibles en la búsqueda.
         </p>
       </div>
     </div>

@@ -80,8 +80,42 @@ export async function fetchAttachments(
     throw new Error(result.error || "Error al obtener adjuntos")
   }
 
+  // Type for API response adjunto item
+  type AdjuntoApiResponse = {
+    id: string | number
+    tipo: string
+    descripcion?: string | null
+    secureUrl: string
+    thumbnailUrl?: string | null
+    createdAt: string
+    uploadedBy: string
+    bytes?: number
+    originalFilename?: string | null
+    format?: string | null
+    width?: number | null
+    height?: number | null
+    publicId?: string | null
+    resourceType?: string | null
+    uploadedById?: number | null
+    context?: "patient" | "consultation" | "procedure"
+    contextId?: number | null
+    contextInfo?: {
+      consultaId?: number
+      consultaFecha?: string
+      consultaTipo?: string
+    }
+    source?: "adjunto" | "consentimiento"
+    consentimientoMetadata?: {
+      idConsentimiento: number
+      tipo: string
+      firmadoEn: string
+      vigenteHasta?: string | null
+      vigente: boolean
+    }
+  }
+
   // Map response to Attachment format
-  const adjuntos: Attachment[] = result.data.adjuntos.map((a: any) => {
+  const adjuntos: Attachment[] = result.data.adjuntos.map((a: AdjuntoApiResponse) => {
     const splitNombre = (nombre?: string) => {
       if (!nombre) return { firstName: "", lastName: "" }
       const parts = nombre.trim().split(/\s+/)
@@ -95,15 +129,17 @@ export async function fetchAttachments(
     const { firstName, lastName, fullName } = splitNombre(a.uploadedBy)
 
     // Determine MIME type
-    const getMimeType = (format?: string, resourceType?: string) => {
-      if (format === "pdf") return "application/pdf"
-      if (resourceType === "image") {
-        if (format === "jpg" || format === "jpeg") return "image/jpeg"
-        if (format === "png") return "image/png"
-        if (format === "gif") return "image/gif"
+    const getMimeType = (format?: string | null, resourceType?: string | null) => {
+      const normalizedFormat = format ?? undefined
+      const normalizedResourceType = resourceType ?? undefined
+      if (normalizedFormat === "pdf") return "application/pdf"
+      if (normalizedResourceType === "image") {
+        if (normalizedFormat === "jpg" || normalizedFormat === "jpeg") return "image/jpeg"
+        if (normalizedFormat === "png") return "image/png"
+        if (normalizedFormat === "gif") return "image/gif"
         return "image/*"
       }
-      if (resourceType === "video") return "video/*"
+      if (normalizedResourceType === "video") return "video/*"
       return "application/octet-stream"
     }
 
@@ -216,15 +252,17 @@ export async function createAttachment(params: CreateAttachmentParams): Promise<
 
   const { firstName, lastName, fullName } = splitNombre(a.uploadedBy)
 
-  const getMimeType = (format?: string, resourceType?: string) => {
-    if (format === "pdf") return "application/pdf"
-    if (resourceType === "image") {
-      if (format === "jpg" || format === "jpeg") return "image/jpeg"
-      if (format === "png") return "image/png"
-      if (format === "gif") return "image/gif"
+  const getMimeType = (format?: string | null, resourceType?: string | null) => {
+    const normalizedFormat = format ?? undefined
+    const normalizedResourceType = resourceType ?? undefined
+    if (normalizedFormat === "pdf") return "application/pdf"
+    if (normalizedResourceType === "image") {
+      if (normalizedFormat === "jpg" || normalizedFormat === "jpeg") return "image/jpeg"
+      if (normalizedFormat === "png") return "image/png"
+      if (normalizedFormat === "gif") return "image/gif"
       return "image/*"
     }
-    if (resourceType === "video") return "video/*"
+    if (normalizedResourceType === "video") return "video/*"
     return "application/octet-stream"
   }
 

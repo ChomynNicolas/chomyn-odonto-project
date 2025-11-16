@@ -32,21 +32,21 @@ export async function POST(req: NextRequest) {
     const { userId, action, resource, recordCount, privacyMode } = parsed.data
 
     // Registrar en AuditLog
+    // Nota: entityId se usa 0 para exportaciones ya que no hay una entidad específica asociada
     await prisma.auditLog.create({
       data: {
-        userId,
+        actorId: userId,
         action: "EXPORT",
-        entityType: "KPI_EXPORT",
-        entityId: null,
-        changes: {
+        entity: "KPI_EXPORT",
+        entityId: 0,
+        metadata: {
           action,
           resource,
           recordCount,
           privacyMode: privacyMode ?? false,
           timestamp: new Date().toISOString(),
         },
-        ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown",
-        userAgent: req.headers.get("user-agent") || "unknown",
+        ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown",
       },
     })
 

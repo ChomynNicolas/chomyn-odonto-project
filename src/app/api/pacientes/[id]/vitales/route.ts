@@ -13,9 +13,10 @@ const VitalSignsSchema = z.object({
   measuredAt: z.string(),
 })
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 })
     }

@@ -1,12 +1,14 @@
 import {
   PrismaClient, RolNombre, TipoDocumento, TipoContacto, RelacionPaciente,
   TipoCita, EstadoCita, MotivoCancelacion,
-  ConsultaEstado, ClinicoArchivoTipo, TreatmentStepStatus, DienteSuperficie,
+  ConsultaEstado, TreatmentStepStatus, DienteSuperficie,
   AllergySeverity,
   DiagnosisStatus,
   PerioBleeding,
   PerioSite,
-  AdjuntoTipo
+  AdjuntoTipo,
+  Genero,
+  ToothCondition
 } from "@prisma/client";
 import { normEmail, normPhonePY } from "./utils";
 
@@ -55,7 +57,7 @@ create: { profesionalId, especialidadId: esp.idEspecialidad },
 
 
 export async function ensurePersonaConDocumento(prisma: PrismaClient, p: {
-nombres: string; apellidos: string; genero?: any; fechaNacimiento?: Date | null;
+nombres: string; apellidos: string; genero?: Genero | null; fechaNacimiento?: Date | null;
 doc: { tipo: TipoDocumento; numero: string; paisEmision?: string | null; ruc?: string | null };
 }) {
 const { doc } = p;
@@ -84,7 +86,7 @@ documento: { create: { tipo: doc.tipo, numero: doc.numero, paisEmision: doc.pais
 }
 
 
-export async function ensureContactos(prisma: PrismaClient, personaId: number, contactos: Array<{
+export async function ensureContactos(prisma: PrismaClient, personaId: number, contactos: ReadonlyArray<{
 tipo: TipoContacto; valor: string; label?: string; whatsappCapaz?: boolean; smsCapaz?: boolean; esPrincipal?: boolean; esPreferidoRecordatorio?: boolean; esPreferidoCobranza?: boolean;
 }>) {
 for (const c of contactos) {
@@ -383,7 +385,7 @@ export async function addAdjuntoAConsulta(
     size: number;
     tipo: AdjuntoTipo;
     procedimientoId?: number | null;
-    metadata?: any; // ignorado aquí, pero mantenemos la firma
+    metadata?: unknown; // ignorado aquí, pero mantenemos la firma
   }
 ) {
   const st = deriveStorageFromUrl(params.url, params.originalName);
@@ -504,9 +506,9 @@ export async function addOdontoAndPerio(
 
   await prisma.odontogramEntry.createMany({
     data: [
-      { OdontogramSnapshot_id: od.idOdontogramSnapshot, tooth_number: 16, surface: "O" as any, condition: "CARIES" as any },
-      { OdontogramSnapshot_id: od.idOdontogramSnapshot, tooth_number: 26, surface: "O" as any, condition: "FILLED" as any },
-    ] as any,
+      { snapshotId: od.idOdontogramSnapshot, toothNumber: 16, surface: DienteSuperficie.O, condition: ToothCondition.CARIES },
+      { snapshotId: od.idOdontogramSnapshot, toothNumber: 26, surface: DienteSuperficie.O, condition: ToothCondition.FILLED },
+    ],
   });
 
   const perio = await prisma.periodontogramSnapshot.create({
@@ -520,9 +522,9 @@ export async function addOdontoAndPerio(
 
   await prisma.periodontogramMeasure.createMany({
     data: [
-      { PeriodontogramSnapshot_id: perio.idPeriodontogramSnapshot, tooth_number: 16, site: "MB" as PerioSite, probing_depth_mm: 3, bleeding: "NONE" as PerioBleeding },
-      { PeriodontogramSnapshot_id: perio.idPeriodontogramSnapshot, tooth_number: 16, site: "B"  as PerioSite, probing_depth_mm: 2, bleeding: "NONE" as PerioBleeding },
-    ] as any,
+      { snapshotId: perio.idPeriodontogramSnapshot, toothNumber: 16, site: PerioSite.MB, probingDepthMm: 3, bleeding: PerioBleeding.NONE },
+      { snapshotId: perio.idPeriodontogramSnapshot, toothNumber: 16, site: PerioSite.B, probingDepthMm: 2, bleeding: PerioBleeding.NONE },
+    ],
   });
 }
 

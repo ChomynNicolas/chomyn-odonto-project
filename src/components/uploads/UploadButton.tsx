@@ -3,6 +3,27 @@
 
 import { useState } from "react";
 
+type CloudinaryUploadResult = {
+  event: "success" | "close" | "abort" | "display-changed" | "queues-end" | "source-changed";
+  info?: {
+    public_id: string;
+    secure_url: string;
+    bytes: number;
+    format?: string;
+    width?: number;
+    height?: number;
+    resource_type?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type CloudinaryUploadError = {
+  message?: string;
+  status?: number;
+  [key: string]: unknown;
+} | null;
+
 export default function UploadButton(props: {
   pacienteId?: number;
   procedimientoId?: number;
@@ -22,7 +43,7 @@ export default function UploadButton(props: {
       const sign = await res.json();
       if (!sign.ok) throw new Error("No se pudo firmar");
 
-      // @ts-ignore - widget global (agrega en _app head el script de Cloudinary)
+      // @ts-expect-error - widget global (agrega en _app head el script de Cloudinary)
       const widget = window.cloudinary.createUploadWidget(
         {
           cloudName: sign.cloudName,
@@ -36,8 +57,8 @@ export default function UploadButton(props: {
           // authenticated / public
           access_mode: sign.accessMode.toLowerCase(),
         },
-        (error: any, result: any) => {
-          if (!error && result && result.event === "success") {
+        (error: CloudinaryUploadError, result: CloudinaryUploadResult | null) => {
+          if (!error && result && result.event === "success" && result.info) {
             props.onUploaded?.({
               publicId: result.info.public_id,
               secureUrl: result.info.secure_url,

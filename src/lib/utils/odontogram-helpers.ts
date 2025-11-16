@@ -7,7 +7,16 @@
 
 import type { ToothRecord, ToothCondition } from "@/lib/types/patient"
 import type { OdontogramEntryDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
-import type { DienteSuperficie } from "@prisma/client"
+import type { DienteSuperficie, ToothCondition as PrismaToothCondition } from "@prisma/client"
+
+/**
+ * Mapea un valor de ToothCondition de Prisma al tipo del frontend
+ * Asegura que todos los valores sean compatibles
+ */
+function mapPrismaConditionToFrontend(condition: PrismaToothCondition): ToothCondition {
+  // Todos los valores de Prisma son válidos en el frontend
+  return condition as ToothCondition
+}
 
 /**
  * Convierte entries del API a formato ToothRecord para el componente visual
@@ -31,7 +40,7 @@ export function entriesToToothRecords(entries: OdontogramEntryDTO[]): ToothRecor
       }
       // Actualizar condición si es más grave o diferente
       if (entry.condition !== "INTACT" && existing.condition === "INTACT") {
-        existing.condition = entry.condition
+        existing.condition = mapPrismaConditionToFrontend(entry.condition)
       }
       // Combinar notas
       if (entry.notes && !existing.notes?.includes(entry.notes)) {
@@ -41,7 +50,7 @@ export function entriesToToothRecords(entries: OdontogramEntryDTO[]): ToothRecor
       // Crear nuevo registro
       recordsMap.set(toothKey, {
         toothNumber: toothKey,
-        condition: entry.condition,
+        condition: mapPrismaConditionToFrontend(entry.condition),
         surfaces: entry.surface ? [entry.surface] : undefined,
         notes: entry.notes || undefined,
       })

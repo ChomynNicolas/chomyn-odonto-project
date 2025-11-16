@@ -37,7 +37,7 @@ export async function executeCitaTransition(ctx: TransitionContext) {
   const newEstado = getNewEstado(cita.estado, ctx.action)
 
   const now = new Date()
-  const data: Prisma.CitaUpdateInput = { estado: newEstado, updatedAt: now }
+  const data: Prisma.CitaUncheckedUpdateInput = { estado: newEstado, updatedAt: now }
 
   switch (ctx.action) {
     case "CONFIRM":

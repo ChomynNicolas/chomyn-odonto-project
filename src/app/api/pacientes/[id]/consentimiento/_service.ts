@@ -252,13 +252,17 @@ function mapToDTO(data: ConsentimientoWithRelations): ConsentimientoDTO {
   const relacion = data.responsable.PacienteResponsable?.[0]?.relacion ?? null
   
   // Prisma devuelve los campos con los nombres del modelo (Paciente_idPaciente, firmado_en, etc.)
-  const firmadoEn = data.firmado_en ?? data.firmadoEn
-  const vigenteHasta = data.vigente_hasta ?? data.vigenteHasta
-  const registradoEn = data.registrado_en ?? data.registradoEn
+  // Access using bracket notation to handle snake_case field names
+  const firmadoEn = (data as unknown as { firmado_en: Date }).firmado_en
+  const vigenteHasta = (data as unknown as { vigente_hasta: Date }).vigente_hasta
+  const registradoEn = (data as unknown as { registrado_en: Date }).registrado_en
+  const pacienteId = (data as unknown as { Paciente_idPaciente: number }).Paciente_idPaciente
+  const publicId = (data as unknown as { public_id: string }).public_id
+  const secureUrl = (data as unknown as { secure_url: string }).secure_url
 
   return {
     idConsentimiento: data.idConsentimiento,
-    pacienteId: data.Paciente_idPaciente ?? data.pacienteId,
+    pacienteId,
     tipo: data.tipo,
     firmadoEn: firmadoEn instanceof Date ? firmadoEn.toISOString() : firmadoEn,
     vigenteHasta: vigenteHasta instanceof Date ? vigenteHasta.toISOString() : vigenteHasta,
@@ -285,13 +289,13 @@ function mapToDTO(data: ConsentimientoWithRelations): ConsentimientoDTO {
         }
       : null,
     archivo: {
-      publicId: data.public_id ?? data.publicId,
-      secureUrl: data.secure_url ?? data.secureUrl,
+      publicId,
+      secureUrl,
       format: data.format,
       bytes: data.bytes,
       thumbnailUrl:
         data.width && data.height
-          ? `${(data.secure_url ?? data.secureUrl).split("/upload/")[0]}/upload/w_300,h_300,c_fill/${data.public_id ?? data.publicId}`
+          ? `${secureUrl.split("/upload/")[0]}/upload/w_300,h_300,c_fill/${publicId}`
           : null,
     },
     registro: {

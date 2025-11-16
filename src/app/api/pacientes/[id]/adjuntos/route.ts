@@ -149,13 +149,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         where: {
           Paciente_idPaciente: pacienteId,
           activo: true,
-          // Apply search filter if provided
+          // Apply search filter if provided (only search in observaciones, tipo is an enum)
           ...(search
             ? {
-                OR: [
-                  { observaciones: { contains: search, mode: "insensitive" } },
-                  { tipo: { contains: search, mode: "insensitive" } },
-                ],
+                observaciones: { contains: search, mode: "insensitive" },
               }
             : {}),
         },
@@ -181,12 +178,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         where: {
           Paciente_idPaciente: pacienteId,
           activo: true,
+          // Apply search filter if provided (only search in observaciones, tipo is an enum)
           ...(search
             ? {
-                OR: [
-                  { observaciones: { contains: search, mode: "insensitive" } },
-                  { tipo: { contains: search, mode: "insensitive" } },
-                ],
+                observaciones: { contains: search, mode: "insensitive" },
               }
             : {}),
         },

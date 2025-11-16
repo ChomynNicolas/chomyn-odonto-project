@@ -175,10 +175,25 @@ export const fichaRepo = {
               idPersona: true,
               nombres: true,
               apellidos: true,
+              segundoApellido: true, // ⭐ Added
               genero: true,
               fechaNacimiento: true,
               direccion: true,
-              documento: { select: { tipo: true, numero: true, ruc: true } },
+              ciudad: true, // ⭐ Added
+              pais: true, // ⭐ Added
+              contactoEmergenciaNombre: true, // ⭐ Added
+              contactoEmergenciaTelefono: true, // ⭐ Added
+              contactoEmergenciaRelacion: true, // ⭐ Added
+              documento: { 
+                select: { 
+                  tipo: true, 
+                  numero: true, 
+                  ruc: true,
+                  paisEmision: true, // ⭐ Added
+                  fechaEmision: true, // ⭐ Added
+                  fechaVencimiento: true, // ⭐ Added
+                } 
+              },
               contactos: {
                 where: { activo: true },
                 select: {
@@ -190,6 +205,8 @@ export const fichaRepo = {
                   whatsappCapaz: true,
                   esPreferidoRecordatorio: true,
                   esPreferidoCobranza: true,
+                  createdAt: true, // ⭐ Added for timestamps
+                  updatedAt: true, // ⭐ Added for timestamps
                 },
                 orderBy: [{ esPrincipal: "desc" }, { createdAt: "asc" }],
               },
@@ -216,7 +233,16 @@ export const fichaRepo = {
       // Responsables
       prisma.pacienteResponsable.findMany({
         where: { pacienteId: idPaciente },
-        include: {
+        select: {
+          idPacienteResponsable: true,
+          relacion: true,
+          esPrincipal: true,
+          autoridadLegal: true,
+          vigenteDesde: true, // ⭐ Added
+          vigenteHasta: true, // ⭐ Added
+          notas: true, // ⭐ Added
+          createdAt: true, // ⭐ Added
+          updatedAt: true, // ⭐ Added
           persona: {
             select: {
               idPersona: true,
@@ -224,9 +250,14 @@ export const fichaRepo = {
               apellidos: true,
               documento: { select: { tipo: true, numero: true } },
               contactos: {
-                where: { activo: true, esPrincipal: true },
-                take: 1,
-                select: { valorNorm: true, tipo: true },
+                where: { activo: true }, // ⭐ Changed: get all active contacts, not just principal
+                select: { 
+                  valorNorm: true, 
+                  tipo: true,
+                  esPrincipal: true,
+                  label: true,
+                },
+                orderBy: [{ esPrincipal: "desc" }, { createdAt: "asc" }],
               },
             },
           },

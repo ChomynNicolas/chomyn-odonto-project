@@ -113,3 +113,29 @@ export const PacienteCreateBodySchema = z.object({
 })
 
 export type PacienteCreateBody = z.infer<typeof PacienteCreateBodySchema>
+
+// ============= List Query Schema =============
+// ⚠️ Query params from URLSearchParams are always strings
+// Use z.coerce to automatically convert strings to the expected types
+export const pacientesListQuerySchema = z.object({
+  q: z.string().optional(),
+  // Coerce "true"/"false" strings to boolean (z.coerce.boolean() handles this automatically)
+  soloActivos: z.coerce.boolean().optional(),
+  genero: z.enum(["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"]).optional(),
+  hasEmail: z.coerce.boolean().optional(),
+  hasPhone: z.coerce.boolean().optional(),
+  createdFrom: z.string().optional(),
+  createdTo: z.string().optional(),
+  sort: z.enum(["createdAt asc", "createdAt desc", "nombre asc", "nombre desc"]).default("createdAt desc"),
+  // Cursor remains as string (service converts it to number when needed)
+  cursor: z.string().optional(),
+  // Coerce limit string to number with validation
+  limit: z.coerce
+    .number("limit debe ser un número")
+    .int("limit debe ser un número entero")
+    .min(1, "limit debe ser al menos 1")
+    .max(100, "limit no puede ser mayor a 100")
+    .default(20),
+})
+
+export type PacientesListQuery = z.infer<typeof pacientesListQuerySchema>

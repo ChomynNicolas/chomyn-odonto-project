@@ -32,6 +32,8 @@ export function OdontogramEditor({ teeth, notes, onToothUpdate, onNotesChange }:
       MISSING: "Ausente",
       IMPLANT: "Implante",
       ROOT_CANAL: "Endodoncia",
+      BRIDGE: "Puente",
+      EXTRACTION_NEEDED: "Extracción necesaria",
       FRACTURED: "Fracturado",
     }
     return labels[condition]
@@ -160,6 +162,8 @@ export function OdontogramEditor({ teeth, notes, onToothUpdate, onNotesChange }:
                     "MISSING",
                     "IMPLANT",
                     "ROOT_CANAL",
+                    "BRIDGE",
+                    "EXTRACTION_NEEDED",
                     "FRACTURED",
                   ] as ToothCondition[]
                 ).map((condition) => (

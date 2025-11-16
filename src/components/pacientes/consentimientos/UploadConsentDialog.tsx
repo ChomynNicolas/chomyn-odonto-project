@@ -33,6 +33,25 @@ const uploadSchema = z.object({
 
 type UploadFormData = z.infer<typeof uploadSchema>
 
+/**
+ * Props del componente UploadConsentDialog.
+ * 
+ * @remarks
+ * Este diálogo permite subir un consentimiento informado firmado para un paciente menor de edad.
+ * 
+ * Permisos:
+ * - ADMIN: Puede subir consentimientos
+ * - ODONT: Puede subir consentimientos
+ * - RECEP: Puede subir consentimientos (permite que recepcionista complete el flujo)
+ * 
+ * Flujo de uso:
+ * 1. Usuario selecciona responsable que firma
+ * 2. Usuario ingresa fecha de firma
+ * 3. Usuario sube archivo (PDF o imagen)
+ * 4. Sistema valida y sube a Cloudinary
+ * 5. Sistema registra consentimiento en BD asociado al paciente (y opcionalmente a la cita)
+ * 6. Se ejecuta onSuccess callback para actualizar UI
+ */
 interface UploadConsentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void

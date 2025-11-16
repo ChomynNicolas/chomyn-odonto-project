@@ -3,23 +3,14 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PacienteQuickCreateDTO } from "@/lib/schema/paciente.quick";
-import type { PacienteItem } from "@/lib/api/pacientes.types";
+import type { pacienteRepo } from "@/app/api/pacientes/_repo";
 
-type CreateResp = { ok: true; data: { item: PacienteItem } } | { ok: false; error: string };
+// Tipo del item devuelto por getPacienteUI (estructura Prisma con persona.documento.ruc)
+type PacienteUIItem = NonNullable<Awaited<ReturnType<typeof pacienteRepo.getPacienteUI>>>;
+
+type CreateResp = { ok: true; data: { item: PacienteUIItem } } | { ok: false; error: string };
 
 const KEY = (q: string, soloActivos: boolean, limit: number) => ["pacientes", { q, soloActivos, limit }];
-
-function incluyeEnFiltro(p: PacienteItem, q: string) {
-  if (!q) return true;
-  const texto = [
-    p.persona.nombres,
-    p.persona.apellidos,
-    p.persona.documento?.numero,
-    p.persona.documento?.ruc,
-    ...(p.persona.contactos?.map(c => c.valorNorm) ?? []),
-  ].filter(Boolean).join(" ").toLowerCase();
-  return texto.includes(q.toLowerCase());
-}
 
 export function useCreatePacienteQuick(params: { qForList: string; soloActivos: boolean; limit: number }) {
   const qc = useQueryClient();
@@ -37,25 +28,10 @@ export function useCreatePacienteQuick(params: { qForList: string; soloActivos: 
     },
     onSuccess: (resp) => {
       if (!resp.ok) return;
-      const nuevo = resp.data.item;
-
-      // 1) Optimista: prepend en la primera página si matchea el filtro
-      qc.setQueriesData<{ pages: { items: PacienteItem[]; nextCursor: string | null }[]; pageParams: any[] }>(
-        { queryKey: KEY(params.qForList, params.soloActivos, params.limit), exact: false },
-        (old) => {
-          if (!old) return old;
-          if (!incluyeEnFiltro(nuevo, params.qForList)) return old;
-
-          const firstPage = old.pages[0];
-          const yaExiste = old.pages.some(pg => pg.items.some(i => i.idPaciente === nuevo.idPaciente));
-          if (yaExiste) return old;
-
-          const updatedFirst = { ...firstPage, items: [nuevo, ...firstPage.items] };
-          return { ...old, pages: [updatedFirst, ...old.pages.slice(1)] };
-        }
-      );
-
-      // 2) Garantía de consistencia: invalidar y refetchear en background
+      
+      // Invalidar la query para refetchear y mostrar el nuevo paciente
+      // Nota: No hacemos update optimista porque el tipo del item devuelto por quick
+      // (PacienteUIItem) tiene una estructura diferente al PacienteListItemDTO usado en la lista
       qc.invalidateQueries({ queryKey: KEY(params.qForList, params.soloActivos, params.limit) });
     },
   });

@@ -73,8 +73,9 @@ export type CitaLite = {
   consultorio: { idConsultorio: number; nombre: string } | null
 }
 
-export function nombreCompleto(p?: { nombres: string | null; apellidos: string | null }) {
-  return [p?.nombres ?? "", p?.apellidos ?? ""].join(" ").trim()
+export function nombreCompleto(p?: { nombres: string | null; apellidos: string | null; segundoApellido?: string | null }) {
+  const parts = [p?.nombres ?? "", p?.apellidos ?? "", p?.segundoApellido ?? ""].filter(Boolean)
+  return parts.join(" ").trim()
 }
 
 export type PacienteFichaCompletaDTO = {
@@ -88,12 +89,25 @@ export type PacienteFichaCompletaDTO = {
     idPersona: number
     nombres: string
     apellidos: string
+    segundoApellido: string | null // ⭐ Added
     nombreCompleto: string
     genero: string | null
     fechaNacimiento: string | null
     edad: number | null
     direccion: string | null
-    documento: { tipo: string; numero: string; ruc: string | null } | null
+    ciudad: string | null // ⭐ Added
+    pais: string | null // ⭐ Added
+    contactoEmergenciaNombre: string | null // ⭐ Added
+    contactoEmergenciaTelefono: string | null // ⭐ Added
+    contactoEmergenciaRelacion: string | null // ⭐ Added
+    documento: { 
+      tipo: string
+      numero: string
+      ruc: string | null
+      paisEmision: string | null // ⭐ Added
+      fechaEmision: string | null // ⭐ Added
+      fechaVencimiento: string | null // ⭐ Added
+    } | null
     contactos: Array<{
       tipo: "PHONE" | "EMAIL"
       valorNorm: string
@@ -103,6 +117,8 @@ export type PacienteFichaCompletaDTO = {
       whatsappCapaz?: boolean | null
       esPreferidoRecordatorio?: boolean
       esPreferidoCobranza?: boolean
+      createdAt?: string // ⭐ Added
+      updatedAt?: string // ⭐ Added
     }>
   }
 
@@ -112,11 +128,21 @@ export type PacienteFichaCompletaDTO = {
     relacion: string
     esPrincipal: boolean
     autoridadLegal: boolean
+    vigenteDesde: string // ⭐ Added
+    vigenteHasta: string | null // ⭐ Added
+    notas: string | null // ⭐ Added
+    createdAt: string // ⭐ Added
+    updatedAt: string // ⭐ Added
     persona: {
       idPersona: number
       nombreCompleto: string
       documento: { tipo: string; numero: string } | null
-      contactoPrincipal: string | null
+      contactos: Array<{ // ⭐ Changed: now array of all contacts
+        valorNorm: string
+        tipo: "PHONE" | "EMAIL"
+        esPrincipal: boolean
+        label: string | null
+      }>
     }
   }>
 

@@ -1,9 +1,11 @@
 // src/components/pacientes/tabs/TabFacturacion.tsx
 "use client";
 
+import React from "react";
 import { useParams } from "next/navigation";
 import { usePacienteFacturacion } from "@/hooks/usePacienteFacturacionQuery";
 import { formatDateTime, formatMoneyPYG } from "@/lib/format";
+import type { FacturaItem, PagoItem, DeudaItem } from "@/lib/api/pacientes.detail.types";
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -36,9 +38,10 @@ export default function TabFacturacion() {
     );
   }
   if (isError) {
+    const errorMessage = error instanceof Error ? error.message : "Error al cargar facturación."
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
-        {(error as any)?.message || "Error al cargar facturación."}{" "}
+        {errorMessage}{" "}
         <button onClick={() => refetch()} className="underline underline-offset-2">Reintentar</button>
       </div>
     );
@@ -60,12 +63,15 @@ export default function TabFacturacion() {
             <p className="text-sm text-muted-foreground">Sin facturas.</p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {facturas.map(f => (
-                <li key={f.id} className="flex items-center justify-between">
-                  <span>{f.id} · {formatDateTime(f.fecha)}</span>
-                  <span>{formatMoneyPYG(f.total)} · {f.estado}</span>
-                </li>
-              ))}
+              {facturas.map((f: FacturaItem) => {
+                const fechaStr = f.fecha instanceof Date ? f.fecha.toISOString() : f.fecha
+                return (
+                  <li key={f.id} className="flex items-center justify-between">
+                    <span>{f.id} · {formatDateTime(fechaStr)}</span>
+                    <span>{formatMoneyPYG(f.total)} · {f.estado}</span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>
@@ -75,12 +81,15 @@ export default function TabFacturacion() {
             <p className="text-sm text-muted-foreground">Sin pagos.</p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {pagos.map(p => (
-                <li key={p.id} className="flex items-center justify-between">
-                  <span>{p.id} · {formatDateTime(p.fecha)}</span>
-                  <span>{formatMoneyPYG(p.monto)} · {p.medio}</span>
-                </li>
-              ))}
+              {pagos.map((p: PagoItem) => {
+                const fechaStr = p.fecha instanceof Date ? p.fecha.toISOString() : p.fecha
+                return (
+                  <li key={p.id} className="flex items-center justify-between">
+                    <span>{p.id} · {formatDateTime(fechaStr)}</span>
+                    <span>{formatMoneyPYG(p.monto)} · {p.medio}</span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>
@@ -90,7 +99,7 @@ export default function TabFacturacion() {
             <p className="text-sm text-muted-foreground">Sin deudas.</p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {deudas.map(d => (
+              {deudas.map((d: DeudaItem) => (
                 <li key={d.id} className="flex items-center justify-between">
                   <span>{d.id} · {d.concepto}</span>
                   <span className="text-warning-700">{formatMoneyPYG(d.saldo)}</span>

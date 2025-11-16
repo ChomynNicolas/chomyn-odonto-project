@@ -8,7 +8,7 @@ import { changeCitaEstado } from "./_service";
  * PATCH /api/agenda/citas/[id]/estado
  * Cambia el estado operativo de la cita con auditoría y control de transiciones.
  */
-export async function PATCH(req: NextRequest, context: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   // RBAC
   const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"]);
   if (!auth.authorized) {
@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, context: { params: { id: string } 
   }
 
   // Params
-  const parsedParams = paramsSchema.safeParse(context.params);
+  const parsedParams = paramsSchema.safeParse(await context.params);
   if (!parsedParams.success) {
     return NextResponse.json(
       { ok: false, error: "BAD_REQUEST", details: parsedParams.error.flatten() },

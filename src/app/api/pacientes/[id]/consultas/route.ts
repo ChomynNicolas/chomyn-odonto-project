@@ -10,14 +10,15 @@ const CreateConsultaSchema = z.object({
   status: z.enum(["DRAFT", "FINAL"]).default("DRAFT"),
 })
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ error: "ID inválido" }, { status: 400 })
     }
@@ -62,14 +63,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ error: "ID inválido" }, { status: 400 })
     }
@@ -128,7 +130,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   } catch (error) {
     console.error("Error creating consulta:", error)
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Datos inválidos", details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: "Datos inválidos", details: error.flatten() }, { status: 400 })
     }
     return NextResponse.json({ error: "Error al crear consulta" }, { status: 500 })
   }
