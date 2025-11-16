@@ -26,19 +26,21 @@ export function MedicationsSection({
   const activeMedications = medications.filter((m) => m.status === "ACTIVE")
 
   const getStatusLabel = (status: Medication["status"]) => {
-    const labels = {
+    const labels: Record<Medication["status"], string> = {
       ACTIVE: "Activa",
       SUSPENDED: "Suspendida",
       COMPLETED: "Completada",
+      INACTIVE: "Inactiva",
     }
     return labels[status] || status
   }
 
   const getStatusVariant = (status: Medication["status"]) => {
-    const variants = {
-      ACTIVE: "default" as const,
-      SUSPENDED: "secondary" as const,
-      COMPLETED: "outline" as const,
+    const variants: Record<Medication["status"], "default" | "secondary" | "outline" | "destructive"> = {
+      ACTIVE: "default",
+      SUSPENDED: "secondary",
+      COMPLETED: "outline",
+      INACTIVE: "secondary",
     }
     return variants[status] || "secondary"
   }

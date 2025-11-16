@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { normalizeEmail, normalizePhonePY } from "@/lib/normalize"
 import type { PatientUpdateBody } from "./_schemas"
+import type { Prisma } from "@prisma/client"
 
 interface UpdateContext {
   userId: number
@@ -11,8 +12,8 @@ interface UpdateContext {
 /**
  * Calculate field differences for audit logging
  */
-function calculateDiff(oldData: any, newData: any): Record<string, { old: any; new: any }> {
-  const diff: Record<string, { old: any; new: any }> = {}
+function calculateDiff(oldData: Record<string, unknown>, newData: Record<string, unknown>): Record<string, { old: unknown; new: unknown }> {
+  const diff: Record<string, { old: unknown; new: unknown }> = {}
 
   for (const key in newData) {
     if (newData[key] !== undefined && oldData[key] !== newData[key]) {
@@ -45,7 +46,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     })
 
     if (!current) {
-      const error: any = new Error("Paciente no encontrado")
+      const error = new Error("Paciente no encontrado") as Error & { status: number }
       error.status = 404
       throw error
     }
@@ -53,9 +54,9 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     // 2. Concurrency control - check updatedAt
     const currentUpdatedAt = current.updatedAt.toISOString()
     if (currentUpdatedAt !== body.updatedAt) {
-      const error: any = new Error(
+      const error = new Error(
         "El paciente fue actualizado por otro usuario. Por favor, recarga la página e intenta nuevamente.",
-      )
+      ) as Error & { status: number; code: string }
       error.status = 409
       error.code = "VERSION_CONFLICT"
       throw error
@@ -69,15 +70,32 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     const normalizedEmail = body.email ? normalizeEmail(body.email) : undefined
     const normalizedPhone = body.phone ? normalizePhonePY(body.phone) : undefined
 
+    // Map documentType from API to Prisma enum
+    const documentTypeMap: Record<string, "CI" | "DNI" | "PASAPORTE" | "RUC" | "OTRO"> = {
+      CI: "CI",
+      PASSPORT: "PASAPORTE",
+      RUC: "RUC",
+      OTHER: "OTRO",
+    }
+    const prismaDocumentType = body.documentType ? documentTypeMap[body.documentType] : undefined
+
+    // Map gender from API to Prisma enum
+    const genderMap: Record<string, "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"> = {
+      MALE: "MASCULINO",
+      FEMALE: "FEMENINO",
+      OTHER: "OTRO",
+    }
+    const prismaGender = body.gender ? genderMap[body.gender] : undefined
+
     // 5. Check for duplicates
-    if (body.documentType && body.documentNumber) {
+    if (prismaDocumentType && body.documentNumber) {
       const duplicate = await tx.persona.findFirst({
         where: {
           AND: [
             { idPersona: { not: current.personaId } },
             {
               documento: {
-                tipo: body.documentType,
+                tipo: prismaDocumentType,
                 numero: body.documentNumber.trim(),
               },
             },
@@ -86,7 +104,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       })
 
       if (duplicate) {
-        const error: any = new Error("Ya existe un paciente con este tipo y número de documento")
+        const error = new Error("Ya existe un paciente con este tipo y número de documento") as Error & { status: number; code: string }
         error.status = 409
         error.code = "DUPLICATE_DOCUMENT"
         throw error
@@ -94,7 +112,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     if (normalizedEmail) {
-      const duplicate = await tx.contacto.findFirst({
+      const duplicate = await tx.personaContacto.findFirst({
         where: {
           AND: [
             { personaId: { not: current.personaId } },
@@ -106,7 +124,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       })
 
       if (duplicate) {
-        const error: any = new Error("Ya existe un paciente con este email")
+        const error = new Error("Ya existe un paciente con este email") as Error & { status: number; code: string }
         error.status = 409
         error.code = "DUPLICATE_EMAIL"
         throw error
@@ -114,8 +132,8 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 6. Prepare update data for Persona
-    const personaUpdateData: any = {}
-    const oldPersonaData: any = {}
+    const personaUpdateData: Prisma.PersonaUpdateInput = {}
+    const oldPersonaData: Record<string, unknown> = {}
 
     if (canEditDemographics) {
       if (body.firstName !== undefined) {
@@ -126,8 +144,12 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
         personaUpdateData.apellidos = body.lastName
         oldPersonaData.lastName = current.persona.apellidos
       }
-      if (body.gender !== undefined) {
-        personaUpdateData.genero = body.gender
+      if (body.secondLastName !== undefined) { // ⭐ Added
+        personaUpdateData.segundoApellido = body.secondLastName
+        oldPersonaData.secondLastName = current.persona.segundoApellido
+      }
+      if (prismaGender !== undefined) {
+        personaUpdateData.genero = prismaGender
         oldPersonaData.gender = current.persona.genero
       }
       if (body.dateOfBirth !== undefined) {
@@ -137,6 +159,26 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       if (body.address !== undefined) {
         personaUpdateData.direccion = body.address
         oldPersonaData.address = current.persona.direccion
+      }
+      if (body.city !== undefined) { // ⭐ Added
+        personaUpdateData.ciudad = body.city
+        oldPersonaData.city = current.persona.ciudad
+      }
+      if (body.country !== undefined) { // ⭐ Added
+        personaUpdateData.pais = body.country
+        oldPersonaData.country = current.persona.pais
+      }
+      if (body.emergencyContactName !== undefined) { // ⭐ Added
+        personaUpdateData.contactoEmergenciaNombre = body.emergencyContactName
+        oldPersonaData.emergencyContactName = current.persona.contactoEmergenciaNombre
+      }
+      if (body.emergencyContactPhone !== undefined) { // ⭐ Added
+        personaUpdateData.contactoEmergenciaTelefono = body.emergencyContactPhone
+        oldPersonaData.emergencyContactPhone = current.persona.contactoEmergenciaTelefono
+      }
+      if (body.emergencyContactRelation !== undefined) { // ⭐ Added
+        personaUpdateData.contactoEmergenciaRelacion = body.emergencyContactRelation
+        oldPersonaData.emergencyContactRelation = current.persona.contactoEmergenciaRelacion
       }
     }
 
@@ -149,27 +191,31 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 8. Update or create Documento if needed
-    if (canEditDemographics && (body.documentType || body.documentNumber || body.ruc)) {
-      const documentData: any = {}
+    if (canEditDemographics && (prismaDocumentType || body.documentNumber || body.ruc || body.documentIssueDate !== undefined || body.documentExpiryDate !== undefined)) {
+      const documentData: Prisma.DocumentoUpdateInput = {}
 
-      if (body.documentType) documentData.tipo = body.documentType
+      if (prismaDocumentType) documentData.tipo = prismaDocumentType
       if (body.documentNumber) documentData.numero = body.documentNumber.trim()
       if (body.ruc !== undefined) documentData.ruc = body.ruc
-      if (body.documentCountry) documentData.pais = body.documentCountry
+      if (body.documentCountry) documentData.paisEmision = body.documentCountry
+      if (body.documentIssueDate !== undefined) documentData.fechaEmision = body.documentIssueDate ? new Date(body.documentIssueDate) : null // ⭐ Added
+      if (body.documentExpiryDate !== undefined) documentData.fechaVencimiento = body.documentExpiryDate ? new Date(body.documentExpiryDate) : null // ⭐ Added
 
       if (current.persona.documento) {
         await tx.documento.update({
           where: { idDocumento: current.persona.documento.idDocumento },
           data: documentData,
         })
-      } else if (body.documentType && body.documentNumber) {
+      } else if (prismaDocumentType && body.documentNumber) {
         await tx.documento.create({
           data: {
             personaId: current.personaId,
-            tipo: body.documentType,
+            tipo: prismaDocumentType,
             numero: body.documentNumber.trim(),
-            pais: body.documentCountry ?? "PY",
+            paisEmision: body.documentCountry ?? "PY",
             ruc: body.ruc ?? null,
+            fechaEmision: body.documentIssueDate ? new Date(body.documentIssueDate) : null, // ⭐ Added
+            fechaVencimiento: body.documentExpiryDate ? new Date(body.documentExpiryDate) : null, // ⭐ Added
           },
         })
       }
@@ -182,23 +228,24 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       if (normalizedPhone === null) {
         // Remove phone if exists
         if (existingPhone) {
-          await tx.contacto.update({
+          await tx.personaContacto.update({
             where: { idContacto: existingPhone.idContacto },
             data: { activo: false },
           })
         }
       } else if (existingPhone) {
         // Update existing
-        await tx.contacto.update({
+        await tx.personaContacto.update({
           where: { idContacto: existingPhone.idContacto },
           data: { valorNorm: normalizedPhone },
         })
       } else {
         // Create new
-        await tx.contacto.create({
+        await tx.personaContacto.create({
           data: {
             personaId: current.personaId,
             tipo: "PHONE",
+            valorRaw: normalizedPhone,
             valorNorm: normalizedPhone,
             esPrincipal: true,
             activo: true,
@@ -214,23 +261,24 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       if (normalizedEmail === null) {
         // Remove email if exists
         if (existingEmail) {
-          await tx.contacto.update({
+          await tx.personaContacto.update({
             where: { idContacto: existingEmail.idContacto },
             data: { activo: false },
           })
         }
       } else if (existingEmail) {
         // Update existing
-        await tx.contacto.update({
+        await tx.personaContacto.update({
           where: { idContacto: existingEmail.idContacto },
           data: { valorNorm: normalizedEmail },
         })
       } else {
         // Create new
-        await tx.contacto.create({
+        await tx.personaContacto.create({
           data: {
             personaId: current.personaId,
             tipo: "EMAIL",
+            valorRaw: normalizedEmail,
             valorNorm: normalizedEmail,
             esPrincipal: true,
             activo: true,
@@ -240,8 +288,8 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 11. Update Paciente notes (legacy fields)
-    const notasData: any = current.notas ? JSON.parse(current.notas as string) : {}
-    const oldNotasData: any = { ...notasData }
+    const notasData: Record<string, unknown> = current.notas ? (JSON.parse(current.notas as string) as Record<string, unknown>) : {}
+    const oldNotasData: Record<string, unknown> = { ...notasData }
 
     if (body.insurance !== undefined) {
       notasData.obraSocial = body.insurance
@@ -257,7 +305,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     }
 
     // 12. Update Paciente status if allowed
-    const pacienteUpdateData: any = {
+    const pacienteUpdateData: Prisma.PacienteUpdateInput = {
       notas: JSON.stringify(notasData),
     }
 
@@ -283,7 +331,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
     })
 
     // 13. Calculate diff for audit
-    const newData: any = {
+    const newData: Record<string, unknown> = {
       firstName: body.firstName,
       lastName: body.lastName,
       gender: body.gender,
@@ -311,7 +359,7 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
           metadata: {
             diff,
             role: context.role,
-          },
+          } as Prisma.InputJsonValue,
         },
       })
     } catch (auditError) {

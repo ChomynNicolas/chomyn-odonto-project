@@ -2,8 +2,19 @@
 "use server"
 
 import { prisma as db } from "@/lib/prisma"
-import { PrintablePatientSchema, stripClinicalSectionsForLimitedScope, type PrintablePatientDTO } from "@/lib/validators/patient-print.schema"
+import {
+  AllergySeverityEnum,
+  DiagnosisStatusEnum,
+  EstadoCitaEnum,
+  GeneroEnum,
+  PrintablePatientSchema,
+  stripClinicalSectionsForLimitedScope,
+  TipoDocumentoEnum,
+  TreatmentStepStatusEnum,
+  type PrintablePatientDTO,
+} from "@/lib/validators/patient-print.schema"
 import { calculateAge } from "@/lib/utils/patient-helpers"
+import type { AllergySeverity, DiagnosisStatus, EstadoCita, Genero, TipoDocumento, TreatmentStepStatus } from "@prisma/client"
 
 export type AccessScope = "FULL" | "LIMITED"
 
@@ -179,6 +190,56 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
   const vital = patient.PatientVitals[0] ?? null
   const plan = patient.TreatmentPlan[0] ?? null
 
+  // === Helper functions for type mapping ===
+  const mapGenero = (genero: Genero | null): (typeof GeneroEnum.enum)[keyof typeof GeneroEnum.enum] | null => {
+    if (!genero) return null
+    const validGeneros: Genero[] = ["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"]
+    if (validGeneros.includes(genero)) {
+      return genero as (typeof GeneroEnum.enum)[keyof typeof GeneroEnum.enum]
+    }
+    return null
+  }
+
+  const mapTipoDocumento = (tipo: TipoDocumento): (typeof TipoDocumentoEnum.enum)[keyof typeof TipoDocumentoEnum.enum] => {
+    const validTipos: TipoDocumento[] = ["CI", "DNI", "PASAPORTE", "RUC", "OTRO"]
+    if (validTipos.includes(tipo)) {
+      return tipo as (typeof TipoDocumentoEnum.enum)[keyof typeof TipoDocumentoEnum.enum]
+    }
+    return "OTRO"
+  }
+
+  const mapAllergySeverity = (severity: AllergySeverity): (typeof AllergySeverityEnum.enum)[keyof typeof AllergySeverityEnum.enum] => {
+    const validSeverities: AllergySeverity[] = ["MILD", "MODERATE", "SEVERE"]
+    if (validSeverities.includes(severity)) {
+      return severity as (typeof AllergySeverityEnum.enum)[keyof typeof AllergySeverityEnum.enum]
+    }
+    return "MILD"
+  }
+
+  const mapDiagnosisStatus = (status: DiagnosisStatus): (typeof DiagnosisStatusEnum.enum)[keyof typeof DiagnosisStatusEnum.enum] => {
+    const validStatuses: DiagnosisStatus[] = ["ACTIVE", "RESOLVED", "RULED_OUT"]
+    if (validStatuses.includes(status)) {
+      return status as (typeof DiagnosisStatusEnum.enum)[keyof typeof DiagnosisStatusEnum.enum]
+    }
+    return "ACTIVE"
+  }
+
+  const mapTreatmentStepStatus = (status: TreatmentStepStatus): (typeof TreatmentStepStatusEnum.enum)[keyof typeof TreatmentStepStatusEnum.enum] => {
+    const validStatuses: TreatmentStepStatus[] = ["PENDING", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "DEFERRED"]
+    if (validStatuses.includes(status)) {
+      return status as (typeof TreatmentStepStatusEnum.enum)[keyof typeof TreatmentStepStatusEnum.enum]
+    }
+    return "PENDING"
+  }
+
+  const mapEstadoCita = (estado: EstadoCita): (typeof EstadoCitaEnum.enum)[keyof typeof EstadoCitaEnum.enum] => {
+    const validEstados: EstadoCita[] = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"]
+    if (validEstados.includes(estado)) {
+      return estado as (typeof EstadoCitaEnum.enum)[keyof typeof EstadoCitaEnum.enum]
+    }
+    return "SCHEDULED"
+  }
+
   // === 3) Armar DTO (camelCase, sin datos sensibles redundantes) ===
   const dto: PrintablePatientDTO = {
     patient: {
@@ -189,11 +250,11 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
         lastName,
         birthDate: persona.fechaNacimiento ? new Date(persona.fechaNacimiento).toISOString() : null,
         age,
-        gender: (persona.genero as any) ?? null,
+        gender: mapGenero(persona.genero),
         address: persona.direccion ?? null,
         document: persona.documento
           ? {
-              tipo: persona.documento.tipo as any,
+              tipo: mapTipoDocumento(persona.documento.tipo),
               numero: persona.documento.numero,
               paisEmision: persona.documento.paisEmision ?? null,
               ruc: persona.documento.ruc ?? null,
@@ -225,7 +286,7 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
       id: a.idPatientAllergy,
       label: a.label ?? null,
       catalogName: a.allergyCatalog?.name ?? null,
-      severity: a.severity as any,
+      severity: mapAllergySeverity(a.severity),
       reaction: a.reaction ?? null,
       notedAt: new Date(a.notedAt).toISOString(),
     })),
@@ -235,7 +296,7 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
       label: d.label,
       code: d.code ?? null,
       catalogName: d.diagnosisCatalog?.name ?? null,
-      status: d.status as any,
+      status: mapDiagnosisStatus(d.status),
       notedAt: new Date(d.notedAt).toISOString(),
       resolvedAt: d.resolvedAt ? new Date(d.resolvedAt).toISOString() : null,
       notes: d.notes ?? null,
@@ -278,8 +339,8 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
             procedureName: s.procedimientoCatalogo?.nombre ?? null,
             serviceType: s.serviceType ?? null,
             toothNumber: s.toothNumber ?? null,
-            toothSurface: (s.toothSurface as any) ?? null,
-            status: s.status as any,
+            toothSurface: s.toothSurface ? String(s.toothSurface) : null,
+            status: mapTreatmentStepStatus(s.status),
           })),
         }
       : null,
@@ -288,7 +349,7 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
       id: c.idCita,
       scheduledAt: new Date(c.inicio).toISOString(),
       endAt: c.fin ? new Date(c.fin).toISOString() : null,
-      status: c.estado as any,
+      status: mapEstadoCita(c.estado),
       reason: c.motivo ?? null,
       professional: {
         firstName: c.profesional.persona.nombres,

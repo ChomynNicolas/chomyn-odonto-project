@@ -4,6 +4,7 @@
 import { useParams } from "next/navigation";
 import { usePacienteHistoria } from "@/hooks/usePacienteHistoriaQuery";
 import { SectionCard, EmptyText, InlineError, SmallSkeleton } from "@/components/pacientes/detail/TabSection";
+import type { EvolucionItem } from "@/lib/api/pacientes.detail.types";
 
 export default function TabHistoria() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +28,8 @@ export default function TabHistoria() {
   }
 
   if (isError) {
-    return <InlineError message={(error as any)?.message} onRetry={() => refetch()} />;
+    const errorMessage = error instanceof Error ? error.message : undefined
+    return <InlineError message={errorMessage} onRetry={() => refetch()} />;
   }
 
   if (!data) return <EmptyText />;
@@ -52,15 +54,18 @@ export default function TabHistoria() {
           <EmptyText text="Aún no hay evoluciones registradas." />
         ) : (
           <ol className="mt-1 space-y-4">
-            {data.evoluciones.map(ev => (
-              <li key={ev.id} className="relative pl-6">
-                <span className="absolute left-0 top-1.5 h-3 w-3 rounded-full bg-brand-500" />
-                <div className="text-sm">
-                  <b>{new Date(ev.fecha).toLocaleDateString()}</b> · {ev.profesional}
-                </div>
-                <div className="text-sm text-muted-foreground">{ev.nota}</div>
-              </li>
-            ))}
+            {data.evoluciones.map((ev: EvolucionItem) => {
+              const fecha = ev.fecha instanceof Date ? ev.fecha : new Date(ev.fecha)
+              return (
+                <li key={ev.id} className="relative pl-6">
+                  <span className="absolute left-0 top-1.5 h-3 w-3 rounded-full bg-brand-500" />
+                  <div className="text-sm">
+                    <b>{fecha.toLocaleDateString()}</b> · {ev.profesional}
+                  </div>
+                  <div className="text-sm text-muted-foreground">{ev.nota}</div>
+                </li>
+              )
+            })}
           </ol>
         )}
       </SectionCard>

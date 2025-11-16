@@ -11,9 +11,10 @@ const MedicationSchema = z.object({
   startAt: z.string(),
 })
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 })
     }
@@ -35,8 +36,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: medication })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating medication:", error)
-    return NextResponse.json({ ok: false, error: "Error al crear medicación" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al crear medicación"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

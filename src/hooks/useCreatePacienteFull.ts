@@ -21,9 +21,15 @@ export function useCreatePacienteFull(params: { qForList?: string; soloActivos?:
       })
 
       // el backend responde con el sobre estándar
-      let body: any = null
+      type ApiResponse = {
+        ok: boolean
+        error?: string
+        data?: CreateResult
+      } | null
+
+      let body: ApiResponse = null
       try {
-        body = await res.json()
+        body = await res.json() as ApiResponse
       } catch {
         /* body queda null si la API no devolvió JSON */
       }
@@ -33,7 +39,11 @@ export function useCreatePacienteFull(params: { qForList?: string; soloActivos?:
         throw new Error(msg)
       }
 
-      return body.data as CreateResult
+      if (!body.data) {
+        throw new Error("Respuesta inválida: falta data")
+      }
+
+      return body.data
     },
 
     onSuccess: () => {

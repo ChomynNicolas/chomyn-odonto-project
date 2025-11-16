@@ -4,13 +4,14 @@ import { cloudinary } from "@/lib/cloudinary";
 import { prisma as db } from "@/lib/prisma";
 import { auth } from "@/auth";
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // RBAC: validar acceso al paciente/procedimiento del adjunto
 
-  const id = Number(params.id);
-  const adj = await db.adjunto.findUnique({ where: { id } });
+  const { id: idParam } = await params;
+  const id = Number(idParam);
+  const adj = await db.adjunto.findUnique({ where: { idAdjunto: id } });
   if (!adj) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Para AUTHENTICATED: firmar delivery con expiración

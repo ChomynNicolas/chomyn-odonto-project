@@ -36,7 +36,6 @@ export default function DashboardTabs({ role, initialTab }:{ role: Rol; initialT
         {widgets.map((W) => (
           <Suspense key={W.id} fallback={<SkeletonWidget />}>
             {/* Render server de cada widget */}
-            {/* @ts-expect-error Async Server Component */}
             <W.Render role={role} />
           </Suspense>
         ))}

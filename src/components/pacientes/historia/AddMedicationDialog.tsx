@@ -47,7 +47,7 @@ export function AddMedicationDialog({ open, onOpenChange, patientId, onSuccess }
       onSuccess()
       onOpenChange(false)
       setFormData({ label: "", dose: "", freq: "", route: "ORAL" })
-    } catch (error) {
+    } catch {
       toast.error("Error al agregar medicación")
     } finally {
       setIsSubmitting(false)

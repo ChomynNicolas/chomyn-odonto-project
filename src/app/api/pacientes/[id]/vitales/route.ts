@@ -13,9 +13,10 @@ const VitalSignsSchema = z.object({
   measuredAt: z.string(),
 })
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 })
     }
@@ -46,8 +47,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: vitals })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating vital signs:", error)
-    return NextResponse.json({ ok: false, error: "Error al registrar signos vitales" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al registrar signos vitales"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

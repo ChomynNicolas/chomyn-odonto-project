@@ -45,7 +45,7 @@ export async function reactivatePacienteById(params: {
   }
 
   // Reactivación transaccional
-  const out = await prisma.$transaction(async (_tx) => {
+  const out = await prisma.$transaction(async () => {
     const updatedPaciente = await fichaRepo.reactivatePaciente(identity.idPaciente);
 
     let updatedPersona:

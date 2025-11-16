@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { PrismaClient, EstadoCita } from "@prisma/client";
+import { PrismaClient, EstadoCita, TipoCita, Prisma } from "@prisma/client";
 import { requireSessionWithRoles } from "@/app/api/_lib/auth";
 
 export const revalidate = 0;
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
   } = parsed.data;
 
   try {
-    const where: any = {
+    const where: Prisma.CitaWhereInput = {
       inicio: { lt: end },
       fin: { gt: start },
     };
@@ -57,13 +57,21 @@ export async function GET(req: NextRequest) {
     if (consultorioId) where.consultorioId = consultorioId;
 
     if (estado) {
-      const estados = estado.split(",").map((s) => s.trim().toUpperCase());
-      where.estado = { in: estados };
+      const estados = estado.split(",").map((s) => s.trim().toUpperCase()).filter((s): s is EstadoCita => 
+        Object.values(EstadoCita).includes(s as EstadoCita)
+      );
+      if (estados.length > 0) {
+        where.estado = { in: estados };
+      }
     }
 
     if (tipo) {
-      const tipos = tipo.split(",").map((t) => t.trim().toUpperCase());
-      where.tipo = { in: tipos };
+      const tipos = tipo.split(",").map((t) => t.trim().toUpperCase()).filter((t): t is TipoCita => 
+        Object.values(TipoCita).includes(t as TipoCita)
+      );
+      if (tipos.length > 0) {
+        where.tipo = { in: tipos };
+      }
     }
 
     if (soloUrgencias === "true") {
@@ -177,8 +185,10 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.json({ ok: true, data: filtered }, { status: 200 });
     res.headers.set("Cache-Control", "no-store");
     return res;
-  } catch (e: any) {
-    console.error("GET /api/agenda/citas/calendar error:", e?.code || e?.message);
+  } catch (e: unknown) {
+    const errorCode = (e as { code?: string })?.code
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    console.error("GET /api/agenda/citas/calendar error:", errorCode || errorMessage);
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

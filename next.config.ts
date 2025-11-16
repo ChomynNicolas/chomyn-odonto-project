@@ -18,9 +18,14 @@ const nextConfig: NextConfig = {
         hostname: 'unsplash.com',
         pathname: '**', // allow any path
       },
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '**', // allow any path for Cloudinary images
+      },
     ],
-    // or simpler:
-    // domains: ['img.freepik.com'],
+    // Note: Proxy endpoint URLs (/api/adjuntos/*) use regular <img> tags
+    // instead of Next.js Image to avoid hostname configuration issues
   },
   /* config options here */
   webpack(config) {

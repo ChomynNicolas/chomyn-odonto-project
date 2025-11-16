@@ -1,6 +1,7 @@
 "use client"
-import { useForm } from "react-hook-form"
+import { useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,15 +9,20 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Loader2, Info } from "lucide-react"
 import { useState } from "react"
-import { pacienteQuickCreateSchema, type PacienteQuickCreateDTO } from "@/app/api/pacientes/quick/_schemas"
+import { pacienteQuickCreateSchema } from "@/app/api/pacientes/quick/_schemas"
+import type { QuickCreateResult } from "@/app/api/pacientes/quick/_service.quick"
 import { useQueryClient } from "@tanstack/react-query"
 
 interface PatientQuickCreateModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onCreated?: (idPaciente: number) => void
 }
 
-export function PatientQuickCreateModal({ open, onOpenChange }: PatientQuickCreateModalProps) {
+// Use z.input for form input type (before transforms)
+type FormInput = z.input<typeof pacienteQuickCreateSchema>
+
+export function PatientQuickCreateModal({ open, onOpenChange, onCreated }: PatientQuickCreateModalProps) {
   const [isPending, setIsPending] = useState(false)
   const queryClient = useQueryClient()
 
@@ -25,8 +31,8 @@ export function PatientQuickCreateModal({ open, onOpenChange }: PatientQuickCrea
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm<PacienteQuickCreateDTO>({
-    resolver: zodResolver(pacienteQuickCreateSchema),
+  } = useForm<FormInput>({
+    resolver: zodResolver(pacienteQuickCreateSchema) as Resolver<FormInput>,
     defaultValues: {
       nombreCompleto: "",
       tipoDocumento: "CI",
@@ -34,14 +40,17 @@ export function PatientQuickCreateModal({ open, onOpenChange }: PatientQuickCrea
       telefono: "",
       email: "",
       fechaNacimiento: "",
-      genero: "" as any,
+      genero: "NO_ESPECIFICADO",
     },
   })
 
-  const onSubmit = async (data: PacienteQuickCreateDTO) => {
+  const onSubmit = async (data: FormInput) => {
     setIsPending(true)
 
     try {
+      // Parse to get output type (after transforms)
+      const validated = pacienteQuickCreateSchema.parse(data)
+
       const idempotencyKey = crypto.randomUUID()
 
       const response = await fetch("/api/pacientes/quick", {
@@ -50,26 +59,35 @@ export function PatientQuickCreateModal({ open, onOpenChange }: PatientQuickCrea
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(validated),
       })
 
-      const result = await response.json()
+      const jsonResponse = await response.json() as
+        | { ok: true; data: QuickCreateResult }
+        | { ok: false; error: string; code?: string }
 
-      if (!response.ok) {
-        throw new Error(result.error || "Error al crear paciente")
+      if (!response.ok || !jsonResponse.ok) {
+        const errorMessage = "error" in jsonResponse ? jsonResponse.error : "Error al crear paciente"
+        throw new Error(errorMessage)
+      }
+
+      // TypeScript now knows jsonResponse is { ok: true; data: QuickCreateResult }
+      if (jsonResponse.data.idPaciente && onCreated) {
+        onCreated(jsonResponse.data.idPaciente)
       }
 
       await queryClient.invalidateQueries({ queryKey: ["pacientes"] })
 
       toast.success("Paciente creado exitosamente", {
-        description: `${data.nombreCompleto} ha sido registrado. Podrás completar sus datos más tarde.`,
+        description: `${validated.nombreCompleto} ha sido registrado. Podrás completar sus datos más tarde.`,
       })
 
       reset()
       onOpenChange(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error inesperado"
       toast.error("Error al crear paciente", {
-        description: error.message || "Ocurrió un error inesperado",
+        description: errorMessage,
       })
     } finally {
       setIsPending(false)
@@ -176,7 +194,6 @@ export function PatientQuickCreateModal({ open, onOpenChange }: PatientQuickCrea
                 aria-invalid={!!errors.genero}
                 aria-describedby={errors.genero ? "genero-error" : undefined}
               >
-                <option value="">Seleccionar...</option>
                 <option value="MASCULINO">Masculino</option>
                 <option value="FEMENINO">Femenino</option>
                 <option value="OTRO">Otro</option>

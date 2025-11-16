@@ -25,8 +25,10 @@ export async function GET(req: NextRequest) {
   try {
     const { slots, meta } = await getDisponibilidad(parsed.data)
     return NextResponse.json({ ok: true, meta, data: slots }, { status: 200 })
-  } catch (e: any) {
-    console.error("GET /api/agenda/disponibilidad error:", e?.code || e?.message)
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("GET /api/agenda/disponibilidad error:", code || errorMessage)
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
 }

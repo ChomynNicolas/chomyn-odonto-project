@@ -23,16 +23,17 @@ export function DiagnosesSection({ diagnoses, userRole, onAddDiagnosis }: Diagno
   const filteredDiagnoses = diagnoses.filter((d) => {
     if (filter === "all") return true
     if (filter === "active") return d.status === "ACTIVE" || d.status === "CHRONIC" || d.status === "MONITORING"
-    if (filter === "resolved") return d.status === "RESOLVED"
+    if (filter === "resolved") return d.status === "RESOLVED" || d.status === "RULED_OUT"
     return true
   })
 
   const getStatusLabel = (status: Diagnosis["status"]) => {
-    const labels = {
+    const labels: Record<Diagnosis["status"], string> = {
       ACTIVE: "Activo",
       RESOLVED: "Resuelto",
       CHRONIC: "Crónico",
       MONITORING: "Monitoreo",
+      RULED_OUT: "Descartado",
     }
     return labels[status] || status
   }

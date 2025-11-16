@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { usePacientesQuery } from "@/hooks/usePacientesQuery"
-import type { PacienteListFilters, SortPacientes } from "@/lib/api/pacientes.types"
+import type { PacienteListFilters, SortPacientes, PacienteListItemDTO } from "@/lib/api/pacientes.types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -22,7 +22,7 @@ export default function PacientesTable() {
   })
 
   const [sessionId, setSessionId] = useState(() => Date.now())
-  const [allItems, setAllItems] = useState<any[]>([])
+  const [allItems, setAllItems] = useState<PacienteListItemDTO[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [privacyMode, setPrivacyMode] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -73,6 +73,13 @@ export default function PacientesTable() {
     setNextCursor(data.nextCursor)
   }, [data, filters.cursor])
 
+  const loadMore = useCallback(() => {
+    if (!nextCursor || isLoadingMore) return
+    setIsLoadingMore(true)
+    setFilters((prev) => ({ ...prev, cursor: nextCursor }))
+    setTimeout(() => setIsLoadingMore(false), 500)
+  }, [nextCursor, isLoadingMore])
+
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
     if (!sentinelRef.current || !nextCursor || isLoadingMore) return
@@ -89,14 +96,7 @@ export default function PacientesTable() {
     observer.observe(sentinelRef.current)
 
     return () => observer.disconnect()
-  }, [nextCursor, isLoadingMore])
-
-  const loadMore = useCallback(() => {
-    if (!nextCursor || isLoadingMore) return
-    setIsLoadingMore(true)
-    setFilters((prev) => ({ ...prev, cursor: nextCursor }))
-    setTimeout(() => setIsLoadingMore(false), 500)
-  }, [nextCursor, isLoadingMore])
+  }, [nextCursor, isLoadingMore, loadMore])
 
   const handleSearch = (q: string) => {
     setFilters((prev) => ({ ...prev, q, cursor: undefined }))
@@ -321,88 +321,90 @@ export default function PacientesTable() {
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {paciente.contactoPrincipal ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">
-                            {privacyMode && paciente.contactoPrincipal.tipo === "PHONE"
-                              ? maskPhone(paciente.contactoPrincipal.valor)
-                              : paciente.contactoPrincipal.valor}
-                          </span>
-                          {!privacyMode && (
-                            <div className="flex gap-1">
-                              {paciente.contactoPrincipal.tipo === "PHONE" && (
-                                <>
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" asChild>
-                                          <a href={`tel:${paciente.contactoPrincipal.valor}`} aria-label="Llamar">
-                                            <Phone className="h-3 w-3" />
-                                          </a>
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Llamar</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
+                        (() => {
+                          const contacto = paciente.contactoPrincipal
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">
+                                {privacyMode && contacto.tipo === "PHONE"
+                                  ? maskPhone(contacto.valor)
+                                  : contacto.valor}
+                              </span>
+                              {!privacyMode && (
+                                <div className="flex gap-1">
+                                  {contacto.tipo === "PHONE" && (
+                                    <>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" asChild>
+                                              <a href={`tel:${contacto.valor}`} aria-label="Llamar">
+                                                <Phone className="h-3 w-3" />
+                                              </a>
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Llamar</TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
 
-                                  {paciente.contactoPrincipal.whatsappCapaz && (
+                                      {contacto.whatsappCapaz && (
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" asChild>
+                                                <a
+                                                  href={`https://wa.me/${formatPhoneForWhatsApp(contacto.valor)}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  aria-label="WhatsApp"
+                                                >
+                                                  <MessageCircle className="h-3 w-3" />
+                                                </a>
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>WhatsApp</TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {contacto.tipo === "EMAIL" && (
                                     <TooltipProvider>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" asChild>
-                                            <a
-                                              href={`https://wa.me/${formatPhoneForWhatsApp(paciente.contactoPrincipal.valor)}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              aria-label="WhatsApp"
-                                            >
-                                              <MessageCircle className="h-3 w-3" />
+                                            <a href={`mailto:${contacto.valor}`} aria-label="Enviar email">
+                                              <Mail className="h-3 w-3" />
                                             </a>
                                           </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent>WhatsApp</TooltipContent>
+                                        <TooltipContent>Enviar email</TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
                                   )}
-                                </>
-                              )}
 
-                              {paciente.contactoPrincipal.tipo === "EMAIL" && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" asChild>
-                                        <a
-                                          href={`mailto:${paciente.contactoPrincipal.valor}`}
-                                          aria-label="Enviar email"
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          onClick={() => copyToClipboard(contacto.valor, "Contacto")}
+                                          aria-label="Copiar contacto"
                                         >
-                                          <Mail className="h-3 w-3" />
-                                        </a>
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Enviar email</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
+                                          <Copy className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Copiar</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
                               )}
-
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0"
-                                      onClick={() => copyToClipboard(paciente.contactoPrincipal.valor, "Contacto")}
-                                      aria-label="Copiar contacto"
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Copiar</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
                             </div>
-                          )}
-                        </div>
+                          )
+                        })()
                       ) : (
                         <span className="text-sm text-muted-foreground">-</span>
                       )}

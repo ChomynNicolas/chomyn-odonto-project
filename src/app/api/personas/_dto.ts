@@ -1,9 +1,13 @@
 // src/app/api/personas/_dto.ts
-import type { Prisma } from "@prisma/client"
+import type { Prisma, TipoDocumento } from "@prisma/client"
 import type { PersonaListItemDTO } from "@/lib/schema/personas"
 
 type PersonaWithDocAndContacts = Prisma.PersonaGetPayload<{
-  include: {
+  select: {
+    idPersona: true
+    nombres: true
+    apellidos: true
+    fechaNacimiento: true
     documento: { select: { tipo: true; numero: true; ruc: true } }
     contactos: {
       where: { activo: true }
@@ -22,8 +26,9 @@ export function toPersonaListItemDTO(p: PersonaWithDocAndContacts): PersonaListI
   return {
     idPersona: p.idPersona,
     nombreCompleto: [p.nombres, p.apellidos].filter(Boolean).join(" ").trim(),
+    fechaNacimiento: p.fechaNacimiento ? p.fechaNacimiento.toISOString() : null,
     documento: {
-      tipo: (p.documento?.tipo ?? "OTRO") as any,
+      tipo: (p.documento?.tipo ?? "OTRO") as TipoDocumento,
       numero: p.documento?.numero ?? "",
       ruc: p.documento?.ruc ?? undefined,
     },

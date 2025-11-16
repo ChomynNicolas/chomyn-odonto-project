@@ -2,15 +2,6 @@
 import { z } from "zod"
 import { GeneroEnum, TipoDocumentoEnum } from "@/lib/schema/paciente"
 
-/** 'YYYY-MM-DD' o vacío → undefined */
-const FechaYYYYMMDD = z
-  .string()
-  .optional()
-  .transform((v) => (v && v.trim() !== "" ? v.trim() : undefined))
-  .refine((v) => v === undefined || /^\d{4}-\d{2}-\d{2}$/.test(v), {
-    message: "Fecha inválida (formato esperado YYYY-MM-DD)",
-  })
-
 /** Email opcional ("" → undefined) */
 const EmailOpcional = z
   .string()

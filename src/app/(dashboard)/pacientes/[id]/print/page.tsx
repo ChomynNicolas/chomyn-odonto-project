@@ -14,8 +14,9 @@ export const revalidate = 0
 export const fetchCache = "force-no-store"
 export const runtime = "nodejs"
 
-export default async function PatientPrintPage({ params }: { params: { id: string } }) {
-  const patientId = Number(params.id)
+export default async function PatientPrintPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const patientId = Number(id)
   if (!Number.isFinite(patientId)) {
     redirect("/pacientes") // id inválido
   }
@@ -28,7 +29,7 @@ export default async function PatientPrintPage({ params }: { params: { id: strin
 
   const user = {
     id: Number(session.user.id),
-    role: (session.user as any).rolNombre || "RECEP",
+    role: (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
   } as const
 
   // 2) Verificación de acceso y permisos
@@ -38,10 +39,11 @@ export default async function PatientPrintPage({ params }: { params: { id: strin
   const dto = await getPrintablePatientData(patientId, { scope: decision.scope })
 
   // 4) Auditoría (segura, sin romper UX)
+  const requestHeaders = await headers()
   await auditPatientPrint({
     actorId: user.id,
     entityId: patientId,
-    headers: headers(),
+    headers: requestHeaders,
     path: `/pacientes/${patientId}/print`,
     metadata: { scope: decision.scope }, // NO datos clínicos
   })
@@ -53,7 +55,7 @@ export default async function PatientPrintPage({ params }: { params: { id: strin
     demo.birthDate && typeof demo.age === "number"
       ? `${formatDate(demo.birthDate)} (${demo.age} años)`
       : "—"
-  const genderStr = demo.gender ? formatGender(demo.gender as any) : "No especificado"
+  const genderStr = demo.gender ? formatGender(demo.gender as "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO") : "No especificado"
 
   const primaryPhone = demo.contacts.primaryPhone?.valueNorm
   const primaryEmail = demo.contacts.primaryEmail?.valueNorm

@@ -15,15 +15,14 @@ model Rol {
   @@map("Rol")
 }
 
-
 model AuditLog {
   idAuditLog Int      @id @default(autoincrement())
   actorId    Int
-  action     String   // e.g., "PATIENT_UPDATE", "PATIENT_CREATE", "PATIENT_DELETE"
-  entity     String   // e.g., "Patient", "Appointment", "User"
+  action     String // e.g., "PATIENT_UPDATE", "PATIENT_CREATE", "PATIENT_DELETE"
+  entity     String // e.g., "Patient", "Appointment", "User"
   entityId   Int
   ip         String?
-  metadata   Json?    // Store diff and other contextual data
+  metadata   Json? // Store diff and other contextual data
   createdAt  DateTime @default(now())
 
   actor Usuario @relation(fields: [actorId], references: [idUsuario])
@@ -34,42 +33,44 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-
-
 /// *
 /// * Tabla Usuarios
 model Usuario {
-  idUsuario              Int                      @id @default(autoincrement()) @map("idUsuario")
-  usuario                String                   @unique @map("usuario")
-  email                  String?                  @unique @map("email")
-  passwordHash           String
-  nombreApellido         String                   @map("nombre_apellido")
-  rolId                  Int                      @map("Rol_idRol")
-  createdAt              DateTime                 @default(now()) @map("created_at")
-  updatedAt              DateTime                 @updatedAt @map("updated_at")
-  estaActivo             Boolean                  @default(true) @map("esta_activo")
-  ultimoLoginAt          DateTime?                @map("ultimo_login_at")
-  profesional            Profesional?
-  rol                    Rol                      @relation(fields: [rolId], references: [idRol])
-  citasCreadas           Cita[]                   @relation("CitaCreadaPor")
-  citasCanceladas        Cita[]                   @relation("CitaCanceladaPor")
-  CitaEstadoHistorial    CitaEstadoHistorial[]
-  BloqueoAgenda          BloqueoAgenda[]
-  Consulta               Consulta[]
-  ConsultaAdjunto        Adjunto[]
-  TreatmentPlan          TreatmentPlan[]
-  ClinicalHistoryEntry   ClinicalHistoryEntry[]
-  PatientDiagnosis       PatientDiagnosis[]
-  PatientAllergy         PatientAllergy[]
-  PatientMedication      PatientMedication[]
-  PatientVitals          PatientVitals[]
-  OdontogramSnapshot     OdontogramSnapshot[]
-  PeriodontogramSnapshot PeriodontogramSnapshot[]
-  Adjunto                Adjunto[]                @relation("AdjuntoUploadedBy")
+  idUsuario                   Int                       @id @default(autoincrement()) @map("idUsuario")
+  usuario                     String                    @unique @map("usuario")
+  email                       String?                   @unique @map("email")
+  passwordHash                String
+  nombreApellido              String                    @map("nombre_apellido")
+  rolId                       Int                       @map("Rol_idRol")
+  createdAt                   DateTime                  @default(now()) @map("created_at")
+  updatedAt                   DateTime                  @updatedAt @map("updated_at")
+  estaActivo                  Boolean                   @default(true) @map("esta_activo")
+  ultimoLoginAt               DateTime?                 @map("ultimo_login_at")
+  profesional                 Profesional?
+  rol                         Rol                       @relation(fields: [rolId], references: [idRol])
+  citasCreadas                Cita[]                    @relation("CitaCreadaPor")
+  citasCanceladas             Cita[]                    @relation("CitaCanceladaPor")
+  CitaEstadoHistorial         CitaEstadoHistorial[]
+  BloqueoAgenda               BloqueoAgenda[]
+  Consulta                    Consulta[]
+  ConsultaAdjunto             Adjunto[]
+  TreatmentPlan               TreatmentPlan[]
+  ClinicalHistoryEntry        ClinicalHistoryEntry[]
+  PatientDiagnosis            PatientDiagnosis[]
+  PatientAllergy              PatientAllergy[]
+  PatientMedication           PatientMedication[]
+  PatientVitals               PatientVitals[]
+  OdontogramSnapshot          OdontogramSnapshot[]
+  PeriodontogramSnapshot      PeriodontogramSnapshot[]
+  Adjunto                     Adjunto[]                 @relation("AdjuntoUploadedBy")
+  consentimientosRegistrados  Consentimiento[]
+  PatientAnamnesis            PatientAnamnesis[]        @relation("AnamnesisCreadaPor")
+  PatientAnamnesisActualizada PatientAnamnesis[]        @relation("AnamnesisActualizadaPor")
+  PatientAnamnesisVersion     PatientAnamnesisVersion[]
+  AuditLog                    AuditLog[]
 
   @@index([rolId])
   @@map("Usuario")
-  AuditLog AuditLog[]
 }
 
 model Profesional {
@@ -93,20 +94,29 @@ model Profesional {
 }
 
 model Persona {
-  idPersona           Int                   @id @default(autoincrement()) @map("idPersona")
-  nombres             String                @map("nombres")
-  apellidos           String                @map("apellidos")
-  fechaNacimiento     DateTime?             @map("fecha_nacimiento")
-  genero              Genero?               @map("genero")
-  direccion           String?               @map("direccion")
-  estaActivo          Boolean               @default(true) @map("esta_activo")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
-  documento           Documento?
-  contactos           PersonaContacto[]
-  profesionales       Profesional?
-  paciente            Paciente?
-  PacienteResponsable PacienteResponsable[]
+  idPersona                  Int                   @id @default(autoincrement()) @map("idPersona")
+  nombres                    String                @map("nombres")
+  apellidos                  String                @map("apellidos")
+  segundoApellido            String?               @map("segundo_apellido") // ⭐ Added for second last name
+  fechaNacimiento            DateTime?             @map("fecha_nacimiento")
+  genero                     Genero?               @map("genero")
+  direccion                  String?               @map("direccion")
+  ciudad                     String?               @map("ciudad") // ⭐ Added for city separation
+  pais                       String?               @default("PY") @map("pais") // ⭐ Added for country separation (default Paraguay)
+  // Emergency Contact Information
+  contactoEmergenciaNombre   String?               @map("contacto_emergencia_nombre") // ⭐ Added for emergency contact
+  contactoEmergenciaTelefono String?               @map("contacto_emergencia_telefono") // ⭐ Added for emergency contact
+  contactoEmergenciaRelacion String?               @map("contacto_emergencia_relacion") // ⭐ Added for emergency contact relationship
+  estaActivo                 Boolean               @default(true) @map("esta_activo")
+  createdAt                  DateTime              @default(now()) @map("created_at")
+  updatedAt                  DateTime              @updatedAt @map("updated_at")
+  documento                  Documento?
+  contactos                  PersonaContacto[]
+  profesionales              Profesional?
+  paciente                   Paciente?
+  PacienteResponsable        PacienteResponsable[]
+  consentimientosResponsable Consentimiento[]      @relation("ConsentimientoResponsable")
+  consentimientos            Consentimiento[]
 
   @@index([nombres, apellidos])
   @@map("Persona")
@@ -142,13 +152,15 @@ model PersonaContacto {
   activo                  Boolean      @default(true) @map("activo")
   createdAt               DateTime     @default(now()) @map("created_at")
   updatedAt               DateTime     @updatedAt @map("updated_at")
-  persona                 Persona      @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
 
-  @@unique([personaId, tipo, valorNorm])
-  @@index([personaId, tipo, esPrincipal])
-  @@index([personaId, esPreferidoRecordatorio])
-  @@index([personaId, esPreferidoCobranza])
-  @@map("PersonaContacto")
+  persona Persona @relation(fields: [personaId], references: [idPersona], onDelete: Cascade)
+
+  // 🔥 CLAVE ÚNICA COMPUESTA que tu seed usa en el upsert:
+  @@unique([personaId, tipo, valorNorm], name: "personaId_tipo_valorNorm")
+  // ✅ índices útiles (opcional)
+  @@index([personaId])
+  @@index([tipo])
+  @@index([valorNorm])
 }
 
 model Especialidad {
@@ -203,6 +215,8 @@ enum RelacionPaciente {
   TUTOR
   CONYUGE
   FAMILIAR
+  HIJO
+  EMPRESA
   OTRO
 }
 
@@ -231,14 +245,14 @@ enum EstadoCita {
 
 // Paciente
 model Paciente {
-  idPaciente Int      @id @default(autoincrement()) @map("idPaciente")
-  personaId  Int      @unique @map("Persona_idPersona")
-  notas      String?  @map("notas")
-  estaActivo Boolean  @default(true) @map("esta_activo")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  idPaciente           Int      @id @default(autoincrement()) @map("idPaciente")
+  personaId            Int      @unique @map("Persona_idPersona")
+  notasAdministrativas String?  @map("notas_administrativas") // ⚠️ SOLO notas administrativas (ej: preferencias de horario), NO información clínica. Info clínica → PatientAnamnesis
+  estaActivo           Boolean  @default(true) @map("esta_activo")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
-  persona                Persona                  @relation(fields: [personaId], references: [idPersona])
+  persona                Persona                   @relation(fields: [personaId], references: [idPersona])
   responsables           PacienteResponsable[]
   citas                  Cita[] // <— importante: relación inversa (solo lectura)
   TreatmentPlan          TreatmentPlan[]
@@ -250,6 +264,9 @@ model Paciente {
   OdontogramSnapshot     OdontogramSnapshot[]
   PeriodontogramSnapshot PeriodontogramSnapshot[]
   Adjunto                Adjunto[]
+  consentimientos        Consentimiento[]
+  anamnesisActual        PatientAnamnesis?
+  anamnesisHistorial     PatientAnamnesisVersion[]
 
   @@map("Paciente")
 }
@@ -307,9 +324,9 @@ model Cita {
   tipo            TipoCita   @map("tipo")
   estado          EstadoCita @default(SCHEDULED) @map("estado")
 
-  // Descripción
-  motivo String? @map("motivo")
-  notas  String? @map("notas")
+  // Descripción (ADMINISTRATIVA, no clínica)
+  motivo String? @map("motivo") // ⚠️ Motivo administrativo de agendamiento (ej: "Llamó por dolor"), NO es el motivo clínico detallado. Motivo clínico → PatientAnamnesis.motivoConsulta
+  notas  String? @map("notas") // ⚠️ Notas administrativas de la cita (ej: "Reprogramar si llueve"), NO es información clínica
 
   // Reprogramaciones (self-relation)
   reprogramadaDesdeId Int?   @map("Cita_idCita_reprog_desde")
@@ -343,6 +360,7 @@ model Cita {
   canceladoPor        Usuario?              @relation("CitaCanceladaPor", fields: [cancelledByUserId], references: [idUsuario])
   CitaEstadoHistorial CitaEstadoHistorial[]
   Consulta            Consulta[]
+  consentimientos     Consentimiento[]
 
   // Índices
   @@index([profesionalId, inicio])
@@ -489,9 +507,13 @@ model Consulta {
   startedAt  DateTime?      @map("started_at")
   finishedAt DateTime?      @map("finished_at")
 
-  reason        String? @map("reason")
-  diagnosis     String? @map("diagnosis")
-  clinicalNotes String? @map("clinical_notes")
+  // ⚠️ DEPRECADO: reason eliminado. El motivo clínico debe obtenerse de:
+  // - paciente.anamnesisActual.motivoConsulta (estado actual)
+  // - PatientAnamnesisVersion vinculada a esta consulta (histórico)
+  // reason        String? @map("reason") // ❌ ELIMINADO - usar PatientAnamnesis.motivoConsulta
+
+  diagnosis     String? @map("diagnosis") // ✅ Diagnóstico de la consulta (resultado), diferente del motivo
+  clinicalNotes String? @map("clinical_notes") // ✅ Notas del profesional durante/después de la consulta, complementarias a anamnesis (anamnesis = estado paciente, clinicalNotes = observaciones profesional)
 
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
   createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
@@ -507,6 +529,7 @@ model Consulta {
   PatientVitals          PatientVitals[]
   OdontogramSnapshot     OdontogramSnapshot[]
   PeriodontogramSnapshot PeriodontogramSnapshot[]
+  anamnesisVersiones     PatientAnamnesisVersion[]
 
   @@map("Consulta")
 }
@@ -935,4 +958,180 @@ model PeriodontogramMeasure {
   @@unique([snapshotId, toothNumber, site])
   @@index([toothNumber])
   @@map("PeriodontogramMeasure")
+}
+
+// ==========================
+// Enum
+// ==========================
+enum TipoConsentimiento {
+  CONSENTIMIENTO_MENOR_ATENCION
+  TRATAMIENTO_ESPECIFICO
+  ANESTESIA
+  CIRUGIA
+  RADIOGRAFIA
+  DATOS_PERSONALES
+  OTRO
+
+  @@map("TipoConsentimiento")
+}
+
+enum AnamnesisTipo {
+  ADULTO
+  PEDIATRICO
+}
+
+enum AnamnesisUrgencia {
+  RUTINA
+  PRIORITARIO
+  URGENCIA
+}
+
+// ==========================
+// Modelo
+// ==========================
+model Consentimiento {
+  // PK
+  idConsentimiento Int @id @default(autoincrement()) @map("idConsentimiento")
+
+  // FKs
+  Paciente_idPaciente             Int  @map("Paciente_idPaciente")
+  Persona_idPersona_responsable   Int  @map("Persona_idPersona_responsable")
+  Cita_idCita                     Int? @map("Cita_idCita")
+  Usuario_idUsuario_registradoPor Int  @map("Usuario_idUsuario_registradoPor")
+
+  // Relaciones
+  paciente      Paciente @relation(fields: [Paciente_idPaciente], references: [idPaciente], onDelete: Cascade, onUpdate: Cascade)
+  responsable   Persona  @relation(fields: [Persona_idPersona_responsable], references: [idPersona], onDelete: Restrict, onUpdate: Cascade)
+  cita          Cita?    @relation(fields: [Cita_idCita], references: [idCita], onDelete: SetNull, onUpdate: Cascade)
+  registradoPor Usuario  @relation(fields: [Usuario_idUsuario_registradoPor], references: [idUsuario], onDelete: Restrict, onUpdate: Cascade)
+
+  // Datos del consentimiento
+  tipo          TipoConsentimiento @map("tipo")
+  firmado_en    DateTime           @map("firmado_en")
+  vigente_hasta DateTime           @map("vigente_hasta")
+  registrado_en DateTime           @default(now()) @map("registrado_en")
+
+  // Metadata del archivo (Cloudinary u otro)
+  public_id  String  @unique @map("public_id")
+  secure_url String  @map("secure_url")
+  format     String? @map("format")
+  bytes      Int     @map("bytes")
+  width      Int?    @map("width")
+  height     Int?    @map("height")
+  hash       String? @map("hash")
+  provider   String  @default("CLOUDINARY") @map("provider")
+
+  // Otros
+  observaciones String? @map("observaciones")
+  version       Int     @default(1) @map("version")
+  activo        Boolean @default(true) @map("activo")
+
+  // Timestamps
+  created_at DateTime  @default(now()) @map("created_at")
+  updated_at DateTime  @updatedAt @map("updated_at")
+  personas   Persona[] @relation("ConsentimientoResponsable")
+
+  // Índices para consultas comunes
+  @@index([Paciente_idPaciente, tipo, activo], map: "Consentimiento_Paciente_idPaciente_tipo_activo_idx")
+  @@index([Paciente_idPaciente, Persona_idPersona_responsable, tipo, activo], map: "Consentimiento_Paciente_idPaciente_Persona_idPersona_respo_idx")
+  @@index([vigente_hasta], map: "Consentimiento_vigente_hasta_idx")
+  @@index([Cita_idCita], map: "Consentimiento_Cita_idCita_idx")
+  @@map("Consentimiento")
+}
+
+// ============== 7) Anamnesis (versionable) =================
+
+model PatientAnamnesis {
+  idPatientAnamnesis Int           @id @default(autoincrement()) @map("idPatientAnamnesis")
+  pacienteId         Int           @unique @map("Paciente_idPaciente") // 1:1 por paciente
+  tipo               AnamnesisTipo @map("tipo")
+
+  // 🔹 Resumen clínico mínimo (vista rápida / filtros)
+  motivoConsulta            String?            @map("motivo_consulta")
+  tieneDolorActual          Boolean            @default(false) @map("tiene_dolor_actual")
+  dolorIntensidad           Int?               @map("dolor_intensidad") // 1–10
+  urgenciaPercibida         AnamnesisUrgencia? @map("urgencia_percibida")
+  tieneEnfermedadesCronicas Boolean            @default(false) @map("tiene_enfermedades_cronicas")
+  tieneAlergias             Boolean            @default(false) @map("tiene_alergias")
+  tieneMedicacionActual     Boolean            @default(false) @map("tiene_medicacion_actual")
+  embarazada                Boolean?           @map("embarazada") // solo ADULTO femenino
+  expuestoHumoTabaco        Boolean?           @map("expuesto_humo_tabaco") // útil para niños
+  bruxismo                  Boolean?           @map("bruxismo")
+  higieneCepilladosDia      Int?               @map("higiene_cepillados_dia")
+  usaHiloDental             Boolean?           @map("usa_hilo_dental")
+  ultimaVisitaDental        DateTime?          @map("ultima_visita_dental")
+
+  // 🔹 Datos pediátricos clave (si tipo = PEDIATRICO)
+  tieneHabitosSuccion Boolean? @map("tiene_habitos_succion") // chupete/dedo
+  lactanciaRegistrada Boolean? @map("lactancia_registrada")
+
+  // 🔹 Payload completo por secciones (estructura JSON flexible)
+  payload Json @map("payload")
+
+  // 🔹 Trazabilidad
+  creadoPorUserId      Int      @map("Usuario_idUsuario_creadoPor")
+  actualizadoPorUserId Int?     @map("Usuario_idUsuario_actualizadoPor")
+  creadoPor            Usuario  @relation("AnamnesisCreadaPor", fields: [creadoPorUserId], references: [idUsuario])
+  actualizadoPor       Usuario? @relation("AnamnesisActualizadaPor", fields: [actualizadoPorUserId], references: [idUsuario])
+
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Historial de versiones
+  versiones PatientAnamnesisVersion[]
+
+  @@index([tipo])
+  @@index([tieneEnfermedadesCronicas, tieneAlergias])
+  @@index([urgenciaPercibida])
+  @@index([pacienteId, updatedAt]) // Para obtener anamnesis más reciente por paciente
+  @@index([tieneDolorActual, urgenciaPercibida]) // Para filtros de urgencia
+  @@map("PatientAnamnesis")
+}
+
+model PatientAnamnesisVersion {
+  idPatientAnamnesisVersion Int           @id @default(autoincrement()) @map("idPatientAnamnesisVersion")
+  pacienteId                Int           @map("Paciente_idPaciente")
+  anamnesisId               Int           @map("PatientAnamnesis_id")
+  consultaId                Int?          @map("Consulta_Cita_idCita") // opcional: si se actualizó en una consulta concreta
+  tipo                      AnamnesisTipo @map("tipo")
+
+  // Copia congelada de los campos resumen
+  motivoConsulta            String?            @map("motivo_consulta")
+  tieneDolorActual          Boolean            @default(false) @map("tiene_dolor_actual")
+  dolorIntensidad           Int?               @map("dolor_intensidad")
+  urgenciaPercibida         AnamnesisUrgencia? @map("urgencia_percibida")
+  tieneEnfermedadesCronicas Boolean            @default(false) @map("tiene_enfermedades_cronicas")
+  tieneAlergias             Boolean            @default(false) @map("tiene_alergias")
+  tieneMedicacionActual     Boolean            @default(false) @map("tiene_medicacion_actual")
+  embarazada                Boolean?           @map("embarazada")
+  expuestoHumoTabaco        Boolean?           @map("expuesto_humo_tabaco")
+  bruxismo                  Boolean?           @map("bruxismo")
+  higieneCepilladosDia      Int?               @map("higiene_cepillados_dia")
+  usaHiloDental             Boolean?           @map("usa_hilo_dental")
+  ultimaVisitaDental        DateTime?          @map("ultima_visita_dental")
+  tieneHabitosSuccion       Boolean?           @map("tiene_habitos_succion")
+  lactanciaRegistrada       Boolean?           @map("lactancia_registrada")
+
+  // Snapshot completo del formulario
+  payload Json @map("payload")
+
+  motivoCambio String? @map("motivo_cambio") // ej: "control anual", "pre-operatorio"
+
+  creadoPorUserId Int     @map("Usuario_idUsuario_creadoPor")
+  creadoPor       Usuario @relation(fields: [creadoPorUserId], references: [idUsuario])
+
+  paciente  Paciente         @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  consulta  Consulta?        @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([pacienteId, createdAt])
+  @@index([consultaId])
+  @@index([anamnesisId, createdAt])
+  @@index([tipo, createdAt]) // Para reportes por tipo
+  @@index([urgenciaPercibida, createdAt]) // Para análisis de urgencias históricas
+  @@map("PatientAnamnesisVersion")
 }

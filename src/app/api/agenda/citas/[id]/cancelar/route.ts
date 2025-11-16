@@ -8,7 +8,7 @@ import { cancelarCita } from "./_service";
  * PATCH /api/agenda/citas/[id]/cancelar
  * Cancela una cita (no elimina) y registra auditoría.
  */
-export async function PATCH(req: NextRequest, context: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   // RBAC: RECEP, ODONT, ADMIN
   const auth = await requireSessionWithRoles(req, ["RECEP", "ODONT", "ADMIN"]);
   if (!auth.authorized) {
@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, context: { params: { id: string } 
   }
 
   // Params
-  const parsedParams = paramsSchema.safeParse(await context.params); // ✅
+  const parsedParams = paramsSchema.safeParse(await context.params);
   if (!parsedParams.success) {
     return NextResponse.json(
       { ok: false, error: "BAD_REQUEST", details: parsedParams.error.flatten() },
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, context: { params: { id: string } 
   }
 
   try {
-    const userId = (auth.session.user as any)?.idUsuario ?? (auth.session.user as any)?.id;
+    const userId = auth.session.user.id;
     if (!userId) return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
 
     const result = await cancelarCita(parsedParams.data.id, parsedBody.data, Number(userId));
@@ -45,12 +45,13 @@ export async function PATCH(req: NextRequest, context: { params: { id: string } 
 
     // 200 OK: devolvemos la cita cancelada (DTO mini)
     return NextResponse.json({ ok: true, data: result.data }, { status: 200 });
-  } catch (e: any) {
-    const code = e?.code as string | undefined;
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code;
     if (code === "P2003") {
       return NextResponse.json({ ok: false, error: "FOREIGN_KEY_CONSTRAINT" }, { status: 400 });
     }
-    console.error("PATCH /api/agenda/citas/[id]/cancelar error:", code || e?.message);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error("PATCH /api/agenda/citas/[id]/cancelar error:", code || errorMessage);
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

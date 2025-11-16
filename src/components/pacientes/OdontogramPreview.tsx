@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import type { OdontogramSnapshot, UserRole } from "@/lib/types/patient"
+import type { OdontogramSnapshot, UserRole, ToothCondition } from "@/lib/types/patient"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -234,9 +234,9 @@ function OdontogramViewer({ snapshot }: { snapshot: OdontogramSnapshot }) {
       <div>
         <h3 className="mb-3 text-sm font-semibold">Leyenda</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {["INTACT", "CARIES", "FILLED", "CROWN", "MISSING", "IMPLANT", "ROOT_CANAL", "FRACTURED"].map((condition) => (
+          {(["INTACT", "CARIES", "FILLED", "CROWN", "MISSING", "IMPLANT", "ROOT_CANAL", "FRACTURED"] as ToothCondition[]).map((condition) => (
             <div key={condition} className="flex items-center gap-2">
-              <div className={`h-4 w-4 rounded ${getToothConditionColor(condition as any)}`} />
+              <div className={`h-4 w-4 rounded ${getToothConditionColor(condition)}`} />
               <span className="text-xs">{getConditionLabel(condition)}</span>
             </div>
           ))}

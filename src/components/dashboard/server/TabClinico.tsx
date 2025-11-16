@@ -13,7 +13,7 @@ export default async function TabClinico({ role }: { role: Rol }) {
   const session = await auth()
   if (!session) redirect("/signin")
 
-  const userId = (session.user as any)?.id ?? 0
+  const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
   // Calcular rango del mes actual
   const now = new Date()
@@ -59,25 +59,25 @@ export default async function TabClinico({ role }: { role: Rol }) {
             <KpiCard
               label="Turnos Programados"
               value={data.agenda.turnosProgramados.current}
-              comparison={data.agenda.turnosProgramados.comparison}
-              variant="neutral"
+              comparison={data.agenda.turnosProgramados}
+              variant="default"
             />
             <KpiCard
               label="Tasa de Confirmación"
               value={`${data.agenda.confirmacionRate.current.toFixed(1)}%`}
-              comparison={data.agenda.confirmacionRate.comparison}
+              comparison={data.agenda.confirmacionRate}
               variant={data.agenda.confirmacionRate.current >= 80 ? "success" : "warning"}
             />
             <KpiCard
               label="Tasa de Cancelación"
               value={`${data.agenda.cancelacionRate.current.toFixed(1)}%`}
-              comparison={data.agenda.cancelacionRate.comparison}
+              comparison={data.agenda.cancelacionRate}
               variant={data.agenda.cancelacionRate.current <= 10 ? "success" : "danger"}
             />
             <KpiCard
               label="Tasa de No-Show"
               value={`${data.agenda.noShowRate.current.toFixed(1)}%`}
-              comparison={data.agenda.noShowRate.comparison}
+              comparison={data.agenda.noShowRate}
               variant={data.agenda.noShowRate.current <= 5 ? "success" : "danger"}
             />
           </div>
@@ -94,7 +94,7 @@ export default async function TabClinico({ role }: { role: Rol }) {
               <KpiCard
                 label="Procedimientos Realizados"
                 value={data.produccion.procedimientosRealizados}
-                variant="neutral"
+                variant="default"
               />
               {role === "ADMIN" && (
                 <KpiCard
@@ -144,7 +144,7 @@ export default async function TabClinico({ role }: { role: Rol }) {
               value={`${data.calidad.documentacionCompletaPercent.toFixed(1)}%`}
               variant={data.calidad.documentacionCompletaPercent >= 95 ? "success" : "warning"}
             />
-            <KpiCard label="Consultas con Adjuntos" value={data.calidad.consultasConAdjuntos} variant="neutral" />
+            <KpiCard label="Consultas con Adjuntos" value={data.calidad.consultasConAdjuntos} variant="default" />
             <KpiCard
               label="Tiempo Cierre Promedio"
               value={`${data.calidad.tiempoCierrePromedioHoras.toFixed(1)}h`}
@@ -173,14 +173,14 @@ export default async function TabClinico({ role }: { role: Rol }) {
             <KpiCard
               label="Pacientes Nuevos"
               value={data.pacientes.pacientesNuevos.current}
-              comparison={data.pacientes.pacientesNuevos.comparison}
-              variant="neutral"
+              comparison={data.pacientes.pacientesNuevos}
+              variant="default"
             />
             <KpiCard
               label="Pacientes Activos"
               value={data.pacientes.pacientesActivosAtendidos.current}
-              comparison={data.pacientes.pacientesActivosAtendidos.comparison}
-              variant="neutral"
+              comparison={data.pacientes.pacientesActivosAtendidos}
+              variant="default"
             />
             <KpiCard
               label="Retención (90 días)"
@@ -215,19 +215,19 @@ export default async function TabClinico({ role }: { role: Rol }) {
             <KpiCard
               label="Lead Time Promedio"
               value={`${data.agenda.leadTimeDiasPromedio.current.toFixed(1)} días`}
-              comparison={data.agenda.leadTimeDiasPromedio.comparison}
-              variant="neutral"
+              comparison={data.agenda.leadTimeDiasPromedio}
+              variant="default"
             />
             <KpiCard
               label="Puntualidad"
               value={`${data.agenda.puntualidadMinutosPromedio.current.toFixed(0)} min`}
-              comparison={data.agenda.puntualidadMinutosPromedio.comparison}
+              comparison={data.agenda.puntualidadMinutosPromedio}
               variant={Math.abs(data.agenda.puntualidadMinutosPromedio.current) <= 5 ? "success" : "warning"}
             />
             <KpiCard
               label="Espera en Clínica"
               value={`${data.agenda.esperaMinutosPromedio.current.toFixed(0)} min`}
-              comparison={data.agenda.esperaMinutosPromedio.comparison}
+              comparison={data.agenda.esperaMinutosPromedio}
               variant={data.agenda.esperaMinutosPromedio.current <= 15 ? "success" : "warning"}
             />
             <KpiCard

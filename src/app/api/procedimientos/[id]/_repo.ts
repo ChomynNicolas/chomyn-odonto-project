@@ -1,5 +1,6 @@
 // src/app/api/procedimientos/[id]/_repo.ts
 import { prisma as db } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export async function repoGetProcedimientoForUpdate(id: number) {
   return db.consultaProcedimiento.findUnique({
@@ -11,11 +12,13 @@ export async function repoGetProcedimientoForUpdate(id: number) {
           cita: { select: { pacienteId: true, profesionalId: true } },
         },
       },
-      ConsultaAdjunto: { select: { idConsultaAdjunto: true }, take: 1 },
+      ConsultaAdjunto: { select: { idAdjunto: true }, take: 1 },
       catalogo: { select: { idProcedimiento: true, aplicaDiente: true, aplicaSuperficie: true, activo: true } },
     },
   });
 }
+
+export type ProcedimientoForUpdate = NonNullable<Awaited<ReturnType<typeof repoGetProcedimientoForUpdate>>>;
 
 export async function repoGetCatalogo(procedureId: number) {
   return db.procedimientoCatalogo.findUnique({
@@ -32,7 +35,7 @@ export async function repoGetTreatmentStep(stepId: number) {
 }
 
 // UPDATE parcial
-export async function repoUpdateProcedimiento(id: number, data: any) {
+export async function repoUpdateProcedimiento(id: number, data: Prisma.ConsultaProcedimientoUpdateInput) {
   return db.consultaProcedimiento.update({
     where: { idConsultaProcedimiento: id },
     data,

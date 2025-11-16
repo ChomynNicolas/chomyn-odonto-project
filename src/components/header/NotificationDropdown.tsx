@@ -1,27 +1,28 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import React, { JSX, useEffect, useMemo, useRef, useState } from "react";
-import { Dropdown } from "../ui/dropdown/Dropdown";
-import { DropdownItem } from "../ui/dropdown/DropdownItem";
+import Link from "next/link"
+import { type JSX, useEffect, useMemo, useRef, useState } from "react"
+import { Dropdown } from "../ui/dropdown/Dropdown"
+import { DropdownItem } from "../ui/dropdown/DropdownItem"
+import clsx from "clsx"
 
 /** =========================================================
  * Tipos de dominio y utilidades (amigable con Prisma luego)
  * ========================================================= */
-type NotificationType = "APPOINTMENT" | "BILLING" | "CLINICAL" | "SYSTEM";
-type Severity = "info" | "warning" | "critical";
+type NotificationType = "APPOINTMENT" | "BILLING" | "CLINICAL" | "SYSTEM"
+type Severity = "info" | "warning" | "critical"
 
 type UiNotification = {
-  id: string;
-  type: NotificationType;
-  title: string;      // breve: "Turno confirmado"
-  message: string;    // detalle: "Juan Pérez confirmó el turno de las 10:00"
-  entity?: "Appointment" | "Paciente" | "Factura";
-  entityId?: string;
-  severity: Severity;
-  readAt?: string | null;
-  createdAt: string;  // ISO
-};
+  id: string
+  type: NotificationType
+  title: string // breve: "Turno confirmado"
+  message: string // detalle: "Juan Pérez confirmó el turno de las 10:00"
+  entity?: "Appointment" | "Paciente" | "Factura"
+  entityId?: string
+  severity: Severity
+  readAt?: string | null
+  createdAt: string // ISO
+}
 
 /** =========================================
  * MOCK: hardcode de notificaciones de ejemplo
@@ -72,97 +73,95 @@ const MOCK_NOTIFS: UiNotification[] = [
     readAt: null,
     createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // ayer
   },
-];
+]
 
 /** ==========================
  * Utilidades de presentación
  * ========================== */
 function formatDate(dt: string) {
   // futuro: i18n con dayjs/date-fns
-  const d = new Date(dt);
-  return d.toLocaleString();
+  const d = new Date(dt)
+  return d.toLocaleString()
 }
 
 function entityHref(n: UiNotification): string | undefined {
-  if (n.entity === "Appointment" && n.entityId) return `/agenda?focus=${n.entityId}`;
-  if (n.entity === "Factura" && n.entityId) return `/facturacion/${n.entityId}`;
-  if (n.entity === "Paciente" && n.entityId) return `/pacientes/${n.entityId}`;
-  return undefined;
+  if (n.entity === "Appointment" && n.entityId) return `/agenda?focus=${n.entityId}`
+  if (n.entity === "Factura" && n.entityId) return `/facturacion/${n.entityId}`
+  if (n.entity === "Paciente" && n.entityId) return `/pacientes/${n.entityId}`
+  return undefined
 }
 
 /** ==========================
  * Componente principal
  * ========================== */
 export default function NotificationDropdown() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false)
+  const [items, setItems] = useState<UiNotification[]>([])
+  const unread = items.filter((n) => !n.readAt).length
+  const hasUnread = unread > 0
 
-  // En producción vendrán del servidor; por ahora clonamos los mocks al estado.
-  const [items, setItems] = useState<UiNotification[]>([]);
-  const unread = items.filter((n) => !n.readAt).length;
-  const hasUnread = unread > 0;
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Accesibilidad: cerrar con ESC y click fuera
-  const dropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "Escape") setIsOpen(false)
     }
     function onClickOutside(e: MouseEvent) {
-      if (!dropdownRef.current) return;
+      if (!dropdownRef.current) return
       if (isOpen && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+        setIsOpen(false)
       }
     }
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onClickOutside);
+    window.addEventListener("keydown", onKey)
+    window.addEventListener("mousedown", onClickOutside)
     return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onClickOutside);
-    };
-  }, [isOpen]);
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("mousedown", onClickOutside)
+    }
+  }, [isOpen])
 
-  // Carga inicial mock al abrir por primera vez
   useEffect(() => {
     if (isOpen && items.length === 0) {
       // futuro: aquí llamarás a listMyNotifications()
-      setItems(MOCK_NOTIFS);
+      setItems(MOCK_NOTIFS)
     }
-  }, [isOpen, items.length]);
+  }, [isOpen, items.length])
 
   function toggleDropdown() {
-    setIsOpen((v) => !v);
+    setIsOpen((v) => !v)
   }
   function closeDropdown() {
-    setIsOpen(false);
+    setIsOpen(false)
   }
 
   async function handleBellClick() {
-    toggleDropdown();
+    toggleDropdown()
     // futuro: puedes disparar unreadCount() aquí
   }
 
   async function handleMarkAllRead() {
     // futuro: await markAllAsRead()
-    setItems((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
+    setItems((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })))
   }
 
   async function handleItemClick(n: UiNotification) {
     // futuro: await markAsRead(n.id)
     if (!n.readAt) {
-      setItems((prev) =>
-        prev.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)),
-      );
+      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)))
     }
-    const href = entityHref(n);
-    if (href) window.location.href = href;
-    else closeDropdown();
+    const href = entityHref(n)
+    if (href) window.location.href = href
+    else closeDropdown()
   }
 
   const ui = useMemo(() => {
     const iconByType: Record<NotificationType, JSX.Element> = {
       APPOINTMENT: (
         <svg width="20" height="20" viewBox="0 0 24 24" className="text-brand-600 dark:text-brand-400">
-          <path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v2h18V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM3 10v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10zm5 3h4v4H8z" />
+          <path
+            fill="currentColor"
+            d="M7 2v2H5a2 2 0 0 0-2 2v2h18V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM3 10v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10zm5 3h4v4H8z"
+          />
         </svg>
       ),
       BILLING: (
@@ -180,33 +179,32 @@ export default function NotificationDropdown() {
           <path fill="currentColor" d="M3 4h18v2H3zm0 14h18v2H3zM8 9h8v6H8z" />
         </svg>
       ),
-    };
+    }
     const colorBySeverity: Record<Severity, string> = {
       info: "bg-blue-500",
       warning: "bg-warning-500",
       critical: "bg-danger-500",
-    };
-    return { iconByType, colorBySeverity };
-  }, []);
+    }
+    return { iconByType, colorBySeverity }
+  }, [])
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Botón campana */}
       <button
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        aria-label="Abrir notificaciones"
-        className="relative dropdown-toggle flex items-center justify-center text-gray-500 transition-colors bg-white border border-gray-200 rounded-full hover:text-gray-700 h-11 w-11 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+        aria-label={`Notificaciones${hasUnread ? ` (${unread} sin leer)` : ""}`}
+        className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-all hover:bg-gray-50 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 lg:h-11 lg:w-11"
         onClick={handleBellClick}
       >
-        {/* Dot animado cuando hay no leídas */}
         {hasUnread && (
-          <span className="absolute right-0 top-0.5 z-10 h-2 w-2 rounded-full bg-orange-400">
-            <span className="absolute inline-flex w-full h-full bg-orange-400 rounded-full opacity-75 animate-ping"></span>
+          <span className="absolute right-0.5 top-0.5 z-10 flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
           </span>
         )}
-        {/* Ícono campana (reutilizo el tuyo) */}
-        <svg className="fill-current" width="20" height="20" viewBox="0 0 20 20">
+
+        <svg className="h-5 w-5 fill-current" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
           <path
             fillRule="evenodd"
             clipRule="evenodd"
@@ -216,28 +214,26 @@ export default function NotificationDropdown() {
         {hasUnread && <span className="sr-only">{unread} notificaciones sin leer</span>}
       </button>
 
-      {/* Dropdown */}
       <Dropdown
         isOpen={isOpen}
         onClose={closeDropdown}
-        className="absolute -right-[240px] mt-[17px] flex h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[361px] lg:right-0"
+        className="absolute -right-[240px] mt-3 flex h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:w-[361px] lg:right-0"
       >
-        {/* Cabecera */}
-        <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100 dark:border-gray-700">
-          <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Notificaciones</h5>
+        <div className="flex items-center justify-between border-b border-gray-100 p-4 dark:border-gray-800">
+          <h5 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Notificaciones</h5>
           <div className="flex items-center gap-2">
             <button
               onClick={handleMarkAllRead}
-              className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
-              Marcar todas como leídas
+              Marcar todas
             </button>
             <button
               onClick={toggleDropdown}
-              className="text-gray-500 transition dropdown-toggle dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              className="text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               aria-label="Cerrar"
             >
-              <svg className="fill-current" width="24" height="24" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 fill-current" width="24" height="24" viewBox="0 0 24 24">
                 <path
                   fillRule="evenodd"
                   clipRule="evenodd"
@@ -248,8 +244,11 @@ export default function NotificationDropdown() {
           </div>
         </div>
 
-        {/* Lista */}
-        <ul className="flex flex-col h-auto overflow-y-auto custom-scrollbar" role="menu" aria-label="Lista de notificaciones">
+        <ul
+          className="flex h-auto flex-col overflow-y-auto p-2 custom-scrollbar"
+          role="menu"
+          aria-label="Lista de notificaciones"
+        >
           {items.length === 0 && (
             <li className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
               No tienes notificaciones por ahora.
@@ -257,42 +256,49 @@ export default function NotificationDropdown() {
           )}
 
           {items.map((n) => {
-            const href = entityHref(n);
-            const isUnread = !n.readAt;
+            const href = entityHref(n)
+            const isUnread = !n.readAt
             return (
               <li key={n.id} role="none">
                 <DropdownItem
                   onItemClick={() => handleItemClick(n)}
-                  className={`flex gap-3 rounded-lg border-b border-gray-100 p-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5 ${isUnread ? "bg-blue-50/40 dark:bg-white/5" : ""}`}
+                  className={clsx(
+                    "flex gap-3 rounded-lg border-b border-gray-100 p-3 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800",
+                    isUnread && "bg-blue-50/50 dark:bg-blue-950/20",
+                  )}
                 >
                   {/* Ícono por tipo + dot de severidad */}
-                  <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                  <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                     {ui.iconByType[n.type]}
-                    <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900 ${ui.colorBySeverity[n.severity]}`}></span>
+                    <span
+                      className={clsx(
+                        "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900",
+                        ui.colorBySeverity[n.severity],
+                      )}
+                    ></span>
                   </span>
 
-                  {/* Texto */}
-                  <span className="block">
-                    <span className="mb-1 block text-theme-sm text-gray-700 dark:text-gray-200">
+                  <span className="block min-w-0 flex-1">
+                    <span className="mb-1 block text-sm text-gray-800 dark:text-gray-200">
                       <span className="font-medium">{n.title}</span>
-                      <span className="mx-1">·</span>
-                      <span className="text-gray-500 dark:text-gray-400">{n.message}</span>
+                      <span className="mx-1 text-gray-400">·</span>
+                      <span className="text-gray-600 dark:text-gray-400">{n.message}</span>
                     </span>
-                    <span className="flex items-center gap-2 text-gray-500 text-theme-xs dark:text-gray-400">
+                    <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                       <span>
                         {n.type === "APPOINTMENT"
                           ? "Turnos"
                           : n.type === "BILLING"
-                          ? "Facturación"
-                          : n.type === "CLINICAL"
-                          ? "Clínica"
-                          : "Sistema"}
+                            ? "Facturación"
+                            : n.type === "CLINICAL"
+                              ? "Clínica"
+                              : "Sistema"}
                       </span>
-                      <span className="w-1 h-1 bg-gray-400 rounded-full" />
+                      <span className="h-1 w-1 rounded-full bg-gray-400" />
                       <time dateTime={n.createdAt}>{formatDate(n.createdAt)}</time>
                       {href && (
                         <>
-                          <span className="w-1 h-1 bg-gray-400 rounded-full" />
+                          <span className="h-1 w-1 rounded-full bg-gray-400" />
                           <span className="underline underline-offset-2">Abrir</span>
                         </>
                       )}
@@ -300,26 +306,25 @@ export default function NotificationDropdown() {
                   </span>
                 </DropdownItem>
               </li>
-            );
+            )
           })}
         </ul>
 
-        {/* Pie */}
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 border-t border-gray-100 p-3 dark:border-gray-800">
           <Link
             href="/notificaciones"
-            className="block px-4 py-2 text-sm font-medium text-center text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Ver todas
           </Link>
           <Link
             href="/configuracion?tab=notificaciones"
-            className="block px-4 py-2 text-sm font-medium text-center text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Preferencias
           </Link>
         </div>
       </Dropdown>
     </div>
-  );
+  )
 }

@@ -1,6 +1,7 @@
 // src/lib/audit/log.ts
 import { prisma } from "@/lib/prisma"
 import { AuditAction } from "@/lib/audit/actions"
+import type { Prisma } from "@prisma/client"
 
 /**
  * Extrae IP, user-agent y referer desde Headers (opcional)
@@ -41,12 +42,12 @@ export async function writeAudit(opts: {
   metadata?: Record<string, unknown>
   headers?: Headers
   path?: string
+  ip?: string                // <-- NUEVO: permitir override de IP explícita
 }) {
-  const { actorId, action, entity, entityId, metadata, headers, path } = opts
-
+  const { actorId, action, entity, entityId, metadata, headers, path, ip } = opts
   const ctx = extractRequestContext(headers)
+  const ipFinal = ip ?? ctx.ip
 
-  // Construye metadatos seguros (sin PHI)
   const safeMeta = {
     ...(ctx.meta ?? {}),
     ...(metadata ?? {}),
@@ -60,22 +61,43 @@ export async function writeAudit(opts: {
       action,
       entity,
       entityId,
-      ip: ctx.ip,
-      metadata: safeMeta as any,
+      ip: ipFinal,              // <-- guarda IP si viene
+      metadata: safeMeta as Prisma.InputJsonValue,
     },
   })
 }
 
-/**
- * Wrapper seguro: nunca rompe la UX si falla la auditoría.
- */
 export async function safeAuditWrite(opts: Parameters<typeof writeAudit>[0]) {
   try {
     await writeAudit(opts)
   } catch (e) {
-    // Log interno del servidor (NO incluir PHI)
     console.error("[audit] write failed:", (e as Error).message)
   }
+}
+
+/** Wrapper compatible con executeCitaTransition */
+export async function logAudit(opts: {
+  actorUserId: number
+  entity: string
+  entityId: number
+  action: string
+  payload?: Record<string, unknown>
+  ip?: string
+  userAgent?: string
+  path?: string
+}) {
+  await safeAuditWrite({
+    actorId: opts.actorUserId,
+    action: opts.action,
+    entity: opts.entity,
+    entityId: opts.entityId,
+    ip: opts.ip,
+    metadata: {
+      ...(opts.payload ?? {}),
+      userAgent: opts.userAgent,
+      path: opts.path,
+    },
+  })
 }
 
 /** Acciones específicas (azúcares) */

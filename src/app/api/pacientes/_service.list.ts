@@ -1,14 +1,18 @@
 // src/app/api/pacientes/_service.list.ts
 import { pacientesListQuerySchema, type PacientesListQuery } from "./_schemas";
 import { pacienteRepo, type PacienteListItemDTO } from "./_repo";
-import { Prisma } from "@prisma/client";
+import { Prisma, Genero } from "@prisma/client";
 
 /** ---------------------------------------------------------
  *  Parseo de query desde URLSearchParams (re-uso Zod)
+ *  URLSearchParams siempre devuelve strings, Zod se encarga de la coerción
  * --------------------------------------------------------- */
 export function parsePacientesListQuery(searchParams: URLSearchParams): PacientesListQuery {
+  // Convert URLSearchParams to plain object (all values are strings)
   const obj: Record<string, string> = {};
-  searchParams.forEach((v, k) => (obj[k] = v));
+  searchParams.forEach((value, key) => {
+    obj[key] = value;
+  });
   return pacientesListQuerySchema.parse(obj);
 }
 
@@ -45,7 +49,7 @@ export async function listPacientes(query: PacientesListQuery): Promise<{
 
   // Filtro por género (Persona.genero)
   if (genero) {
-    whereAND.push({ persona: { genero: genero as any } });
+    whereAND.push({ persona: { genero: genero as Genero } });
   }
 
   // Búsqueda q (nombres, apellidos, doc.numero, contactos.valorNorm)

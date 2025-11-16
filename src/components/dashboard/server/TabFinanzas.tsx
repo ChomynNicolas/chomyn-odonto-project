@@ -24,7 +24,7 @@ export default async function TabFinanzas({ role }: { role: Rol }) {
     )
   }
 
-  const userId = (session.user as any)?.id ?? 0
+  const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
   const now = new Date()
   const startDate = startOfMonth(now)
@@ -78,10 +78,10 @@ export default async function TabFinanzas({ role }: { role: Rol }) {
             <KpiCard
               label="Ticket Promedio"
               value={`₲ ${ticketPromedio.toLocaleString("es-PY", { maximumFractionDigits: 0 })}`}
-              variant="neutral"
+              variant="default"
             />
 
-            <KpiCard label="Procedimientos Realizados" value={procedimientosRealizados} variant="neutral" />
+            <KpiCard label="Procedimientos Realizados" value={procedimientosRealizados} variant="default" />
           </div>
         </section>
 
@@ -138,7 +138,7 @@ export default async function TabFinanzas({ role }: { role: Rol }) {
             <KpiCard
               label="Turnos Completados"
               value={data.agenda.turnosCompletados.current}
-              comparison={data.agenda.turnosCompletados.comparison}
+              comparison={data.agenda.turnosCompletados}
               variant="success"
             />
             <KpiCard
@@ -149,14 +149,14 @@ export default async function TabFinanzas({ role }: { role: Rol }) {
             <KpiCard
               label="Pacientes Atendidos"
               value={data.pacientes.pacientesActivosAtendidos.current}
-              comparison={data.pacientes.pacientesActivosAtendidos.comparison}
-              variant="neutral"
+              comparison={data.pacientes.pacientesActivosAtendidos}
+              variant="default"
             />
             <KpiCard
               label="Pacientes Nuevos"
               value={data.pacientes.pacientesNuevos.current}
-              comparison={data.pacientes.pacientesNuevos.comparison}
-              variant="neutral"
+              comparison={data.pacientes.pacientesNuevos}
+              variant="default"
             />
           </div>
         </section>

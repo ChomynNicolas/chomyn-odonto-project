@@ -1,8 +1,6 @@
 "use client";
 
-import type { Paciente } from "../types";
-
-export default function TabAuditoria({ paciente }: { paciente: Paciente }) {
+export default function TabAuditoria() {
   // mock: luego conectar a tabla AuditLog
   const eventos = [
     { id: "a1", fecha: "28/10/2025 10:24", user: "recepcion1", accion: "CREAR_PACIENTE" },

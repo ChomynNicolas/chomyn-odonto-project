@@ -1,7 +1,7 @@
 // hooks/usePacientesFilters.ts
 "use client";
 
-import { useDeferredValue, useMemo, useState, useEffect } from "react";
+import { useDeferredValue, useState, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type FiltersState = {
@@ -25,8 +25,16 @@ export function usePacientesFilters() {
   // push/replace para no generar historial al tipear
   useEffect(() => {
     const params = new URLSearchParams(sp.toString());
-    state.q ? params.set("q", state.q) : params.delete("q");
-    state.status !== "Todos" ? params.set("status", state.status) : params.delete("status");
+    if (state.q) {
+      params.set("q", state.q);
+    } else {
+      params.delete("q");
+    }
+    if (state.status !== "Todos") {
+      params.set("status", state.status);
+    } else {
+      params.delete("status");
+    }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.q, state.status]);

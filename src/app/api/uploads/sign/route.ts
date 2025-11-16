@@ -3,10 +3,10 @@ import { z } from "zod"
 import { cloudinary } from "@/lib/cloudinary"
 import { requireRole } from "@/app/api/pacientes/_rbac"
 
-function jsonError(status: number, code: string, error: string, details?: any) {
+function jsonError(status: number, code: string, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
 }
-function jsonOk(data: any, status = 200) {
+function jsonOk<T>(data: T, status = 200) {
   const res = NextResponse.json({ ok: true, data }, { status })
   res.headers.set("Cache-Control", "no-store")
   return res

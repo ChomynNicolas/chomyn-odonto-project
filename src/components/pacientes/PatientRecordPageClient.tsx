@@ -1,9 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { usePatientData } from "@/lib/hooks/use-patient-data"
 import type { UserRole } from "@/lib/types/patient"
+import type { CurrentUser } from "@/types/agenda"
+import { mapSessionUserToCurrentUser } from "@/lib/auth-helpers"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PatientHeader } from "@/components/pacientes/PatientHeader"
@@ -26,20 +29,91 @@ function nextQuarterHour(base = new Date()) {
 
 export default function PatientRecordPage({ patientId }: { patientId: string }) {
   const router = useRouter()
+  const { data: session, status: sessionStatus } = useSession()
   const { patient, kpis, isLoading, error } = usePatientData(patientId)
   const [openNuevaCita, setOpenNuevaCita] = useState(false)
-  const [userRole] = useState<UserRole>("ADMIN")
   const [activeTab, setActiveTab] = useState("personal")
+  const [profesionalId, setProfesionalId] = useState<number | null>(null)
 
   const defaultInicio = useMemo(() => nextQuarterHour(new Date()), [])
-  const currentUser = { rol: userRole, profesionalId: undefined } as const
+
+  // Get current user from session (computed synchronously)
+  const currentUser: CurrentUser | null = useMemo(() => {
+    if (session?.user) {
+      return mapSessionUserToCurrentUser(session.user)
+    }
+    return null
+  }, [session?.user])
+
+  // Fetch profesionalId if user is ODONT
+  useEffect(() => {
+    if (currentUser?.role === "ODONT" && currentUser.idUsuario) {
+      fetch(`/api/profesionales/by-user/${currentUser.idUsuario}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((res) => {
+          if (!res.ok) {
+            // 404 means user is not a professional (expected for non-ODONT users)
+            // Other errors are logged but don't block the UI
+            if (res.status !== 404) {
+              console.warn(`Failed to fetch profesionalId: ${res.status}`)
+            }
+            return null
+          }
+          return res.json()
+        })
+        .then((data) => {
+          if (data?.ok && data?.data?.idProfesional) {
+            setProfesionalId(data.data.idProfesional)
+          }
+        })
+        .catch((err) => {
+          // Log error but don't block the UI
+          console.error("Error fetching profesionalId:", err)
+        })
+    } else {
+      // Reset profesionalId if user is not ODONT
+      setProfesionalId(null)
+    }
+  }, [currentUser?.role, currentUser?.idUsuario])
 
   console.log({ kpis })
 
-  if (isLoading) {
+  // Show skeleton while loading session or patient data
+  if (sessionStatus === "loading" || isLoading) {
     return <PatientRecordSkeleton />
   }
 
+  // Show error if no session
+  if (sessionStatus === "unauthenticated" || !session?.user) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="rounded-lg border border-destructive bg-destructive/10 p-6 text-center">
+          <h2 className="text-lg font-semibold text-destructive">No autenticado</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Por favor, inicia sesión para acceder a esta página.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error if currentUser is not available (session exists but user data is invalid)
+  if (!currentUser) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="rounded-lg border border-destructive bg-destructive/10 p-6 text-center">
+          <h2 className="text-lg font-semibold text-destructive">Error al cargar usuario</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            No se pudo obtener la información del usuario actual. Por favor, verifica tu sesión.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error if patient data failed to load
   if (error || !patient) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -51,6 +125,16 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
         </div>
       </div>
     )
+  }
+
+  // At this point, currentUser is guaranteed to be non-null
+  // Derive userRole from currentUser
+  const userRole: UserRole = currentUser.role
+
+  // Use currentUser with profesionalId (may be null if not ODONT or not fetched yet)
+  const currentUserWithProfesional: CurrentUser = {
+    ...currentUser,
+    profesionalId: profesionalId ?? currentUser.profesionalId ?? null,
   }
 
   const handlePrint = () => {
@@ -133,7 +217,7 @@ export default function PatientRecordPage({ patientId }: { patientId: string }) 
         open={openNuevaCita}
         onOpenChange={setOpenNuevaCita}
         defaults={{ inicio: defaultInicio }}
-        currentUser={currentUser}
+        currentUser={currentUserWithProfesional}
         prefill={{
           pacienteId: Number(patient.id),
           lockPaciente: true,

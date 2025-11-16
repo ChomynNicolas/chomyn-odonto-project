@@ -10,18 +10,19 @@ function jsonError(status: number, code: string, error: string) {
   return NextResponse.json({ ok: false, code, error }, { status });
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   // Roles permitidos: ADMIN | RECEP | ODONT
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"]);
   if (!gate.ok) return jsonError(403, "RBAC_FORBIDDEN", "No autorizado");
 
   try {
-    const { id } = pathParamsSchema.parse(ctx.params);
+    const { id } = pathParamsSchema.parse(await ctx.params);
     const query = reactivateQuerySchema.parse(Object.fromEntries(req.nextUrl.searchParams));
-    const body = reactivateBodySchema.parse(await safeReadJson(req)); // motivo opcional
+    // body no se usa actualmente, pero se parsea para validación futura
+    await reactivateBodySchema.parse(await safeReadJson(req)); // motivo opcional
 
     const session = await auth();
-    const actorUserId = Number((session?.user as any)?.id) || undefined;
+    const actorUserId = session?.user?.id ? Number.parseInt(session.user.id, 10) : undefined;
 
     const result = await reactivatePacienteById({
       pacienteId: id,
@@ -30,14 +31,16 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
     });
 
     return NextResponse.json({ ok: true, ...result });
-  } catch (e: any) {
-    if (e?.name === "ZodError") {
-      return jsonError(400, "VALIDATION_ERROR", e.issues?.[0]?.message ?? "Parámetros inválidos");
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { issues?: Array<{ message?: string }> }
+      return jsonError(400, "VALIDATION_ERROR", zodError.issues?.[0]?.message ?? "Parámetros inválidos");
     }
     if (e instanceof ReactivatePacienteError) {
       return jsonError(e.status, e.code, e.message);
     }
-    return jsonError(500, "INTERNAL_ERROR", e?.message ?? "Error al reactivar paciente");
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    return jsonError(500, "INTERNAL_ERROR", errorMessage ?? "Error al reactivar paciente");
   }
 }
 

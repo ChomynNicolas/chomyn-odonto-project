@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useRef, useState, useCallback } from "react"
+import { useRef, useState, useCallback, useEffect } from "react"
 import FullCalendar from "@fullcalendar/react"
 import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
@@ -17,33 +17,43 @@ import type { CurrentUser, AgendaFilters, EstadoCita } from "@/types/agenda"
 import { cn } from "@/lib/utils"
 import { NuevaCitaSheet } from "./NuevaCitaSheet"
 
-// Constantes de horario laboral (local)
-const WORK_START = "08:00";
-const WORK_END = "16:00";
-
-function isWithinWorkingHours(start: Date, end: Date) {
-  const [sh, sm] = WORK_START.split(":").map(Number);
-  const [eh, em] = WORK_END.split(":").map(Number);
-
-  const s = new Date(start);
-  const e = new Date(end);
-
-  const startMinutes = s.getHours() * 60 + s.getMinutes();
-  const endMinutes = e.getHours() * 60 + e.getMinutes();
-  const workStartMinutes = sh * 60 + (sm || 0);
-  const workEndMinutes = eh * 60 + (em || 0);
-
-  // Misma fecha calendario
-  const sameYMD =
-    s.getFullYear() === e.getFullYear() &&
-    s.getMonth() === e.getMonth() &&
-    s.getDate() === e.getDate();
-
-  if (!sameYMD) return false;
-  // Debe iniciar >= 08:00 y terminar <= 16:00
-  return startMinutes >= workStartMinutes && endMinutes <= workEndMinutes;
+// Tipo para las propiedades extendidas de los eventos de FullCalendar
+type CitaEventExtendedProps = {
+  consultorioColorHex?: string
+  estado?: EstadoCita
+  urgencia?: boolean
+  primeraVez?: boolean
+  planActivo?: boolean
+  tieneAlergias?: boolean
+  saldoPendiente?: boolean
+  profesionalNombre?: string
+  profesionalId?: number
+  consultorioNombre?: string
 }
 
+// Constantes de horario laboral (local)
+const WORK_START = "08:00"
+const WORK_END = "16:00"
+
+function isWithinWorkingHours(start: Date, end: Date) {
+  const [sh, sm] = WORK_START.split(":").map(Number)
+  const [eh, em] = WORK_END.split(":").map(Number)
+
+  const s = new Date(start)
+  const e = new Date(end)
+
+  const startMinutes = s.getHours() * 60 + s.getMinutes()
+  const endMinutes = e.getHours() * 60 + e.getMinutes()
+  const workStartMinutes = sh * 60 + (sm || 0)
+  const workEndMinutes = eh * 60 + (em || 0)
+
+  // Misma fecha calendario
+  const sameYMD = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate()
+
+  if (!sameYMD) return false
+  // Debe iniciar >= 08:00 y terminar <= 16:00
+  return startMinutes >= workStartMinutes && endMinutes <= workEndMinutes
+}
 
 export default function CitasCalendar({
   currentUser,
@@ -59,6 +69,8 @@ export default function CitasCalendar({
   // Drawer de detalle
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
+  // Estado para controlar el montaje del Sheet (permite animación de cierre)
+  const [shouldMountSheet, setShouldMountSheet] = useState(false)
 
   const [nuevaCitaOpen, setNuevaCitaOpen] = useState(false)
   const [nuevaCitaDefaults, setNuevaCitaDefaults] = useState<{
@@ -68,28 +80,45 @@ export default function CitasCalendar({
 
   const openDrawer = useCallback((eventId: number) => {
     setSelectedEventId(eventId)
-    setDrawerOpen(true)
+    setShouldMountSheet(true) // Montar el Sheet
+    setDrawerOpen(true) // Abrir el Sheet (React batch las actualizaciones)
   }, [])
 
+  // Función centralizada para cerrar el drawer de forma consistente
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false)
+    // Nota: selectedEventId y shouldMountSheet se limpian en el useEffect
+    // después de que la animación de cierre termine completamente
   }, [])
 
+  // Limpiar estados después de que el drawer se cierre completamente
+  // La animación de cierre dura 300ms, esperamos 400ms para asegurar que termine
+  useEffect(() => {
+    if (!drawerOpen && shouldMountSheet) {
+      const timer = setTimeout(() => {
+        // Limpiar todo después de que la animación termine
+        setSelectedEventId(null)
+        setShouldMountSheet(false)
+      }, 400)
+      return () => clearTimeout(timer)
+    }
+  }, [drawerOpen, shouldMountSheet])
+
   function roundToMinutes(d: Date, stepMin = 15) {
-  const ms = stepMin * 60_000;
-  return new Date(Math.round(d.getTime() / ms) * ms);
-}
+    const ms = stepMin * 60_000
+    return new Date(Math.round(d.getTime() / ms) * ms)
+  }
 
   const onSelectDate = useCallback((arg: DateSelectArg) => {
-  const start = roundToMinutes(arg.start, 15);
-  const end = arg.end ? roundToMinutes(arg.end, 15) : new Date(start.getTime() + 30 * 60_000);
+    const start = roundToMinutes(arg.start, 15)
+    const end = arg.end ? roundToMinutes(arg.end, 15) : new Date(start.getTime() + 30 * 60_000)
 
-  setNuevaCitaDefaults({ inicio: start, fin: end });
-  setNuevaCitaOpen(true);
+    setNuevaCitaDefaults({ inicio: start, fin: end })
+    setNuevaCitaOpen(true)
 
-  // Limpia la selección visual del calendario
-  arg.view.calendar.unselect?.();
-}, []);
+    // Limpia la selección visual del calendario
+    arg.view.calendar.unselect?.()
+  }, [])
 
   const onEventClick = useCallback(
     (arg: EventClickArg) => {
@@ -98,8 +127,6 @@ export default function CitasCalendar({
     },
     [openDrawer],
   )
- 
-
 
   const handleAfterChange = useCallback(() => {
     calendarRef.current?.getApi().refetchEvents()
@@ -119,7 +146,7 @@ export default function CitasCalendar({
         }
       })
 
-      const ext = arg.event.extendedProps as any
+      const ext = arg.event.extendedProps as CitaEventExtendedProps
       if (ext?.consultorioColorHex) {
         arg.el.style.borderLeft = `4px solid ${ext.consultorioColorHex}`
       }
@@ -154,13 +181,13 @@ export default function CitasCalendar({
             timeZone="local"
             initialView="timeGridWeek"
             slotMinTime={WORK_START}
-  slotMaxTime={WORK_END}
-  businessHours={{
-    // Lunes a sábado (ajusta si trabajas otros días)
-    daysOfWeek: [1, 2, 3, 4, 5, 6],
-    startTime: WORK_START,
-    endTime: WORK_END,
-  }}
+            slotMaxTime={WORK_END}
+            businessHours={{
+              // Lunes a sábado (ajusta si trabajas otros días)
+              daysOfWeek: [1, 2, 3, 4, 5, 6],
+              startTime: WORK_START,
+              endTime: WORK_END,
+            }}
             slotDuration="00:15:00"
             scrollTime="08:00:00"
             nowIndicator
@@ -196,34 +223,43 @@ export default function CitasCalendar({
         </div>
       </div>
 
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className={cn("w-full p-0", "sm:max-w-md", "md:max-w-lg")}>
-          {selectedEventId && (
-            <CitaDrawer
-              idCita={selectedEventId}
-              onClose={closeDrawer}
-              currentUser={currentUser}
-              onAfterChange={handleAfterChange}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
+      {shouldMountSheet && (
+        <Sheet 
+          open={drawerOpen} 
+          onOpenChange={(open) => {
+            // Manejar el cambio de estado del Sheet de forma robusta
+            setDrawerOpen(open)
+            // Nota: selectedEventId y shouldMountSheet se limpian automáticamente
+            // en el useEffect cuando drawerOpen cambia a false, después de la animación
+          }}
+        >
+          <SheetContent side="right" className={cn("w-full p-0", "sm:max-w-md", "md:max-w-lg")}>
+            {selectedEventId && (
+              <CitaDrawer
+                idCita={selectedEventId}
+                currentUser={currentUser}
+                onAfterChange={handleAfterChange}
+                onClose={closeDrawer}
+              />
+            )}
+          </SheetContent>
+        </Sheet>
+      )}
 
       <NuevaCitaSheet
-  key={nuevaCitaDefaults.inicio?.getTime() ?? 0}
-  open={nuevaCitaOpen}
-  onOpenChange={setNuevaCitaOpen}
-  defaults={nuevaCitaDefaults}
-  currentUser={currentUser}
-  onSuccess={handleAfterChange}
-/>
-
+        key={nuevaCitaDefaults.inicio?.getTime() ?? 0}
+        open={nuevaCitaOpen}
+        onOpenChange={setNuevaCitaOpen}
+        defaults={nuevaCitaDefaults}
+        currentUser={currentUser}
+        onSuccess={handleAfterChange}
+      />
     </div>
   )
 }
 
 function renderEventContent(arg: EventContentArg) {
-  const ext = arg.event.extendedProps as any
+  const ext = arg.event.extendedProps as CitaEventExtendedProps
   const estado: EstadoCita = ext?.estado ?? "SCHEDULED"
 
   // Chip de estado con color + patrón accesible

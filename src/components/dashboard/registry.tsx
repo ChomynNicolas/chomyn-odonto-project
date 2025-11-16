@@ -51,7 +51,7 @@ async function CitasProximasWrapper({ role }:{ role: Rol }) {
   const data = await fetchKpi(role);
   return (
     <div className="rounded-xl border bg-white p-4 shadow-sm">
-      <CitasProximas items={data.proximas10} />
+      <CitasProximas items={data.proximas10} atrasadas={data.atrasadas} />
     </div>
   );
 }
@@ -73,9 +73,15 @@ async function OcupacionWrapper({ role }:{ role: Rol }) {
 }
 async function AlertasWrapper({ role }:{ role: Rol }) {
   const data = await fetchKpi(role);
+  const resumen = {
+    sinConfirmar24h: data.alertas.sinConfirmar24h.length,
+    atrasadas: data.atrasadas.length,
+    conflictos: data.alertas.conflictos.length,
+    bloqueos: data.alertas.bloqueosActivos.length,
+  };
   return (
     <div className="rounded-xl border bg-white p-4 shadow-sm">
-      <AlertasOperativas alertas={data.alertas} />
+      <AlertasOperativas alertas={data.alertas} resumen={resumen} />
     </div>
   );
 }

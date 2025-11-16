@@ -3,9 +3,9 @@
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { useCallback, useMemo } from "react"
-import type { KpiFilters } from "@/app/api/kpis/clinico/_dto"
-import type { DateRangePreset } from "@/app/api/kpis/clinico/_schemas"
 import { getDateRangeFromPreset } from "@/lib/kpis/date-range"
+import { KpiFilters } from "@/app/api/dashboard/kpi/_dto"
+import { DateRangePreset } from "@/app/api/dashboard/kpi/_schemas"
 
 /**
  * Hook para gestionar filtros de KPIs con sincronización URL

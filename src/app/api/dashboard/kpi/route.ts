@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const role = ((auth.session.user as any)?.role as "RECEP" | "ODONT" | "ADMIN") ?? "RECEP"
+    const role = (auth.session.user.role ?? "RECEP") as "RECEP" | "ODONT" | "ADMIN"
     const result = await buildDashboardKpi(parsed.data, role)
 
     // Cache ligera de 60s para aliviar DB en dashboard
@@ -28,8 +28,10 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: { "Cache-Control": "private, max-age=60" },
     })
-  } catch (e: any) {
-    console.error("GET /api/dashboard/kpi error:", e?.code || e?.message)
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    console.error("GET /api/dashboard/kpi error:", code || errorMessage)
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
 }

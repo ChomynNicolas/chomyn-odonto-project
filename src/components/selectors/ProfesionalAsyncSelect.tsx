@@ -24,6 +24,7 @@ export function ProfesionalAsyncSelect({ value, onChange, placeholder = "Buscar 
   const [loading, setLoading] = React.useState(false);
   const [label, setLabel] = React.useState<string>("");
 
+  // Efecto para buscar profesionales cuando cambia el query debounced
   React.useEffect(() => {
     let active = true;
     (async () => {
@@ -32,16 +33,27 @@ export function ProfesionalAsyncSelect({ value, onChange, placeholder = "Buscar 
         const data = await apiBuscarProfesionales(debounced);
         if (!active) return;
         setItems(data);
-        if (value && !label) {
-          const found = data.find((d) => d.id === value);
-          if (found) setLabel(found.nombre);
-        }
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
   }, [debounced]);
+
+  // Efecto separado para cargar el label cuando hay un value seleccionado
+  React.useEffect(() => {
+    if (!value || items.length === 0) return;
+    
+    const found = items.find((d) => d.id === value);
+    if (found) {
+      // Solo actualizar si el label actual no coincide con el nuevo label
+      // Esto previene loops infinitos mientras mantiene el label actualizado
+      setLabel((currentLabel) => {
+        if (currentLabel === found.nombre) return currentLabel;
+        return found.nombre;
+      });
+    }
+  }, [value, items]);
 
   const current = value ? items.find((i) => i.id === value) : undefined;
 

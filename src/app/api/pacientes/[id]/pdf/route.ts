@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const patientId = Number.parseInt(params.id, 10)
+    const { id: idParam } = await params;
+    const patientId = Number.parseInt(idParam, 10)
     if (isNaN(patientId)) {
       return NextResponse.json({ error: "Invalid patient ID" }, { status: 400 })
     }

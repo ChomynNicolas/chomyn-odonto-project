@@ -8,9 +8,10 @@ const ClinicalNoteSchema = z.object({
   fecha: z.string(),
 })
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 })
     }
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       include: {
         createdBy: {
           select: {
+            idUsuario: true,
             nombreApellido: true,
           },
         },
@@ -34,21 +36,24 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       notes: note.notes,
       fecha: note.fecha.toISOString(),
       createdBy: {
-        firstName: note.createdBy.nombreApellido.split(" ")[0] || "",
-        lastName: note.createdBy.nombreApellido.split(" ").slice(1).join(" ") || "",
+        id: note.createdBy.idUsuario || 0,
+        nombre: note.createdBy.nombreApellido || "Usuario",
       },
+      createdAt: note.createdAt.toISOString(),
     }))
 
     return NextResponse.json({ ok: true, data: formatted })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error fetching clinical notes:", error)
-    return NextResponse.json({ ok: false, error: "Error al obtener notas clínicas" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al obtener notas clínicas"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const pacienteId = Number.parseInt(params.id)
+    const { id: idParam } = await params;
+    const pacienteId = Number.parseInt(idParam)
     if (isNaN(pacienteId)) {
       return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 })
     }
@@ -67,8 +72,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     })
 
     return NextResponse.json({ ok: true, data: note })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[API] Error creating clinical note:", error)
-    return NextResponse.json({ ok: false, error: "Error al crear nota clínica" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Error al crear nota clínica"
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
 }

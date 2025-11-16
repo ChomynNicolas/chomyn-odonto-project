@@ -14,7 +14,7 @@ export const patientUpdateBodySchema = z.object({
   // Demographics
   gender: z
     .enum(["MALE", "FEMALE", "OTHER"], {
-      errorMap: () => ({ message: "Género inválido" }),
+      message: "Género inválido",
     })
     .optional(),
   dateOfBirth: z.string().datetime().optional().nullable(),
@@ -23,6 +23,8 @@ export const patientUpdateBodySchema = z.object({
   documentType: z.enum(["CI", "PASSPORT", "RUC", "OTHER"]).optional(),
   documentNumber: z.string().min(1).max(50).optional(),
   documentCountry: z.enum(["PY", "AR", "BR", "OTHER"]).optional(),
+  documentIssueDate: z.string().datetime().optional().nullable(), // ⭐ Added
+  documentExpiryDate: z.string().datetime().optional().nullable(), // ⭐ Added
   ruc: z.string().max(50).optional().nullable(),
 
   // Contact
@@ -32,6 +34,7 @@ export const patientUpdateBodySchema = z.object({
   // Address
   address: z.string().max(300).optional().nullable(),
   city: z.string().max(100).optional().nullable(),
+  country: z.enum(["PY", "AR", "BR", "OTHER"]).optional().nullable(), // ⭐ Added
 
   // Insurance
   insurance: z.string().max(120).optional().nullable(),
@@ -39,6 +42,7 @@ export const patientUpdateBodySchema = z.object({
   // Emergency contact
   emergencyContactName: z.string().max(160).optional().nullable(),
   emergencyContactPhone: z.string().max(20).optional().nullable(),
+  emergencyContactRelation: z.string().max(50).optional().nullable(), // ⭐ Added
 
   // Status (only ADMIN/RECEP can change)
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),

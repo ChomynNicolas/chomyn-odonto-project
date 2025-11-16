@@ -1,13 +1,16 @@
 // src/app/api/pacientes/[id]/turnos/route.ts
 import { NextResponse } from "next/server";
 import { prisma as db } from "@/lib/prisma";
+import { EstadoCita } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 // Estados de tu enum:
 // SCHEDULED | CONFIRMED | CHECKED_IN | IN_PROGRESS | COMPLETED | CANCELLED | NO_SHOW
-const FUTURE_STATES = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"] as const;
+const FUTURE_STATES: EstadoCita[] = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"];
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: idParam } = await params;
+  const id = Number(idParam);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 });
   }
@@ -27,8 +30,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     where: {
       pacienteId: id,
       OR: [
-        { inicio: { gte: now }, estado: { in: FUTURE_STATES as any } },
-        { inicio: { lte: now }, fin: { gte: now }, estado: { in: FUTURE_STATES as any } }, // en curso
+        { inicio: { gte: now }, estado: { in: FUTURE_STATES } },
+        { inicio: { lte: now }, fin: { gte: now }, estado: { in: FUTURE_STATES } }, // en curso
       ],
     },
     include: {
@@ -65,7 +68,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     take: 50,
   });
 
-  const mapTurno = (c: any) => {
+  type CitaWithRelations = Prisma.CitaGetPayload<{
+    include: {
+      profesional: { include: { persona: true } }
+      consultorio: true
+    }
+  }>
+
+  const mapTurno = (c: CitaWithRelations) => {
     const inicio = new Date(c.inicio);
     const fin = new Date(c.fin);
     const profesionalNombre = [c.profesional?.persona?.nombres, c.profesional?.persona?.apellidos].filter(Boolean).join(" ").trim();

@@ -10,14 +10,14 @@ import { ok, errors, generateETag, checkETag, checkRateLimit, safeLog } from "..
 
 
 
-export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return errors.forbidden()
 
   const requestId = crypto.randomUUID()
 
   try {
-    const { id } = pathParamsSchema.parse(ctx.params)
+    const { id } = pathParamsSchema.parse(await ctx.params)
 
     safeLog("info", "Fetching patient record", { requestId, pacienteId: id, userId: gate.userId })
 
@@ -52,18 +52,25 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
         "Cache-Control": "private, must-revalidate",
       },
     })
-  } catch (e: any) {
-    safeLog("error", "Error fetching patient record", { requestId, error: e?.message })
-    if (e?.name === "ZodError") return errors.validation("Parámetros inválidos")
-    return errors.internal(e?.message ?? "Error al obtener paciente")
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error fetching patient record", { requestId, error: errorMessage })
+    if (e instanceof Error && e.name === "ZodError") return errors.validation("Parámetros inválidos")
+    return errors.internal(errorMessage ?? "Error al obtener paciente")
   }
 }
 
-export async function PUT(req: NextRequest, ctx: { params: { id: string } }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return errors.forbidden()
 
   const requestId = crypto.randomUUID()
+
+  // Validate userId is defined for rate limiting
+  if (gate.userId === undefined) {
+    safeLog("error", "User ID is undefined", { requestId })
+    return errors.forbidden("Usuario no identificado")
+  }
 
   // Rate limiting for mutations
   const rateLimitKey = `update:${gate.userId}`
@@ -74,7 +81,7 @@ export async function PUT(req: NextRequest, ctx: { params: { id: string } }) {
   }
 
   try {
-    const { id } = pathParamsSchema.parse(ctx.params)
+    const { id } = pathParamsSchema.parse(await ctx.params)
     const body = patientUpdateBodySchema.parse(await req.json())
 
     // Check If-Match header for optimistic locking
@@ -95,27 +102,52 @@ export async function PUT(req: NextRequest, ctx: { params: { id: string } }) {
       }
     }
 
+    // Get client IP for audit
+    const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined
+
+    // Build update context (userId is already validated above)
+    const context = {
+      userId: gate.userId,
+      role: gate.role,
+      ip,
+    }
+
     safeLog("info", "Updating patient", { requestId, pacienteId: id, userId: gate.userId })
 
-    const result = await updatePaciente(id, body, gate.userId)
+    const result = await updatePaciente(id, body, context)
 
     safeLog("info", "Patient updated successfully", { requestId, pacienteId: id })
 
     return ok(result)
-  } catch (e: any) {
-    safeLog("error", "Error updating patient", { requestId, error: e?.message })
-    if (e?.name === "ZodError") return errors.validation(e.issues?.[0]?.message ?? "Datos inválidos")
-    if (e?.status === 404) return errors.notFound(e.message)
-    if (e?.code === "P2002") return errors.conflict("Ya existe un registro con esos datos")
-    return errors.internal(e?.message ?? "Error al actualizar paciente")
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error updating patient", { requestId, error: errorMessage })
+    if (e instanceof Error && e.name === "ZodError") {
+      const zodError = e as { issues?: Array<{ message?: string }> }
+      return errors.validation(zodError.issues?.[0]?.message ?? "Datos inválidos")
+    }
+    const status = (e as { status?: number })?.status
+    if (status === 404) {
+      const error = e as { message?: string }
+      return errors.notFound(error.message ?? "No encontrado")
+    }
+    const code = (e as { code?: string })?.code
+    if (code === "P2002") return errors.conflict("Ya existe un registro con esos datos")
+    return errors.internal(errorMessage ?? "Error al actualizar paciente")
   }
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireRole(["ADMIN", "RECEP", "ODONT"])
   if (!gate.ok) return errors.forbidden()
 
   const requestId = crypto.randomUUID()
+
+  // Validate userId is defined for rate limiting
+  if (gate.userId === undefined) {
+    safeLog("error", "User ID is undefined", { requestId })
+    return errors.forbidden("Usuario no identificado")
+  }
 
   // Rate limiting for deletions
   const rateLimitKey = `delete:${gate.userId}`
@@ -126,7 +158,7 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
   }
 
   try {
-    const { id } = pathParamsSchema.parse(ctx.params)
+    const { id } = pathParamsSchema.parse(await ctx.params)
     const query = deleteQuerySchema.parse(Object.fromEntries(req.nextUrl.searchParams))
     const role = gate.role!
 
@@ -142,30 +174,33 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
     safeLog("info", "Patient deleted successfully", { requestId, pacienteId: id, mode: result.mode })
 
     return ok({ mode: result.mode, result })
-  } catch (e: any) {
-    safeLog("error", "Error deleting patient", { requestId, error: e?.message })
-    if (e?.name === "ZodError") return errors.validation("Parámetros inválidos")
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e)
+    safeLog("error", "Error deleting patient", { requestId, error: errorMessage })
+    if (e instanceof Error && e.name === "ZodError") return errors.validation("Parámetros inválidos")
     if (e instanceof DeletePacienteError)
       return errors.apiError?.(e.status, e.code, e.message) ?? errors.internal(e.message)
-    if (e?.code === "P2003") return errors.fk("No se puede eliminar por restricciones de integridad")
-    return errors.internal(e?.message ?? "Error al eliminar/inactivar paciente")
+    const code = (e as { code?: string })?.code
+    if (code === "P2003") return errors.fk("No se puede eliminar por restricciones de integridad")
+    return errors.internal(errorMessage ?? "Error al eliminar/inactivar paciente")
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     // 1. Authentication & authorization (mock - replace with real auth)
     const userId = 1 // TODO: Get from session
     const userRole = "ADMIN" as "ADMIN" | "RECEP" | "ODONT" // TODO: Get from session
 
     // 2. Parse and validate request
-    const id = Number.parseInt(params.id, 10)
+    const resolvedParams = await params
+    const id = Number.parseInt(resolvedParams.id, 10)
     if (isNaN(id)) {
       return Response.json({ ok: false, error: "ID inválido" }, { status: 400 })
     }
 
     const body = await req.json()
-    const validatedBody = pacienteUpdateBodySchema.parse(body)
+    const validatedBody = patientUpdateBodySchema.parse(body)
 
     // 3. Get client IP for audit
     const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined
@@ -187,35 +222,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         },
       },
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[PATCH /api/pacientes/[id]]", error)
 
     // Handle Zod validation errors
-    if (error.name === "ZodError") {
+    if (error instanceof Error && error.name === "ZodError") {
+      const zodError = error as { errors?: unknown }
       return Response.json(
         {
           ok: false,
           error: "Datos inválidos",
-          details: error.errors,
+          details: zodError.errors,
         },
         { status: 400 },
       )
     }
 
     // Handle custom errors
-    if (error.status) {
+    const status = (error as { status?: number })?.status
+    if (status) {
+      const errorObj = error as { message?: string; code?: string }
       return Response.json(
         {
           ok: false,
-          error: error.message,
-          code: error.code,
+          error: errorObj.message ?? "Error",
+          code: errorObj.code,
         },
-        { status: error.status },
+        { status },
       )
     }
 
     // Handle Prisma unique constraint violations
-    if (error.code === "P2002") {
+    const code = (error as { code?: string })?.code
+    if (code === "P2002") {
       return Response.json(
         {
           ok: false,

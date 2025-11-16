@@ -44,7 +44,7 @@ export function AddClinicalNoteDialog({ open, onOpenChange, patientId, onSuccess
       onSuccess()
       onOpenChange(false)
       setFormData({ title: "", notes: "" })
-    } catch (error) {
+    } catch {
       toast.error("Error al agregar nota clínica")
     } finally {
       setIsSubmitting(false)

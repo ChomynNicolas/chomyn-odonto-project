@@ -5,8 +5,8 @@ import { fichaRepo } from "./_repo";
 export class DeletePacienteError extends Error {
   code: string;
   status: number;
-  extra?: any;
-  constructor(code: string, message: string, status = 400, extra?: any) {
+  extra?: unknown;
+  constructor(code: string, message: string, status = 400, extra?: unknown) {
     super(message);
     this.code = code;
     this.status = status;
@@ -38,7 +38,7 @@ export async function deletePacienteById(params: {
 
   if (!wantHard) {
     // Soft delete idempotente (si ya está inactivo, no es error)
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async () => {
       const updated = await fichaRepo.softInactivatePaciente(pacienteId);
       if (alsoInactivatePersona && identity.personaId) {
         await fichaRepo.softInactivatePersona(identity.personaId);
@@ -61,7 +61,7 @@ export async function deletePacienteById(params: {
   }
 
   // Hard delete
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async () => {
     const deleted = await fichaRepo.hardDeletePaciente(pacienteId);
     // (Opcional) también podrías eliminar Persona si sabes que no la usas en otra entidad
     // await tx.persona.delete({ where: { idPersona: identity.personaId } });

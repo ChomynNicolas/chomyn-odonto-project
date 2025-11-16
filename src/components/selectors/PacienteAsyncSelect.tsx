@@ -28,6 +28,7 @@ export function PacienteAsyncSelect({ value, onChange, placeholder = "Buscar por
   const [loading, setLoading] = React.useState(false);
   const [label, setLabel] = React.useState<string>("");
 
+  // Efecto para buscar pacientes cuando cambia el query debounced
   React.useEffect(() => {
     let active = true;
     (async () => {
@@ -36,17 +37,28 @@ export function PacienteAsyncSelect({ value, onChange, placeholder = "Buscar por
         const data = await apiBuscarPacientes(debounced, 10);
         if (!active) return;
         setItems(data);
-        // si ya hay value, intentamos mostrar su label
-        if (value && !label) {
-          const found = data.find((d) => d.id === value);
-          if (found) setLabel(`${found.label}${found.doc ? " · " + found.doc : ""}`);
-        }
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
   }, [debounced]);
+
+  // Efecto separado para cargar el label cuando hay un value seleccionado
+  React.useEffect(() => {
+    if (!value || items.length === 0) return;
+    
+    const found = items.find((d) => d.id === value);
+    if (found) {
+      const newLabel = `${found.label}${found.doc ? " · " + found.doc : ""}`;
+      // Solo actualizar si el label actual no coincide con el nuevo label
+      // Esto previene loops infinitos mientras mantiene el label actualizado
+      setLabel((currentLabel) => {
+        if (currentLabel === newLabel) return currentLabel;
+        return newLabel;
+      });
+    }
+  }, [value, items]);
 
   const current = value ? items.find((i) => i.id === value) : undefined;
 

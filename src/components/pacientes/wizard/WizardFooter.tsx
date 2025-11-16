@@ -10,7 +10,7 @@ interface WizardFooterProps {
   isSubmitting: boolean
   onPrevious: () => void
   onNext: () => void
-  onSave: (intent: "continue" | "open" | "schedule") => void
+  onSave: (intent: "continue" | "open") => void
   onCancel: () => void
 }
 
@@ -58,7 +58,6 @@ export function WizardFooter({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onSave("continue")}>Guardar y Continuar Editando</DropdownMenuItem>
               <DropdownMenuItem onClick={() => onSave("open")}>Guardar y Abrir Ficha</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onSave("schedule")}>Guardar y Agendar Cita</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

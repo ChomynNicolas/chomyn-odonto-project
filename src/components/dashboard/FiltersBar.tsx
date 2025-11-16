@@ -13,9 +13,17 @@ export default function FiltersBar() {
 
   function apply() {
     const qs = new URLSearchParams(sp.toString());
-    profesionalId ? qs.set("prof", profesionalId) : qs.delete("prof");
-    consultorioId ? qs.set("cons", consultorioId) : qs.delete("cons");
-    router.replace(`/?${qs.toString()}`);
+    if (profesionalId) {
+      qs.set("prof", profesionalId)
+    } else {
+      qs.delete("prof")
+    }
+    if (consultorioId) {
+      qs.set("cons", consultorioId)
+    } else {
+      qs.delete("cons")
+    }
+    router.replace(`/?${qs.toString()}`)
   }
 
   return (

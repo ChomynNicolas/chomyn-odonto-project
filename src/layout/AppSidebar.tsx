@@ -35,6 +35,7 @@ const navItems: NavItem[] = [
   // Operación
   { group: "Operación", name: "Inicio", path: "/", icon: <GridIcon /> },
   { group: "Operación", name: "Agenda", path: "/calendar", icon: <CalendarDays /> },
+  { group: "Operación", name: "Búsqueda de Citas", path: "/citas", icon: <CalendarSearch /> },
   
 
   // Pacientes

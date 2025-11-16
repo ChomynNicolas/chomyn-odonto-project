@@ -55,6 +55,7 @@ export function KpiCalidadSection({ calidad }: KpiCalidadSectionProps) {
         {/* Consultas con adjuntos */}
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
           <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image className="h-3 w-3" aria-hidden="true" />
             Consultas con Adjuntos
           </div>

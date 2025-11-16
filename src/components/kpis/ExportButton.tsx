@@ -5,7 +5,7 @@ import { Download } from "lucide-react"
 import { ExportColumn, generateCSV, downloadCSV } from "@/lib/kpis/export-csv"
 
 interface ExportButtonProps {
-  data: any[]
+  data: Record<string, unknown>[]
   columns: ExportColumn[]
   filename: string
   privacyMode?: boolean

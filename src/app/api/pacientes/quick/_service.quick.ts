@@ -5,6 +5,7 @@ import type { PacienteQuickCreateDTO } from "./_schemas"
 import { splitNombreCompleto } from "./_dto"
 import { normalizeEmail, normalizePhonePY } from "@/lib/normalize"
 import type { Prisma } from "@prisma/client"
+import { TipoDocumento } from "@prisma/client"
 
 export class QuickCreateError extends Error {
   code: "VALIDATION_ERROR" | "UNIQUE_CONFLICT" | "INTERNAL_ERROR"
@@ -34,14 +35,20 @@ function toDateUTCFromYYYYMMDD(v?: string): Date | null {
 }
 
 function isPrismaUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestError {
-  return !!e && typeof e === "object" && (e as any).code === "P2002"
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "code" in e &&
+    typeof (e as { code: unknown }).code === "string" &&
+    (e as { code: string }).code === "P2002"
+  )
 }
 
 export async function quickCreatePaciente(
   input: PacienteQuickCreateDTO,
-  actorUserId?: number,
+  actorUserId: number,
 ): Promise<QuickCreateResult> {
-  const { nombres, apellidos } = splitNombreCompleto(input.nombreCompleto)
+  const { nombres, apellidos, segundoApellido } = splitNombreCompleto(input.nombreCompleto)
   const generoDB = input.genero
 
   const phoneNorm = normalizePhonePY(input.telefono)
@@ -55,7 +62,7 @@ export async function quickCreatePaciente(
 
   // Pre-check documento
   const docExists = await prisma.documento.findFirst({
-    where: { tipo: input.tipoDocumento as any, numero: input.dni.trim() },
+    where: { tipo: input.tipoDocumento as TipoDocumento, numero: input.dni.trim() },
     select: { idDocumento: true },
   })
   if (docExists) throw new QuickCreateError("UNIQUE_CONFLICT", "Ya existe un paciente con ese documento", 409)
@@ -65,6 +72,7 @@ export async function quickCreatePaciente(
       const persona = await pacienteRepo.createPersonaConDocumento(tx, {
         nombres,
         apellidos,
+        segundoApellido,
         genero: generoDB,
         fechaNacimiento: toDateUTCFromYYYYMMDD(input.fechaNacimiento)!,
         direccion: null,
@@ -97,14 +105,27 @@ export async function quickCreatePaciente(
         notasJson: {},
       })
 
-      // Auditoría opcional…
-
       return { idPaciente: paciente.idPaciente, idPersona: persona.idPersona }
     })
 
+    // Audit log (no bloqueante)
+    await prisma.auditLog.create({
+      data: {
+        action: "PATIENT_CREATE",
+        entity: "Patient",
+        entityId: idPaciente,
+        actorId: actorUserId,
+        metadata: { 
+          nombreCompleto: `${nombres} ${apellidos}`.trim(),
+          documento: input.dni,
+          tipoDocumento: input.tipoDocumento,
+        } as Prisma.InputJsonValue,
+      },
+    }).catch((e) => console.error("[warn] audit create failed", e))
+
     const item = await pacienteRepo.getPacienteUI(idPaciente)
     return { idPaciente, idPersona, item }
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (isPrismaUniqueError(e)) {
       throw new QuickCreateError("UNIQUE_CONFLICT", "Ya existe un paciente con ese documento o contacto", 409)
     }

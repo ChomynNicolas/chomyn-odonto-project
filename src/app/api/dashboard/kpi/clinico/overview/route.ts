@@ -1,8 +1,8 @@
 // src/app/api/kpis/clinico/overview/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { requireSessionWithRoles } from "@/app/api/_lib/auth"
-import { kpiFiltersSchema } from "../_schemas"
-import { buildKpiClinicoOverview } from "../_service"
+import { kpiFiltersSchema } from "../../_schemas"
+import { buildKpiClinicoOverview } from "../../_service"
 
 export const dynamic = "force-dynamic"
 
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { session, role } = authResult
-  const userId = (session.user as any).id
+  const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
   try {
     // Parsear query params
@@ -52,11 +52,12 @@ export async function GET(req: NextRequest) {
         "Content-Type": "application/json",
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[KPI Clinico Overview] Error:", error)
 
-    if (error.name === "ZodError") {
-      return NextResponse.json({ error: "Parámetros inválidos", details: error.errors }, { status: 400 })
+    if (error instanceof Error && error.name === "ZodError") {
+      const zodError = error as { errors?: unknown }
+      return NextResponse.json({ error: "Parámetros inválidos", details: zodError.errors }, { status: 400 })
     }
 
     return NextResponse.json({ error: "Error al calcular KPIs clínicos" }, { status: 500 })

@@ -9,10 +9,10 @@ interface AppointmentsTabProps {
   patient: PatientRecord
   userRole: UserRole
   onNewAppointment: () => void
-  onUpdate: () => void
+  onUpdate?: () => void
 }
 
-export function AppointmentsTab({ patient, userRole, onNewAppointment, onUpdate }: AppointmentsTabProps) {
+export function AppointmentsTab({ patient, userRole, onNewAppointment }: AppointmentsTabProps) {
   return (
     <div className="space-y-6">
       {/* Appointments */}

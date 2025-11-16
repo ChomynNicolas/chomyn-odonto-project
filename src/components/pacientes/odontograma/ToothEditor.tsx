@@ -62,12 +62,14 @@ export function ToothEditor({ tooth, toothNumber, onUpdate, onClose }: ToothEdit
               <SelectItem value="MISSING">Ausente</SelectItem>
               <SelectItem value="IMPLANT">Implante</SelectItem>
               <SelectItem value="ROOT_CANAL">Endodoncia</SelectItem>
+              <SelectItem value="BRIDGE">Puente</SelectItem>
+              <SelectItem value="EXTRACTION_NEEDED">Extracción necesaria</SelectItem>
               <SelectItem value="FRACTURED">Fracturado</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {condition !== "MISSING" && condition !== "IMPLANT" && (
+        {condition !== "MISSING" && condition !== "IMPLANT" && condition !== "BRIDGE" && condition !== "EXTRACTION_NEEDED" && (
           <div className="space-y-2">
             <Label>Superficies Afectadas</Label>
             <div className="space-y-2">

@@ -1,7 +1,42 @@
 // app/api/agenda/disponibilidad/_service.ts
 import { PrismaClient, type EstadoCita } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { GetDisponibilidadQuery } from "./_schemas";
 import type { SlotDTO } from "./_dto";
+
+// Tipo para la disponibilidad del profesional (JSON almacenado en BD)
+type ProfesionalDisponibilidad = {
+  dow?: {
+    [key: string]: [string, string][];
+  };
+} | null;
+
+// Valida y convierte Prisma.JsonValue a ProfesionalDisponibilidad
+function parseProfesionalDisponibilidad(
+  json: Prisma.JsonValue | null | undefined
+): ProfesionalDisponibilidad {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    return null;
+  }
+  const obj = json as Record<string, unknown>;
+  if (!obj.dow || typeof obj.dow !== "object" || Array.isArray(obj.dow)) {
+    return null;
+  }
+  const dow = obj.dow as Record<string, unknown>;
+  const parsedDow: Record<string, [string, string][]> = {};
+  for (const [key, value] of Object.entries(dow)) {
+    if (Array.isArray(value)) {
+      const segments = value.filter((seg): seg is [string, string] => 
+        Array.isArray(seg) && seg.length === 2 && 
+        typeof seg[0] === "string" && typeof seg[1] === "string"
+      );
+      if (segments.length > 0) {
+        parsedDow[key] = segments;
+      }
+    }
+  }
+  return Object.keys(parsedDow).length > 0 ? { dow: parsedDow } : null;
+}
 
 const prisma = new PrismaClient();
 
@@ -115,7 +150,7 @@ function fallbackWorkingWindowsUtc(fechaYMD: string) {
  */
 function buildWorkingWindowsUtc(
   fechaYMD: string,
-  profesionalDisponibilidad: any | null
+  profesionalDisponibilidad: ProfesionalDisponibilidad
 ): Array<{ start: Date; end: Date }> {
   if (!profesionalDisponibilidad?.dow) return fallbackWorkingWindowsUtc(fechaYMD);
 
@@ -192,16 +227,19 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   }
 
   // 2) Ventanas laborales (preferencia disponibilidad; si no, 08–16 local)
-  const working = buildWorkingWindowsUtc(ymd, profesional?.disponibilidad ?? null);
+  const disponibilidad = parseProfesionalDisponibilidad(profesional?.disponibilidad ?? null);
+  const working = buildWorkingWindowsUtc(ymd, disponibilidad);
 
   // 3) Citas activas que intersecten el día
-  const whereCita: any = {
+  const whereCita: Prisma.CitaWhereInput = {
     estado: { in: ACTIVE_CITA_STATES },
     inicio: { lt: nextDayUtc },
     fin: { gt: dayStartUtc },
   };
   if (query.profesionalId) whereCita.profesionalId = query.profesionalId;
   if (query.consultorioId) whereCita.consultorioId = query.consultorioId;
+  // Excluir cita específica (útil para reschedule: no considerar la cita que se está reprogramando)
+  if (query.excludeCitaId) whereCita.idCita = { not: query.excludeCitaId };
 
   const citas = await prisma.cita.findMany({
     where: whereCita,
@@ -209,7 +247,7 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   });
 
   // 4) Bloqueos
-  const whereBloq: any = {
+  const whereBloq: Prisma.BloqueoAgendaWhereInput = {
     activo: true,
     desde: { lt: nextDayUtc },
     hasta: { gt: dayStartUtc },

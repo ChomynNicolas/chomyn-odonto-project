@@ -103,7 +103,7 @@ export default function AppointmentsByMonthChart({
           formatter: (val: number) => `${val} turno${val === 1 ? "" : "s"}`,
         },
         // total por mes en tooltip
-        custom: ({ series, seriesIndex, dataPointIndex }) => {
+        custom: ({ series, dataPointIndex }) => {
           const c = series[0][dataPointIndex] ?? 0;
           const x = series[1][dataPointIndex] ?? 0;
           const n = series[2][dataPointIndex] ?? 0;
@@ -170,7 +170,7 @@ export default function AppointmentsByMonthChart({
       {/* Chart */}
       <div className="max-w-full overflow-x-auto custom-scrollbar">
         <div className="-ml-5 min-w-[650px] xl:min-w-full pl-2">
-          <ReactApexChart options={options} series={series as any} type="bar" height={220} />
+          <ReactApexChart options={options} series={series} type="bar" height={220} />
         </div>
       </div>
     </div>

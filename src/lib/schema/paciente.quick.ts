@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { GeneroEnum, TipoDocumentoEnum } from "./paciente"
 
 /**
  * Zod schema for quick patient creation
@@ -6,10 +7,8 @@ import { z } from "zod"
  */
 export const pacienteQuickCreateSchema = z.object({
   nombreCompleto: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
-  genero: z.enum(["MASCULINO", "FEMENINO", "OTRO", "NO_ESPECIFICADO"]).optional(),
-  tipoDocumento: z.enum(["CI", "DNI", "PASAPORTE", "RUC", "OTRO"], {
-    required_error: "El tipo de documento es requerido",
-  }),
+  genero: GeneroEnum.optional(),
+  tipoDocumento: TipoDocumentoEnum, // Required by default, no custom error needed
   dni: z.string().min(3, "El número de documento debe tener al menos 3 caracteres"),
   telefono: z.string().min(6, "El teléfono debe tener al menos 6 dígitos"),
   email: z.string().email("Email inválido").optional().or(z.literal("")),

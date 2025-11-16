@@ -13,6 +13,7 @@ export const getDisponibilidadQuerySchema = z.object({
   consultorioId: z.coerce.number().int().positive().optional(),
   duracionMinutos: z.coerce.number().int().min(5).max(480).default(30),
   intervalo: z.coerce.number().int().min(5).max(60).default(15),
+  excludeCitaId: z.coerce.number().int().positive().optional(), // Excluir esta cita del cálculo (útil para reschedule)
 })
 
 export type GetDisponibilidadQuery = z.infer<typeof getDisponibilidadQuerySchema>

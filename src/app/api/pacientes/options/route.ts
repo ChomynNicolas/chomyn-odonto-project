@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma as db } from "@/lib/prisma";
 import { requireRole } from "../_rbac";
-import {  TipoContacto } from '@prisma/client';
+import { TipoContacto, Prisma } from '@prisma/client';
 
 export const revalidate = 0;
 
@@ -27,22 +27,24 @@ export async function GET(req: NextRequest) {
   // Heurística: si q = solo dígitos (>=4), prioriza documento
   const qIsDoc = !!q && /^\d{4,}$/.test(q);
 
-  const where = q
-    ? {
-        AND: [
-          { estaActivo: true },
-          {
-            OR: [
-              ...(qIsDoc
-                ? [{ persona: { documento: { numero: { contains: q, mode: "insensitive" } } } }]
-                : []),
-              { persona: { nombres: { contains: q, mode: "insensitive" } } },
-              { persona: { apellidos: { contains: q, mode: "insensitive" } } },
-            ],
-          },
-        ],
-      }
-    : { estaActivo: true };
+  // Construir where con tipos explícitos para Prisma
+  const whereAND: Prisma.PacienteWhereInput[] = [{ estaActivo: true }];
+  
+  if (q) {
+    const orConditions: Prisma.PacienteWhereInput[] = [
+      { persona: { nombres: { contains: q, mode: "insensitive" } } },
+      { persona: { apellidos: { contains: q, mode: "insensitive" } } },
+    ];
+    
+    // Si es búsqueda por documento, agregar condición de documento primero
+    if (qIsDoc) {
+      orConditions.unshift({ persona: { documento: { numero: { contains: q, mode: "insensitive" } } } });
+    }
+    
+    whereAND.push({ OR: orConditions });
+  }
+
+  const where: Prisma.PacienteWhereInput = { AND: whereAND };
 
   const rows = await db.paciente.findMany({
     where,

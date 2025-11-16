@@ -8,6 +8,7 @@ import { requireSessionWithRoles } from "@/app/api/_lib/auth"
 import { prisma } from "@/lib/prisma"
 import { ofuscarNombre, ofuscarDocumento } from "@/lib/kpis/privacy"
 import type { Prisma } from "@prisma/client"
+import { EstadoCita } from "@prisma/client"
 import { kpiFiltersSchema, drillDownQuerySchema } from "../../../_schemas"
 
 export const dynamic = "force-dynamic"
@@ -54,8 +55,8 @@ export async function GET(req: NextRequest) {
 
   const filters = filtersParsed.data
   const pagination = paginationParsed.data
-  const role = ((auth.session.user as any)?.role as "RECEP" | "ODONT" | "ADMIN") ?? "RECEP"
-  const userId = (auth.session.user as any)?.id ?? 0
+  const role = (auth.session.user.role ?? "RECEP") as "RECEP" | "ODONT" | "ADMIN"
+  const userId = auth.session.user.id ? Number.parseInt(auth.session.user.id, 10) : 0
 
   try {
     // Construir WHERE clause
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (filters.estadoCita?.length) {
-      where.estado = { in: filters.estadoCita as any[] }
+      where.estado = { in: filters.estadoCita as EstadoCita[] }
     }
 
     // Contar total
@@ -106,7 +107,11 @@ export async function GET(req: NextRequest) {
       include: {
         paciente: {
           include: {
-            persona: true,
+            persona: {
+              include: {
+                documento: true,
+              },
+            },
           },
         },
         profesional: {
@@ -128,10 +133,10 @@ export async function GET(req: NextRequest) {
         inicio: cita.inicio.toISOString(),
         fin: cita.fin.toISOString(),
         estado: cita.estado,
-        paciente: filters.privacyMode ? ofuscarNombre(pacienteNombre) : pacienteNombre,
+        paciente: filters.privacyMode ? ofuscarNombre(pacienteNombre, true) : pacienteNombre,
         pacienteDocumento: filters.privacyMode
-          ? ofuscarDocumento(cita.paciente.persona.numeroDocumento || "")
-          : cita.paciente.persona.numeroDocumento,
+          ? ofuscarDocumento(cita.paciente.persona.documento?.numero || "", true)
+          : cita.paciente.persona.documento?.numero || null,
         profesional: profesionalNombre,
         consultorio: cita.consultorio?.nombre || null,
         tipo: cita.tipo,
@@ -157,8 +162,9 @@ export async function GET(req: NextRequest) {
         },
       },
     )
-  } catch (error: any) {
-    console.error("GET /api/kpis/clinico/drill-down/citas error:", error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error("GET /api/kpis/clinico/drill-down/citas error:", errorMessage)
     return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
   }
 }

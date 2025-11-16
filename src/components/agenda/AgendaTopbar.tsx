@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Search, Filter, Plus, X } from "lucide-react"
+import { Search, Filter, Plus, X, CalendarSearch } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { AgendaFilters, CurrentUser, EstadoCita, TipoCita } from "@/types/agenda"
 
 interface AgendaTopbarProps {
@@ -18,6 +19,7 @@ interface AgendaTopbarProps {
 }
 
 export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUser }: AgendaTopbarProps) {
+  const router = useRouter()
   const [busqueda, setBusqueda] = React.useState(filters.busquedaPaciente ?? "")
   const [filtersOpen, setFiltersOpen] = React.useState(false)
 
@@ -27,6 +29,7 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
       onFiltersChange({ ...filters, busquedaPaciente: busqueda || undefined })
     }, 300)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busqueda])
 
   const activeFiltersCount = [
@@ -58,6 +61,17 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
 
         {/* Botones de acción */}
         <div className="flex items-center gap-2">
+          {/* Búsqueda avanzada */}
+          <Button
+            variant="outline"
+            size="default"
+            onClick={() => router.push("/citas")}
+            className="bg-transparent"
+          >
+            <CalendarSearch className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Búsqueda</span>
+          </Button>
+
           {/* Filtros avanzados (sheet en mobile/tablet) */}
           <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
             <SheetTrigger asChild>
@@ -78,7 +92,12 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
               <SheetHeader>
                 <SheetTitle>Filtros de agenda</SheetTitle>
               </SheetHeader>
-              <FiltersForm filters={filters} onFiltersChange={onFiltersChange} currentUser={currentUser} />
+              <FiltersForm 
+                filters={filters} 
+                onFiltersChange={onFiltersChange} 
+                currentUser={currentUser}
+                onClose={() => setFiltersOpen(false)}
+              />
             </SheetContent>
           </Sheet>
 
@@ -155,20 +174,26 @@ function FiltersForm({
   filters,
   onFiltersChange,
   currentUser,
+  onClose,
 }: {
   filters: AgendaFilters
   onFiltersChange: (filters: AgendaFilters) => void
   currentUser?: CurrentUser
+  onClose?: () => void
 }) {
   const [localFilters, setLocalFilters] = React.useState(filters)
 
   const handleApply = () => {
     onFiltersChange(localFilters)
+    // Cerrar el Sheet después de aplicar los filtros
+    onClose?.()
   }
 
   const handleReset = () => {
     setLocalFilters({})
     onFiltersChange({})
+    // Cerrar el Sheet después de limpiar los filtros
+    onClose?.()
   }
 
   return (
@@ -188,7 +213,7 @@ function FiltersForm({
             })
           }
         />
-        {currentUser?.rol === "ODONT" && currentUser.profesionalId && (
+        {currentUser?.role === "ODONT" && currentUser.profesionalId && (
           <Button
             variant="outline"
             size="sm"

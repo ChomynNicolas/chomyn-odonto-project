@@ -1,3 +1,4 @@
+import { getCurrentUserForAgenda } from "@/lib/auth-helpers";
 import CitasCalendar from "@/components/agenda/CitasCalendar";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import type { Metadata } from "next";
@@ -7,11 +8,12 @@ export const metadata: Metadata = {
   description: "Agenda de turnos",
 };
 
-export default function Page() {
+export default async function Page() {
+  const currentUser = await getCurrentUserForAgenda();
   return (
     <div className="space-y-4">
       <PageBreadcrumb pageTitle="Agenda clínica" />
-      <CitasCalendar />
+      <CitasCalendar currentUser={currentUser ?? undefined} />
     </div>
   );
 }

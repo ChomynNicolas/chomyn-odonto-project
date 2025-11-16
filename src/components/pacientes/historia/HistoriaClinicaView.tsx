@@ -1,28 +1,39 @@
+// src/components/pacientes/historia/HistoriaClinicaView.tsx
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FileText, AlertCircle, Pill, Activity, Stethoscope } from "lucide-react"
-import { DiagnosesSection } from "@/components/pacientes/DiagnosesSection"
-import { AllergiesSection } from "@/components/pacientes/AllergiesSection"
-import { MedicationsSection } from "@/components/pacientes/MedicationsSection"
-import { VitalSignsSection } from "@/components/pacientes/VitalSignsSection"
-import { ClinicalNotesSection } from "./ClinicalNotesSection"
-import { MedicalHistorySection } from "./MedicalHistorySection"
+import { AlertCircle, FileText, Stethoscope, Clock } from "lucide-react"
+import { usePatientContext } from "@/context/PatientDataContext"
+import { calculateAge } from "@/lib/utils/patient-helpers"
+import { QuickSummaryCard } from "./sections/QuickSummaryCard"
+import { AnamnesisSummarySection } from "./sections/AnamnesisSummarySection"
+import { MedicalBackgroundSection } from "./sections/MedicalBackgroundSection"
+import { ClinicalNotesTimeline } from "./sections/ClinicalNotesTimeline"
+import { AnamnesisTimeline } from "./sections/AnamnesisTimeline"
 import { AddDiagnosisDialog } from "./AddDiagnosisDialog"
 import { AddAllergyDialog } from "./AddAllergyDialog"
 import { AddMedicationDialog } from "./AddMedicationDialog"
 import { AddVitalSignsDialog } from "./AddVitalSignsDialog"
 import { AddClinicalNoteDialog } from "./AddClinicalNoteDialog"
 import { toast } from "sonner"
-import { usePatientContext } from "@/context/PatientDataContext"
 
 interface HistoriaClinicaViewProps {
   patientId: string
 }
 
+/**
+ * Vista rediseñada de Historia Clínica
+ * 
+ * Características:
+ * - Vista unificada que integra anamnesis, alergias, medicaciones y signos vitales
+ * - Diseño responsive con tabs y acordeones
+ * - Resumen rápido en la parte superior
+ * - Navegación clara entre secciones
+ * - Estados vacíos informativos
+ */
 export function HistoriaClinicaView({ patientId }: HistoriaClinicaViewProps) {
   const { patient, isLoading, error, mutate } = usePatientContext()
   const [activeTab, setActiveTab] = useState("resumen")
@@ -31,6 +42,11 @@ export function HistoriaClinicaView({ patientId }: HistoriaClinicaViewProps) {
   const [showAddMedication, setShowAddMedication] = useState(false)
   const [showAddVitals, setShowAddVitals] = useState(false)
   const [showAddNote, setShowAddNote] = useState(false)
+
+  const handleSuccess = () => {
+    mutate()
+    toast.success("Registro agregado exitosamente")
+  }
 
   if (isLoading) {
     return <HistoriaClinicaSkeleton />
@@ -54,135 +70,93 @@ export function HistoriaClinicaView({ patientId }: HistoriaClinicaViewProps) {
     )
   }
 
-  const handleSuccess = () => {
-    mutate()
-    toast.success("Registro agregado exitosamente")
-  }
-
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto px-4 py-6 space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Historia Clínica</h1>
-        <p className="text-muted-foreground">
-          {patient.firstName} {patient.lastName}
-        </p>
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Historia Clínica</h1>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <p className="text-lg">
+            {patient.firstName} {patient.lastName}
+          </p>
+          {patient.dateOfBirth && (
+            <>
+              <span>•</span>
+              <span className="text-sm">
+                {new Date(patient.dateOfBirth).toLocaleDateString("es-PY")}
+              </span>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Resumen Rápido - Siempre visible */}
+      <QuickSummaryCard patient={patient} />
 
       {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="resumen">
-            <FileText className="mr-2 h-4 w-4" />
-            Resumen
+        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-4">
+          <TabsTrigger value="resumen" className="flex items-center gap-2">
+            <Stethoscope className="h-4 w-4" />
+            <span className="hidden sm:inline">Resumen</span>
           </TabsTrigger>
-          <TabsTrigger value="diagnosticos">
-            <Stethoscope className="mr-2 h-4 w-4" />
-            Diagnósticos
+          <TabsTrigger value="anamnesis" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Anamnesis</span>
           </TabsTrigger>
-          <TabsTrigger value="alergias">
-            <AlertCircle className="mr-2 h-4 w-4" />
-            Alergias
+          <TabsTrigger value="antecedentes" className="flex items-center gap-2">
+            <Stethoscope className="h-4 w-4" />
+            <span className="hidden sm:inline">Antecedentes</span>
           </TabsTrigger>
-          <TabsTrigger value="medicacion">
-            <Pill className="mr-2 h-4 w-4" />
-            Medicación
-          </TabsTrigger>
-          <TabsTrigger value="vitales">
-            <Activity className="mr-2 h-4 w-4" />
-            Signos Vitales
+          <TabsTrigger value="evolucion" className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            <span className="hidden sm:inline">Evolución</span>
           </TabsTrigger>
         </TabsList>
 
-        {/* Resumen Tab */}
+        {/* Tab: Resumen General */}
         <TabsContent value="resumen" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <MedicalHistorySection patient={patient} />
-            <ClinicalNotesSection patientId={patientId} onAddNote={() => setShowAddNote(true)} />
-          </div>
+            {/* Anamnesis Resumida */}
+            <AnamnesisSummarySection
+              patient={patient}
+              onAddAllergy={() => setShowAddAllergy(true)}
+              onAddMedication={() => setShowAddMedication(true)}
+              onAddVitalSigns={() => setShowAddVitals(true)}
+              onAddNote={() => setShowAddNote(true)}
+            />
 
-          {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Diagnósticos Activos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {patient.diagnoses?.filter((d) => d.status === "ACTIVE").length || 0}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Alergias Registradas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{patient.allergies?.length || 0}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Medicación Activa</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {patient.medications?.filter((m) => m.status === "ACTIVE").length || 0}
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Últimos Signos Vitales</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {patient.vitalSigns && patient.vitalSigns.length > 0
-                    ? new Date(patient.vitalSigns[0].recordedAt).toLocaleDateString()
-                    : "N/A"}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Antecedentes Médicos */}
+            <MedicalBackgroundSection patient={patient} />
           </div>
         </TabsContent>
 
-        {/* Diagnósticos Tab */}
-        <TabsContent value="diagnosticos">
-          <DiagnosesSection
-            diagnoses={patient.diagnoses || []}
-            userRole="ADMIN"
-            onAddDiagnosis={() => setShowAddDiagnosis(true)}
+        {/* Tab: Anamnesis Completa */}
+        <TabsContent value="anamnesis" className="space-y-6">
+          {/* Anamnesis completa desde evolución */}
+          <AnamnesisTimeline
+            patientId={patientId}
+            patientAge={patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : null}
           />
-        </TabsContent>
-
-        {/* Alergias Tab */}
-        <TabsContent value="alergias">
-          <AllergiesSection
-            allergies={patient.allergies || []}
-            userRole="ADMIN"
+          
+          {/* Resumen de anamnesis (alergias, medicaciones, etc.) */}
+          <AnamnesisSummarySection
+            patient={patient}
             onAddAllergy={() => setShowAddAllergy(true)}
-          />
-        </TabsContent>
-
-        {/* Medicación Tab */}
-        <TabsContent value="medicacion">
-          <MedicationsSection
-            medications={patient.medications || []}
-            userRole="ADMIN"
             onAddMedication={() => setShowAddMedication(true)}
-            onSuspendMedication={(id) => {
-              toast.info("Suspendiendo medicación", { description: `ID: ${id}` })
-            }}
+            onAddVitalSigns={() => setShowAddVitals(true)}
+            onAddNote={() => setShowAddNote(true)}
           />
         </TabsContent>
 
-        {/* Signos Vitales Tab */}
-        <TabsContent value="vitales">
-          <VitalSignsSection
-            vitalSigns={patient.vitalSigns || []}
-            userRole="ADMIN"
-            onAddVitalSigns={() => setShowAddVitals(true)}
-          />
+        {/* Tab: Antecedentes Médicos Detallados */}
+        <TabsContent value="antecedentes" className="space-y-6">
+          <MedicalBackgroundSection patient={patient} />
+        </TabsContent>
+
+        {/* Tab: Evolución y Notas Clínicas */}
+        <TabsContent value="evolucion" className="space-y-6">
+          <ClinicalNotesTimeline patientId={patientId} onAddNote={() => setShowAddNote(true)} />
         </TabsContent>
       </Tabs>
 
@@ -224,14 +198,29 @@ export function HistoriaClinicaView({ patientId }: HistoriaClinicaViewProps) {
 function HistoriaClinicaSkeleton() {
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
-      <div>
-        <Skeleton className="h-10 w-64 mb-2" />
-        <Skeleton className="h-4 w-48" />
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-6 w-48" />
       </div>
+      
+      {/* Quick Summary Skeleton */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <Card key={i}>
+            <CardContent className="pt-6">
+              <Skeleton className="h-20 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Tabs Skeleton */}
       <Skeleton className="h-12 w-full" />
+      
+      {/* Content Skeleton */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-96 w-full" />
       </div>
     </div>
   )

@@ -8,20 +8,22 @@ import { KpiGridSkeleton } from "@/components/kpis/KpiSkeleton"
 
 export const dynamic = "force-dynamic"
 
-export default async function KpisClinicosPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined }
-}) {
+export default async function KpisClinicosPage() {
   const session = await auth()
   if (!session?.user) {
     redirect("/login")
   }
 
-  const role = (session.user as any)?.role as "ADMIN" | "ODONT" | "RECEP"
+  const role: "ADMIN" | "ODONT" | "RECEP" = session.user.role ?? "RECEP"
   if (!role || !["ADMIN", "ODONT", "RECEP"].includes(role)) {
     redirect("/dashboard")
   }
+
+  if (!session.user.id) {
+    redirect("/login")
+  }
+
+  const userId = Number.parseInt(session.user.id, 10)
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -38,7 +40,7 @@ export default async function KpisClinicosPage({
 
       {/* Contenido con Suspense */}
       <Suspense fallback={<KpiGridSkeleton count={8} />}>
-        <KpiOverviewContent role={role} userId={(session.user as any).id} />
+        <KpiOverviewContent role={role} userId={userId} />
       </Suspense>
     </div>
   )

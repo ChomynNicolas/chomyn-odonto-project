@@ -28,21 +28,12 @@ type Kpi = {
   ariaLabel?: string;
 };
 
-function formatCurrencyPYG(value: number) {
-  // Ajusta a tu necesidad/región
-  return new Intl.NumberFormat("es-PY", {
-    style: "currency",
-    currency: "PYG",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 function renderDeltaBadge(delta?: Delta) {
   if (!delta) return null;
 
   // Decide color según tendencia
-  const color =
-    delta.trend === "up" ? "success" : delta.trend === "down" ? "error" : "gray";
+  const color: "success" | "error" | "light" =
+    delta.trend === "up" ? "success" : delta.trend === "down" ? "error" : "light";
 
   // Icono inline (puedes usar también ArrowUp/Down si ya los tienes)
   const Up = () => (
@@ -57,7 +48,7 @@ function renderDeltaBadge(delta?: Delta) {
   );
 
   return (
-    <Badge color={color as any}>
+    <Badge color={color}>
       {delta.trend === "up" ? <Up /> : delta.trend === "down" ? <Down /> : null}
       {delta.value.toFixed(2)}%
     </Badge>

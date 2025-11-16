@@ -9,10 +9,14 @@ export interface RBACPermissions {
   canViewClinicalData: boolean
   canEditClinicalData: boolean
   canUploadAttachments: boolean
+  canDeleteAttachments: boolean
   canScheduleAppointments: boolean
   canViewAudit: boolean
   canExport: boolean
   canPrint: boolean
+  canUploadConsentimientos: boolean
+  canViewConsentDetails: boolean
+  canDownloadConsentimientos: boolean
 }
 
 // Bandera para permitir exportar PDF a RECEP (configurable por env)
@@ -33,10 +37,14 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: true,
         canEditClinicalData: true,
         canUploadAttachments: true,
+        canDeleteAttachments: true,
         canScheduleAppointments: true,
         canViewAudit: true,
         canExport: true,
         canPrint: true,
+        canUploadConsentimientos: true,
+        canViewConsentDetails: true,
+        canDownloadConsentimientos: true,
       }
     case "ODONT":
       return {
@@ -47,10 +55,14 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: true,
         canEditClinicalData: true,
         canUploadAttachments: true,
+        canDeleteAttachments: true,
         canScheduleAppointments: true,
         canViewAudit: false,
         canExport: true,
         canPrint: true,
+        canUploadConsentimientos: true,
+        canViewConsentDetails: true,
+        canDownloadConsentimientos: true,
       }
     case "RECEP":
       return {
@@ -61,10 +73,14 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: false, // Verás cómo usar esto para filtrar secciones clínicas
         canEditClinicalData: false,
         canUploadAttachments: false,
+        canDeleteAttachments: false,
         canScheduleAppointments: true,
         canViewAudit: false,
         canExport: RECEP_EXPORT_PDF, // <- bandera
         canPrint: true,
+        canUploadConsentimientos: false,
+        canViewConsentDetails: true,
+        canDownloadConsentimientos: true,
       }
     default:
       return {
@@ -75,10 +91,14 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canViewClinicalData: false,
         canEditClinicalData: false,
         canUploadAttachments: false,
+        canDeleteAttachments: false,
         canScheduleAppointments: false,
         canViewAudit: false,
         canExport: false,
         canPrint: false,
+        canUploadConsentimientos: false,
+        canViewConsentDetails: false,
+        canDownloadConsentimientos: false,
       }
   }
 }

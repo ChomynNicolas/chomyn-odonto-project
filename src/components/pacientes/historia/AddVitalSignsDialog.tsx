@@ -65,7 +65,7 @@ export function AddVitalSignsDialog({ open, onOpenChange, patientId, onSuccess }
         temperature: "",
         notes: "",
       })
-    } catch (error) {
+    } catch {
       toast.error("Error al registrar signos vitales")
     } finally {
       setIsSubmitting(false)

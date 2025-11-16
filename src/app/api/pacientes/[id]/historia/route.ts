@@ -4,9 +4,10 @@ import { prisma as db } from "@/lib/prisma";
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = Number(params.id);
+  const { id: idParam } = await params;
+  const id = Number(idParam);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ ok: false, error: "ID inválido" }, { status: 400 });
   }
@@ -22,7 +23,7 @@ export async function GET(
     antecedentesMedicos: null,
     alergias: null,
     medicacion: null,
-    evoluciones: [] as any[],
+    evoluciones: [] as unknown[],
   };
 
   return NextResponse.json({ ok: true, data });
