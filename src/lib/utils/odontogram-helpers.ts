@@ -7,7 +7,8 @@
 
 import type { ToothRecord, ToothCondition } from "@/lib/types/patient"
 import type { OdontogramEntryDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
-import type { DienteSuperficie, ToothCondition as PrismaToothCondition } from "@prisma/client"
+import { DienteSuperficie } from "@prisma/client"
+import type { ToothCondition as PrismaToothCondition } from "@prisma/client"
 
 /**
  * Mapea un valor de ToothCondition de Prisma al tipo del frontend
@@ -87,8 +88,23 @@ export function entriesToToothRecords(entries: OdontogramEntryDTO[]): ToothRecor
 }
 
 /**
+ * Determina si un diente tiene información relevante para guardar
+ * Un diente es relevante si:
+ * - No está en estado INTACT, O
+ * - Tiene superficies específicas, O
+ * - Tiene notas
+ */
+export function isToothRelevant(tooth: ToothRecord): boolean {
+  if (tooth.condition !== "INTACT") return true
+  if (tooth.surfaces && tooth.surfaces.length > 0) return true
+  if (tooth.notes && tooth.notes.trim().length > 0) return true
+  return false
+}
+
+/**
  * Convierte ToothRecord[] a formato entries para el API
  * Crea una entry por cada superficie afectada o una entry general si no hay superficies
+ * Filtra automáticamente dientes INTACT sin información adicional
  */
 export function toothRecordsToEntries(teeth: ToothRecord[]): Array<{
   toothNumber: number
@@ -103,7 +119,10 @@ export function toothRecordsToEntries(teeth: ToothRecord[]): Array<{
     notes: string | null
   }> = []
 
-  teeth.forEach((tooth) => {
+  // Filtrar solo dientes relevantes
+  const relevantTeeth = teeth.filter(isToothRelevant)
+
+  relevantTeeth.forEach((tooth) => {
     const toothNum = Number.parseInt(tooth.toothNumber)
     if (isNaN(toothNum)) return
 
@@ -137,19 +156,24 @@ export function toothRecordsToEntries(teeth: ToothRecord[]): Array<{
  * Mapea strings de superficie a enum DienteSuperficie
  */
 function mapSurfaceStringToEnum(surfaceStr: string): DienteSuperficie | null {
+  // Si ya es un valor del enum, devolverlo directamente
+  if (Object.values(DienteSuperficie).includes(surfaceStr as DienteSuperficie)) {
+    return surfaceStr as DienteSuperficie
+  }
+  
   const mapping: Record<string, DienteSuperficie> = {
-    Oclusal: "O",
-    Mesial: "M",
-    Distal: "D",
-    Vestibular: "V",
-    "Lingual/Palatino": "L",
-    MO: "MO",
-    DO: "DO",
-    VO: "VO",
-    LO: "LO",
-    MOD: "MOD",
-    MV: "MV",
-    DL: "DL",
+    Oclusal: DienteSuperficie.O,
+    Mesial: DienteSuperficie.M,
+    Distal: DienteSuperficie.D,
+    Vestibular: DienteSuperficie.V,
+    "Lingual/Palatino": DienteSuperficie.L,
+    MO: DienteSuperficie.MO,
+    DO: DienteSuperficie.DO,
+    VO: DienteSuperficie.VO,
+    LO: DienteSuperficie.LO,
+    MOD: DienteSuperficie.MOD,
+    MV: DienteSuperficie.MV,
+    DL: DienteSuperficie.DL,
   }
 
   return mapping[surfaceStr] || null
@@ -176,4 +200,3 @@ export function mapSurfaceEnumToString(surface: DienteSuperficie | null): string
   }
   return mapping[surface] || surface
 }
-

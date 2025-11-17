@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Loader2, Info } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { pacienteQuickCreateSchema } from "@/app/api/pacientes/quick/_schemas"
 import type { QuickCreateResult } from "@/app/api/pacientes/quick/_service.quick"
 import { useQueryClient } from "@tanstack/react-query"
+import { validatePhone, normalizePhone, isMobilePhone } from "@/lib/phone-utils"
 
 interface PatientQuickCreateModalProps {
   open: boolean
@@ -24,6 +25,9 @@ type FormInput = z.input<typeof pacienteQuickCreateSchema>
 
 export function PatientQuickCreateModal({ open, onOpenChange, onCreated }: PatientQuickCreateModalProps) {
   const [isPending, setIsPending] = useState(false)
+  const [phoneValidation, setPhoneValidation] = useState<{ isValid: boolean; error?: string; isMobile?: boolean }>({
+    isValid: true,
+  })
   const queryClient = useQueryClient()
 
   const {
@@ -31,6 +35,8 @@ export function PatientQuickCreateModal({ open, onOpenChange, onCreated }: Patie
     handleSubmit,
     formState: { errors },
     reset,
+    watch,
+    setValue,
   } = useForm<FormInput>({
     resolver: zodResolver(pacienteQuickCreateSchema) as Resolver<FormInput>,
     defaultValues: {
@@ -43,6 +49,26 @@ export function PatientQuickCreateModal({ open, onOpenChange, onCreated }: Patie
       genero: "NO_ESPECIFICADO",
     },
   })
+
+  const phoneValue = watch("telefono")
+
+  // Validate phone number in real-time
+  useEffect(() => {
+    if (!phoneValue || phoneValue.trim() === "") {
+      setPhoneValidation({ isValid: true }) // Don't show error for empty field until submit
+      return
+    }
+
+    const validation = validatePhone(phoneValue)
+    const normalized = normalizePhone(phoneValue)
+    const isMobile = normalized ? isMobilePhone(normalized) : false
+
+    setPhoneValidation({
+      isValid: validation.isValid,
+      error: validation.error,
+      isMobile,
+    })
+  }, [phoneValue])
 
   const onSubmit = async (data: FormInput) => {
     setIsPending(true)
@@ -214,14 +240,32 @@ export function PatientQuickCreateModal({ open, onOpenChange, onCreated }: Patie
             <Input
               id="telefono"
               type="tel"
-              placeholder="+595 XXX XXX XXX"
-              {...register("telefono")}
-              aria-invalid={!!errors.telefono}
-              aria-describedby={errors.telefono ? "telefono-error" : undefined}
+              placeholder="0991234567 o +595991234567"
+              {...register("telefono", {
+                onBlur: (e) => {
+                  // Normalize phone on blur
+                  const normalized = normalizePhone(e.target.value)
+                  if (normalized && normalized !== e.target.value) {
+                    setValue("telefono", normalized, { shouldValidate: true })
+                  }
+                },
+              })}
+              aria-invalid={!!errors.telefono || (phoneValue && !phoneValidation.isValid)}
+              aria-describedby={
+                errors.telefono || (phoneValue && !phoneValidation.isValid) ? "telefono-error" : undefined
+              }
             />
-            {errors.telefono && (
-              <p id="telefono-error" className="text-sm text-destructive">
-                {errors.telefono.message}
+            {phoneValue && phoneValidation.isMobile && (
+              <p className="text-sm text-green-600">✓ Número móvil detectado (WhatsApp/SMS disponible)</p>
+            )}
+            {(errors.telefono || (phoneValue && !phoneValidation.isValid)) && (
+              <p id="telefono-error" className="text-sm text-destructive" role="alert">
+                {errors.telefono?.message || phoneValidation.error || "Teléfono inválido"}
+              </p>
+            )}
+            {!phoneValue && (
+              <p className="text-sm text-muted-foreground">
+                Formato: 09XXXXXXXX o +595XXXXXXXXX. Se detectará automáticamente si es móvil.
               </p>
             )}
           </div>

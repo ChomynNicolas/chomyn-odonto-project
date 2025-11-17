@@ -494,7 +494,17 @@ export const PacienteCreateSchemaClient = z
 
   telefono: z
     .string("El teléfono es requerido")
-    .min(1, "El teléfono es requerido"),
+    .min(1, "El teléfono es requerido")
+    .refine(
+      (val) => {
+        if (!val || val.trim() === "") return false
+        // Permitir espacios y guiones durante la entrada (se normalizarán después)
+        return true
+      },
+      {
+        message: "El teléfono es requerido",
+      }
+    ),
   
   email: z
     .string()
@@ -572,18 +582,49 @@ export const PacienteCreateSchemaClient = z
   // el flujo no necesita enviar origen/version desde el cliente
   })
   .superRefine((data, ctx) => {
-    // Validar teléfono con código de país
+    // Validar teléfono con código de país usando validación robusta
     const codigoPais = data.codigoPaisTelefono || "+595"
-    if (data.telefono) {
-      const resultado = validarTelefono(data.telefono, codigoPais)
-      if (!resultado.valido) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: resultado.mensaje || "Formato de teléfono inválido",
-          path: ["telefono"],
-        })
+    
+    if (!data.telefono || data.telefono.trim() === "") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El teléfono es requerido",
+        path: ["telefono"],
+      })
+      return
+    }
+
+    // Validar formato usando phone-utils (más robusto)
+    const resultado = validarTelefono(data.telefono, codigoPais)
+    if (!resultado.valido) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: resultado.mensaje || "Formato de teléfono inválido. Ej: 0991234567 o +595991234567",
+        path: ["telefono"],
+      })
+      return
+    }
+
+    // Validación adicional: rechazar caracteres no numéricos (excepto + y espacios/guiones que se normalizan)
+    const tieneCaracteresInvalidos = /[^\d+\s\-()]/.test(data.telefono)
+    if (tieneCaracteresInvalidos) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El teléfono solo puede contener números, espacios, guiones y el símbolo +",
+        path: ["telefono"],
+      })
+    }
+  })
+  .transform((data) => {
+    // Normalizar teléfono después de validar
+    const codigoPais = data.codigoPaisTelefono || "+595"
+    if (data.telefono && data.telefono.trim()) {
+      return {
+        ...data,
+        telefono: normalizarTelefono(data.telefono, codigoPais),
       }
     }
+    return data
   })
 
 export type PacienteCreateDTOClient = z.infer<typeof PacienteCreateSchemaClient>

@@ -74,7 +74,21 @@ export const PacienteCreateBodySchema = z.object({
   direccion: z.string().max(300).optional(),
   ciudad: z.string().max(100).optional(),
   pais: z.string().length(2).default("PY"),
-  telefono: z.string().min(1).max(50),
+  telefono: z
+    .string()
+    .min(1, "El teléfono es requerido")
+    .max(50, "El teléfono no puede exceder 50 caracteres")
+    .refine(
+      (val) => {
+        if (!val || val.trim() === "") return false
+        // Validación básica: debe tener al menos 7 dígitos después de limpiar
+        const digits = val.replace(/[\s\-()+]/g, "")
+        return digits.length >= 7 && digits.length <= 15
+      },
+      {
+        message: "El teléfono debe tener entre 7 y 15 dígitos",
+      }
+    ),
   email: z.string().email().optional(),
 
   preferenciasContacto: z.object({
@@ -96,20 +110,21 @@ export const PacienteCreateBodySchema = z.object({
     email: z.boolean().optional(),
   }).optional(),
 
-  // --- Retro-compatibilidad: string o array ---
+  // ⚠️ DEPRECATED: Estos campos se ignoran durante la creación del paciente.
+  // Los datos clínicos deben gestionarse en otras pantallas después de crear el paciente.
+  // Se mantienen en el schema para compatibilidad hacia atrás, pero no se procesan.
   alergias: z.union([z.string().max(1000), z.array(AllergyInputSchema)]).optional(),
   medicacion: z.union([z.string().max(1000), z.array(MedicationInputSchema)]).optional(),
-
   antecedentes: z.string().max(2000).optional(),
   observaciones: z.string().max(2000).optional(),
+  vitals: VitalsSchema.optional(),
+  adjuntos: z.array(z.any()).optional(),
+
   responsablePago: z.object({
     personaId: z.number().int().positive(),
     relacion: z.enum(["PADRE","MADRE","TUTOR","CONYUGE","HIJO","FAMILIAR","EMPRESA","OTRO"]),
     esPrincipal: z.boolean().default(true),
   }).optional(),
-  adjuntos: z.array(z.any()).optional(),
-
-  vitals: VitalsSchema.optional(),
 })
 
 export type PacienteCreateBody = z.infer<typeof PacienteCreateBodySchema>

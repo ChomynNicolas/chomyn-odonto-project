@@ -1,6 +1,6 @@
 // src/lib/audit/log.ts
 import { prisma } from "@/lib/prisma"
-import { AuditAction } from "@/lib/audit/actions"
+import { AuditAction, AuditEntity } from "@/lib/audit/actions"
 import type { Prisma } from "@prisma/client"
 
 /**
@@ -132,6 +132,74 @@ export async function auditPatientPdfExport(args: {
     entity: "Patient",
     entityId: args.entityId,
     metadata: args.metadata,
+    headers: args.headers,
+    path: args.path,
+  })
+}
+
+/**
+ * Registra auditoría para creación de odontograma
+ */
+export async function auditOdontogramCreate(args: {
+  actorId: number
+  snapshotId: number
+  pacienteId: number
+  consultaId?: number | null
+  entriesCount: number
+  headers?: Headers
+  path?: string
+  metadata?: Record<string, unknown>
+}) {
+  await safeAuditWrite({
+    actorId: args.actorId,
+    action: AuditAction.ODONTOGRAM_CREATE,
+    entity: AuditEntity.OdontogramSnapshot,
+    entityId: args.snapshotId,
+    metadata: {
+      pacienteId: args.pacienteId,
+      consultaId: args.consultaId ?? null,
+      entriesCount: args.entriesCount,
+      ...(args.metadata ?? {}),
+    },
+    headers: args.headers,
+    path: args.path,
+  })
+}
+
+/**
+ * Registra auditoría para actualización de odontograma
+ */
+export async function auditOdontogramUpdate(args: {
+  actorId: number
+  snapshotId: number
+  pacienteId: number
+  consultaId?: number | null
+  diff: {
+    added: number
+    removed: number
+    modified: number
+  }
+  diffSummary: string
+  headers?: Headers
+  path?: string
+  metadata?: Record<string, unknown>
+}) {
+  await safeAuditWrite({
+    actorId: args.actorId,
+    action: AuditAction.ODONTOGRAM_UPDATE,
+    entity: AuditEntity.OdontogramSnapshot,
+    entityId: args.snapshotId,
+    metadata: {
+      pacienteId: args.pacienteId,
+      consultaId: args.consultaId ?? null,
+      changes: {
+        added: args.diff.added,
+        removed: args.diff.removed,
+        modified: args.diff.modified,
+      },
+      summary: args.diffSummary,
+      ...(args.metadata ?? {}),
+    },
     headers: args.headers,
     path: args.path,
   })

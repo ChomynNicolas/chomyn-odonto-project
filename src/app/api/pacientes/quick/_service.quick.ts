@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { pacienteRepo } from "@/app/api/pacientes/_repo"
 import type { PacienteQuickCreateDTO } from "./_schemas"
 import { splitNombreCompleto } from "./_dto"
-import { normalizeEmail, normalizePhonePY } from "@/lib/normalize"
+import { normalizeEmail } from "@/lib/normalize"
+import { normalizePhone, isMobilePhone, validatePhone } from "@/lib/phone-utils"
 import type { Prisma } from "@prisma/client"
 import { TipoDocumento } from "@prisma/client"
 
@@ -51,8 +52,19 @@ export async function quickCreatePaciente(
   const { nombres, apellidos, segundoApellido } = splitNombreCompleto(input.nombreCompleto)
   const generoDB = input.genero
 
-  const phoneNorm = normalizePhonePY(input.telefono)
-  if (!phoneNorm) throw new QuickCreateError("VALIDATION_ERROR", "Teléfono inválido o no normalizable", 400)
+  // Normalize and validate phone number using centralized utilities
+  const phoneValidation = validatePhone(input.telefono)
+  if (!phoneValidation.isValid) {
+    throw new QuickCreateError("VALIDATION_ERROR", phoneValidation.error || "Teléfono inválido", 400)
+  }
+
+  const phoneNorm = normalizePhone(input.telefono)
+  if (!phoneNorm) {
+    throw new QuickCreateError("VALIDATION_ERROR", "Teléfono inválido o no normalizable", 400)
+  }
+
+  // Determine if phone is mobile (capable of WhatsApp/SMS)
+  const isMobile = isMobilePhone(phoneNorm)
 
   let emailNorm: string | undefined
   if (input.email) {
@@ -88,6 +100,8 @@ export async function quickCreatePaciente(
         personaId: persona.idPersona,
         valorRaw: input.telefono,
         valorNorm: phoneNorm,
+        whatsappCapaz: isMobile,
+        smsCapaz: isMobile,
         prefer: { recordatorio: true, cobranza: !emailNorm },
       })
 
