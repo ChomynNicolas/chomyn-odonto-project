@@ -166,7 +166,7 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
                   : `Ingrese el número con código de país ${codigoPais}`}
               </FormDescription>
               {!telefonoValido && validacionTelefono.mensaje ? (
-                <p className="text-xs text-red-600">{validacionTelefono.mensaje}</p>
+                <p className="text-xs text-destructive" role="alert">{validacionTelefono.mensaje}</p>
               ) : (
                 <FormMessage />
               )}

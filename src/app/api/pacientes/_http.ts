@@ -81,16 +81,18 @@ export const errors = {
       { status: 404 },
     ),
 
-  conflict: (message = "Conflicto de recursos", code = "CONFLICT") =>
-    NextResponse.json(
-      {
-        ok: false,
-        code,
-        error: message,
-        timestamp: new Date().toISOString(),
-      } as ApiError,
-      { status: 409 },
-    ),
+  conflict: (message = "Conflicto de recursos", code = "CONFLICT", details?: unknown) => {
+    const error: ApiError = {
+      ok: false,
+      code,
+      error: message,
+      timestamp: new Date().toISOString(),
+    }
+    if (details !== undefined && details !== null) {
+      error.details = details
+    }
+    return NextResponse.json(error, { status: 409 })
+  },
 
   optimisticLock: (message = "El recurso fue modificado. Por favor, refresque y vuelva a intentar.") =>
     NextResponse.json(

@@ -188,20 +188,36 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
 
     try {
       setIsSaving(true)
+      
+      // Convertir a entries (ya filtra automáticamente dientes INTACT sin información)
       const entries = toothRecordsToEntries(teeth)
 
       if (entries.length === 0) {
-        toast.error("Debe registrar al menos un diente")
+        toast.error("Debe registrar al menos un diente con información relevante (condición diferente a sano, superficies o notas)")
         return
+      }
+
+      // Preparar datos para enviar, asegurando que null se maneje correctamente
+      const payload = {
+        notes: notes.trim() || undefined,
+        entries: entries.map((entry) => ({
+          toothNumber: entry.toothNumber,
+          surface: entry.surface ?? null,
+          condition: entry.condition,
+          notes: entry.notes ?? null,
+        })),
+      }
+
+      // Log para debugging (solo en desarrollo)
+      if (process.env.NODE_ENV === "development") {
+        console.log("[OdontogramaModule] Sending payload:", JSON.stringify(payload, null, 2))
+        console.log("[OdontogramaModule] Entries count:", entries.length)
       }
 
       const res = await fetch(`/api/agenda/citas/${citaId}/consulta/odontograma`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notes: notes.trim() || null,
-          entries,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (!res.ok) {

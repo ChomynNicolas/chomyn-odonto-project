@@ -188,9 +188,9 @@ export type CreateAttachmentInput = z.infer<typeof createAttachmentSchema>
 // ============================================================================
 export const odontogramEntrySchema = z.object({
   toothNumber: z.number().int().min(1).max(85),
-  surface: z.nativeEnum(DienteSuperficie).optional(),
+  surface: z.nativeEnum(DienteSuperficie).nullable().optional(),
   condition: z.nativeEnum(ToothCondition),
-  notes: z.string().max(500).optional(),
+  notes: z.string().max(500).nullable().optional(),
 })
 
 export const createOdontogramSchema = z.object({

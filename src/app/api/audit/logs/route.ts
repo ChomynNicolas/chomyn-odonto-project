@@ -1,16 +1,18 @@
-// src/app/api/audit/export/route.ts
+// src/app/api/audit/logs/route.ts
 /**
- * GET /api/audit/export
- * Exporta registros de auditoría filtrados a CSV
+ * GET /api/audit/logs
+ * Endpoint principal para consultar registros de auditoría con filtros avanzados
  */
 
 import { type NextRequest } from "next/server"
 import { auth } from "@/auth"
-import { errors } from "@/app/api/_http"
+import { ok, errors } from "@/app/api/_http"
 import { auditLogFiltersSchema } from "../_schemas"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { ACTION_LABELS, ENTITY_LABELS } from "@/lib/types/audit"
+import { canAccessGlobalAuditLog } from "@/lib/audit/rbac"
+import { filterAuditEntries } from "@/lib/audit/filters"
+import type { AuditLogEntry } from "@/lib/types/audit"
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,19 +21,20 @@ export async function GET(req: NextRequest) {
       return errors.forbidden("No autenticado")
     }
 
-    // Solo ADMIN puede exportar logs
+    // Verificar permisos usando RBAC
     const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
-    if (userRole !== "ADMIN") {
-      return errors.forbidden("Solo administradores pueden exportar registros de auditoría")
+    if (!canAccessGlobalAuditLog(userRole)) {
+      return errors.forbidden("Solo administradores pueden ver el log de auditoría completo")
     }
 
     // Parsear y validar query params
     const searchParams = Object.fromEntries(req.nextUrl.searchParams.entries())
     const filters = auditLogFiltersSchema.parse(searchParams)
 
-    // Construir condiciones de filtro (mismo que en GET /api/audit/logs)
+    // Construir condiciones de filtro
     const where: Prisma.AuditLogWhereInput = {}
 
+    // Filtro por rango de fechas
     if (filters.dateFrom || filters.dateTo) {
       where.createdAt = {}
       if (filters.dateFrom) {
@@ -42,30 +45,36 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Filtro por usuario
     if (filters.actorId) {
       where.actorId = filters.actorId
     }
 
+    // Filtro por acción(es)
     if (filters.actions && filters.actions.length > 0) {
       where.action = { in: filters.actions }
     } else if (filters.action) {
       where.action = filters.action
     }
 
+    // Filtro por entidad(es)
     if (filters.entities && filters.entities.length > 0) {
       where.entity = { in: filters.entities }
     } else if (filters.entity) {
       where.entity = filters.entity
     }
 
+    // Filtro por ID de entidad
     if (filters.entityId) {
       where.entityId = filters.entityId
     }
 
+    // Filtro por IP
     if (filters.ip) {
       where.ip = filters.ip
     }
 
+    // Búsqueda en metadata (búsqueda de texto en JSON)
     if (filters.search) {
       where.OR = [
         { action: { contains: filters.search, mode: "insensitive" } },
@@ -79,9 +88,19 @@ export async function GET(req: NextRequest) {
       ]
     }
 
-    // Obtener todos los registros (sin límite de paginación para exportación)
+    // Calcular paginación
+    const page = filters.page ?? 1
+    const limit = filters.limit ?? 20
+    const skip = (page - 1) * limit
+
+    // Contar total de registros
+    const total = await prisma.auditLog.count({ where })
+
+    // Obtener registros con paginación
     const logs = await prisma.auditLog.findMany({
       where,
+      skip,
+      take: limit,
       orderBy: {
         [filters.sortBy ?? "createdAt"]: filters.sortOrder ?? "desc",
       },
@@ -99,67 +118,44 @@ export async function GET(req: NextRequest) {
           },
         },
       },
-      take: 10000, // Límite máximo para exportación
     })
 
-    // Generar CSV
-    const headers = [
-      "ID",
-      "Fecha y Hora",
-      "Usuario",
-      "Email",
-      "Rol",
-      "Acción",
-      "Entidad",
-      "ID Recurso",
-      "IP",
-      "Resumen",
-      "Metadata",
-    ]
+    // Formatear respuesta (ADMIN ve todo sin filtros)
+    const formattedLogs: AuditLogEntry[] = logs.map((log) => ({
+      id: log.idAuditLog,
+      createdAt: log.createdAt.toISOString(),
+      actor: {
+        id: log.actor.idUsuario,
+        nombre: log.actor.nombreApellido,
+        email: log.actor.email,
+        role: log.actor.rol.nombreRol as "ADMIN" | "ODONT" | "RECEP",
+      },
+      action: log.action,
+      entity: log.entity,
+      entityId: log.entityId,
+      ip: log.ip,
+      metadata: log.metadata as Record<string, unknown> | null,
+    }))
+    
+    // Aplicar filtros según rol (aunque aquí solo ADMIN accede, mantener consistencia)
+    const filteredLogs = filterAuditEntries(formattedLogs, userRole)
 
-    const rows = logs.map((log) => {
-      const actionLabel = ACTION_LABELS[log.action] || log.action
-      const entityLabel = ENTITY_LABELS[log.entity] || log.entity
-      const metadata = log.metadata as Record<string, unknown> | null
-      const summary = metadata?.summary || metadata?.entriesCount
-        ? `${metadata.summary || `${metadata.entriesCount} entrada(s)`}`
-        : ""
+    const totalPages = Math.ceil(total / limit)
 
-      return [
-        log.idAuditLog,
-        log.createdAt.toISOString(),
-        log.actor.nombreApellido,
-        log.actor.email || "",
-        log.actor.rol.nombreRol,
-        actionLabel,
-        entityLabel,
-        log.entityId,
-        log.ip || "",
-        summary,
-        JSON.stringify(metadata || {}),
-      ]
-    })
-
-    // Escapar valores CSV
-    const escapeCSV = (value: unknown): string => {
-      if (value === null || value === undefined) return ""
-      const str = String(value)
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return `"${str.replace(/"/g, '""')}"`
-      }
-      return str
-    }
-
-    const csvContent = [
-      headers.map(escapeCSV).join(","),
-      ...rows.map((row) => row.map(escapeCSV).join(",")),
-    ].join("\n")
-
-    // Retornar CSV
-    return new Response(csvContent, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="audit-log-${new Date().toISOString().split("T")[0]}.csv"`,
+    return ok({
+      data: filteredLogs,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+      filters: {
+        ...filters,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
       },
     })
   } catch (e: unknown) {
@@ -168,7 +164,8 @@ export async function GET(req: NextRequest) {
       return errors.validation(zodError.issues?.[0]?.message ?? "Parámetros de filtro inválidos")
     }
     const errorMessage = e instanceof Error ? e.message : String(e)
-    console.error("[GET /api/audit/export]", e)
-    return errors.internal(errorMessage ?? "Error al exportar registros de auditoría")
+    console.error("[GET /api/audit/logs]", e)
+    return errors.internal(errorMessage ?? "Error al obtener registros de auditoría")
   }
 }
+

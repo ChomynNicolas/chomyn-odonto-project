@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Search, Filter, Plus, Phone, Mail, MessageCircle, Copy, Eye, EyeOff, ChevronDown, Loader2 } from "lucide-react"
 import { PatientQuickCreateModal } from "./PatientQuickCreateModal"
-import { formatPhoneForWhatsApp } from "@/lib/normalize"
+import { formatForWhatsApp } from "@/lib/phone-utils"
+import { canShowWhatsAppIcon } from "@/lib/patient-utils"
 import { toast } from "sonner"
 import { formatDateInTZ } from "@/lib/date-utils"
 import Link from "next/link"
@@ -347,13 +348,13 @@ export default function PacientesTable() {
                                         </Tooltip>
                                       </TooltipProvider>
 
-                                      {contacto.whatsappCapaz && (
+                                      {canShowWhatsAppIcon(paciente) && (
                                         <TooltipProvider>
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Button variant="ghost" size="sm" className="h-6 w-6 p-0" asChild>
                                                 <a
-                                                  href={`https://wa.me/${formatPhoneForWhatsApp(contacto.valor)}`}
+                                                  href={`https://wa.me/${formatForWhatsApp(contacto.valor)}`}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
                                                   aria-label="WhatsApp"

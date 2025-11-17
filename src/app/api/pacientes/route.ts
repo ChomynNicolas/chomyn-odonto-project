@@ -5,6 +5,8 @@ import { createPaciente } from "./_service.create"
 import { errors, ok, checkRateLimit } from "./_http";
 import { requireRole } from "./_rbac";
 import { PacienteCreateBodySchema } from "./_schemas";
+import { PacienteAlreadyExistsError, isPacienteDomainError } from "./_errors";
+import { Prisma } from "@prisma/client";
 
 // In-memory idempotency cache (in production, use Redis)
 type PacienteCreated = Awaited<ReturnType<typeof createPaciente>>
@@ -122,10 +124,45 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[v0] Error creating patient:", error)
 
+    // Manejo de errores de dominio (duplicados)
+    if (error instanceof PacienteAlreadyExistsError) {
+      return errors.conflict(
+        error.message,
+        "PACIENTE_ALREADY_EXISTS",
+      )
+    }
+
+    // Manejo de errores de dominio genéricos
+    if (isPacienteDomainError(error)) {
+      return errors.apiError(
+        error.statusCode,
+        error.code,
+        error.message,
+        error.details,
+      )
+    }
+
+    // Manejo de errores de Prisma (unique constraint como fallback)
+    // Esto puede ocurrir en casos de race condition (dos requests simultáneos)
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        // Unique constraint violation
+        const target = (error.meta?.target as string[]) || []
+        if (target.some((t) => t.includes("numero") || t.includes("documento"))) {
+          return errors.conflict(
+            "Ya existe un paciente con este documento. Por favor, verifique los datos.",
+            "DUPLICATE_DOCUMENT",
+          )
+        }
+      }
+    }
+
+    // Manejo genérico de errores de unique constraint (legacy)
     if (error instanceof Error && error.message.includes("Unique constraint")) {
       return errors.conflict("Ya existe un paciente con este documento")
     }
 
+    // Error interno del servidor
     if (process.env.NODE_ENV !== "production") {
       return errors.internal("Error al crear paciente", String(error))
     }

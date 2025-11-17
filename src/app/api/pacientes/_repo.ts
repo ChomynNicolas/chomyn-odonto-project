@@ -217,7 +217,7 @@ export const pacienteRepo = {
     tx.paciente.create({
       data: {
         personaId: data.personaId,
-        notas: JSON.stringify(data.notasJson ?? {}),
+        notasAdministrativas: JSON.stringify(data.notasJson ?? {}),
         estaActivo: true,
       },
     }),
@@ -254,6 +254,53 @@ export const pacienteRepo = {
         autoridadLegal: tieneAutoridadLegal,
       },
     })
+  },
+
+  /**
+   * Busca un paciente existente por tipo y número de documento.
+   * Retorna null si no existe, o el ID del paciente si existe.
+   * 
+   * @param tipoDocumento - Tipo de documento (CI, DNI, PASAPORTE, RUC, OTRO)
+   * @param numeroDocumento - Número de documento (normalizado/trimmed)
+   * @param tx - Cliente de transacción opcional (para usar dentro de transacciones)
+   * @returns Objeto con idPaciente e idPersona si existe, null si no existe
+   */
+  findByDocumento: async (
+    tipoDocumento: TipoDocumento | string,
+    numeroDocumento: string,
+    tx?: Prisma.TransactionClient,
+  ) => {
+    const client = tx || prisma
+    const numeroNormalizado = numeroDocumento.trim()
+
+    const documento = await client.documento.findFirst({
+      where: {
+        tipo: tipoDocumento as TipoDocumento,
+        numero: numeroNormalizado,
+      },
+      include: {
+        persona: {
+          include: {
+            paciente: {
+              select: {
+                idPaciente: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!documento || !documento.persona.paciente) {
+      return null
+    }
+
+    return {
+      idPaciente: documento.persona.paciente.idPaciente,
+      idPersona: documento.persona.idPersona,
+      tipoDocumento: documento.tipo,
+      numeroDocumento: documento.numero,
+    }
   },
 
   getPacienteUI: (idPaciente: number) =>
