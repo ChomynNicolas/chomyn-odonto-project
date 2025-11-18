@@ -36,7 +36,7 @@ export const AnamnesisResponseSchema = z.object({
   pacienteId: z.number(),
   tipo: z.enum(["ADULTO", "PEDIATRICO"]),
   motivoConsulta: z.string().nullable(),
-  payload: z.record(z.any()), // JSON payload
+  payload: z.record(z.string(), z.any()), // JSON payload
   creadoPor: z.object({
     idUsuario: z.number(),
     nombreApellido: z.string(),

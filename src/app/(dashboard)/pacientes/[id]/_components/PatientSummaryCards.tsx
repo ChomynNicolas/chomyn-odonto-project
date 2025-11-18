@@ -5,6 +5,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RestrictedSection } from '@/lib/rbac/guards';
 import { Calendar, Clock, TrendingUp, XCircle, ClipboardList, FileCheck, AlertTriangle } from 'lucide-react';
 import type { PatientOverviewDTO, RolNombre } from '@/types/patient';
@@ -24,20 +25,34 @@ export function PatientSummaryCards({
     <div className="space-y-4">
       {/* Next Appointment */}
       {summaryCards.nextAppointment ? (
-        <Card>
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="h-4 w-4 text-blue-600" />
               Próxima Cita
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
-              <p className="font-medium">{summaryCards.nextAppointment.date}</p>
-              <p className="text-sm text-muted-foreground">
-                {summaryCards.nextAppointment.time}
-              </p>
+            <div className="space-y-2">
+              <div>
+                <p className="font-medium text-base">{summaryCards.nextAppointment.date}</p>
+                <p className="text-sm text-muted-foreground">
+                  {summaryCards.nextAppointment.time}
+                </p>
+              </div>
               <p className="text-sm">{summaryCards.nextAppointment.professional}</p>
+              {summaryCards.nextAppointment.consultorio && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs text-muted-foreground cursor-help">
+                      {summaryCards.nextAppointment.consultorio}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Consultorio</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <Badge variant="outline" className="text-xs">
                 {summaryCards.nextAppointment.type}
               </Badge>
@@ -48,7 +63,7 @@ export function PatientSummaryCards({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="h-4 w-4 text-muted-foreground" />
               Próxima Cita
             </CardTitle>
           </CardHeader>
@@ -60,33 +75,36 @@ export function PatientSummaryCards({
 
       {/* Last Visit */}
       {summaryCards.lastVisit && (
-        <Card>
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4" />
+              <Clock className="h-4 w-4 text-green-600" />
               Última Visita
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
-              <p className="text-sm">{summaryCards.lastVisit.date}</p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{summaryCards.lastVisit.date}</p>
               <p className="text-sm text-muted-foreground">
                 {summaryCards.lastVisit.professional}
               </p>
+              <Badge variant="outline" className="text-xs">
+                {summaryCards.lastVisit.type}
+              </Badge>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Statistics */}
-      <Card>
+      <Card className="transition-shadow hover:shadow-md">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4 text-purple-600" />
             Estadísticas
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Total visitas</span>
             <span className="font-medium">{summaryCards.statistics.totalVisits}</span>
@@ -113,10 +131,10 @@ export function PatientSummaryCards({
 
       {/* Treatment Plans - Clinical only */}
       {currentRole !== 'RECEP' && summaryCards.activeTreatmentPlans ? (
-        <Card>
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" />
+              <ClipboardList className="h-4 w-4 text-indigo-600" />
               Planes Activos
             </CardTitle>
           </CardHeader>
@@ -160,14 +178,14 @@ export function PatientSummaryCards({
       ) : null}
 
       {/* Consent Status */}
-      <Card>
+      <Card className="transition-shadow hover:shadow-md">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FileCheck className="h-4 w-4" />
+            <FileCheck className="h-4 w-4 text-amber-600" />
             Consentimientos
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Activos</span>
             <span className="font-medium">
@@ -190,14 +208,14 @@ export function PatientSummaryCards({
 
       {/* Risk Summary - Clinical only */}
       {currentRole !== 'RECEP' && (
-        <Card>
+        <Card className="transition-shadow hover:shadow-md">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4 text-red-600" />
               Resumen de Riesgos
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-3 text-sm">
             {riskFlags.hasAllergies && (
               <div className="flex items-center justify-between">
                 <span>Alergias</span>

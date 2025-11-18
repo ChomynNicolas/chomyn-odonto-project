@@ -3,10 +3,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionWithRoles } from '@/app/api/_lib/auth';
-import { ok, errors } from '@/app/api/_http';
 import { patientIdSchema } from '@/lib/api/patients/validators';
 import { prisma } from '@/lib/prisma';
-import type { RolNombre } from '@/types/patient';
 
 export async function GET(
   req: NextRequest,
@@ -46,13 +44,13 @@ export async function GET(
             },
             _count: {
               select: {
-                executedProcedures: true,
+                consultaProcedimientos: true,
               },
             },
           },
           orderBy: { order: 'asc' },
         },
-        createdByUser: {
+        creadoPor: {
           select: { nombreApellido: true },
         },
       },
@@ -65,17 +63,18 @@ export async function GET(
       descripcion: plan.descripcion,
       isActive: plan.isActive,
       createdAt: plan.createdAt.toISOString(),
-      createdBy: plan.createdByUser?.nombreApellido || 'Desconocido',
+      createdBy: plan.creadoPor?.nombreApellido || 'Desconocido',
       steps: plan.steps.map(step => ({
         id: step.idTreatmentStep,
         order: step.order,
-        procedure: step.procedimientoCatalogo?.nombre || 'Procedimiento',
+        // Use catalog name if available, otherwise fallback to serviceType or default
+        procedure: step.procedimientoCatalogo?.nombre || step.serviceType || 'Procedimiento',
         toothNumber: step.toothNumber,
-        surface: step.surface,
+        surface: step.toothSurface || null, // Map toothSurface to surface for frontend compatibility
         status: step.status,
         estimatedCostCents: step.estimatedCostCents,
         notes: step.notes,
-        executedCount: step._count.executedProcedures,
+        executedCount: step._count.consultaProcedimientos,
       })),
       progress: {
         total: plan.steps.length,
@@ -88,8 +87,17 @@ export async function GET(
     return NextResponse.json({ ok: true, data: { plans: response } }, { status: 200 });
   } catch (error) {
     console.error('[PatientWorkspace] Error fetching treatment plans:', error);
+    
+    // Provide more detailed error information in development
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
     return NextResponse.json(
-      { ok: false, error: 'INTERNAL_ERROR' },
+      { 
+        ok: false, 
+        error: 'INTERNAL_ERROR',
+        ...(isDevelopment && { details: errorMessage })
+      },
       { status: 500 }
     );
   }

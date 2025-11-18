@@ -90,6 +90,14 @@ export function ClinicalHistoryTab({ patientId }: ClinicalHistoryTabProps) {
                   <p className="text-sm text-muted-foreground mt-1">
                     {entry.professional.name}
                   </p>
+                  {entry.consultation?.status && (
+                    <Badge 
+                      variant={entry.consultation.status === 'FINAL' ? 'default' : 'secondary'} 
+                      className="text-xs mt-1"
+                    >
+                      {entry.consultation.status === 'FINAL' ? 'Finalizada' : 'Borrador'}
+                    </Badge>
+                  )}
                 </div>
                 <Badge variant="outline">{entry.type}</Badge>
               </div>
@@ -116,15 +124,22 @@ export function ClinicalHistoryTab({ patientId }: ClinicalHistoryTabProps) {
               {entry.procedures.length > 0 && (
                 <div>
                   <p className="text-sm font-medium mb-2">Procedimientos</p>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {entry.procedures.map((proc) => (
-                      <div key={proc.id} className="flex items-center gap-2 text-sm">
-                        <Activity className="h-3 w-3 text-muted-foreground" />
-                        <span>{proc.procedure}</span>
-                        {proc.toothNumber && (
-                          <Badge variant="secondary" className="text-xs">
-                            Diente {proc.toothNumber}
-                          </Badge>
+                      <div key={proc.id} className="flex flex-col gap-1 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                          <span className="flex-1">{proc.procedure}</span>
+                          {proc.toothNumber && (
+                            <Badge variant="secondary" className="text-xs">
+                              Diente {proc.toothNumber}
+                            </Badge>
+                          )}
+                        </div>
+                        {proc.notes && (
+                          <p className="text-xs text-muted-foreground ml-5 italic">
+                            {proc.notes}
+                          </p>
                         )}
                       </div>
                     ))}

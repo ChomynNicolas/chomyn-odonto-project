@@ -30,9 +30,43 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const consulta = await prisma.consulta.findUnique({
       where: { citaId },
-      select: { citaId: true },
+      select: { 
+        citaId: true,
+        cita: {
+          select: {
+            pacienteId: true,
+          },
+        },
+      },
     })
     if (!consulta) return errors.notFound("Consulta no encontrada")
+
+    // Check if anamnesis is mandatory for first consultation
+    if (input.status === "FINAL") {
+      // Note: Prisma client uses camelCase, so AnamnesisConfig becomes anamnesisConfig
+      const config = await (prisma as any).anamnesisConfig.findUnique({
+        where: { key: "MAIN" },
+      })
+
+      const mandatoryFirstConsultation = config?.value && 
+        typeof config.value === "object" && 
+        "MANDATORY_FIRST_CONSULTATION" in config.value &&
+        config.value.MANDATORY_FIRST_CONSULTATION === true
+
+      if (mandatoryFirstConsultation) {
+        // Check if patient has anamnesis
+        const anamnesis = await prisma.patientAnamnesis.findUnique({
+          where: { pacienteId: consulta.cita.pacienteId },
+          select: { idPatientAnamnesis: true, motivoConsulta: true },
+        })
+
+        if (!anamnesis || !anamnesis.motivoConsulta) {
+          return errors.validation(
+            "No se puede finalizar la consulta sin completar la anamnesis. La anamnesis es obligatoria para la primera consulta."
+          )
+        }
+      }
+    }
 
     const updateData: Prisma.ConsultaUpdateInput = {
       status: input.status,

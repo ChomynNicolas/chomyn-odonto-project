@@ -37,7 +37,8 @@ import {
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AnamnesisMVPForm } from "./modules/AnamnesisMVPForm"
+import { AnamnesisForm } from "./modules/anamnesis/AnamnesisForm"
+import type { AnamnesisResponse } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { DiagnosticosModule } from "./modules/DiagnosticosModule"
 import { ProcedimientosModule } from "./modules/ProcedimientosModule"
 import { AdjuntosModule } from "./modules/AdjuntosModule"
@@ -268,15 +269,10 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
     clinicalNotes: "",
   })
   const [isSavingResumen, setIsSavingResumen] = useState(false)
-  const [anamnesis, setAnamnesis] = useState<{
-    motivoConsulta: string | null
-    payload: Record<string, any>
-  } | null>(null)
-  const [isLoadingAnamnesis, setIsLoadingAnamnesis] = useState(false)
+  const [anamnesis, setAnamnesis] = useState<AnamnesisResponse | null>(null)
 
   const fetchAnamnesis = async (pacienteId: number) => {
     try {
-      setIsLoadingAnamnesis(true)
       const res = await fetch(`/api/pacientes/${pacienteId}/anamnesis`)
       if (!res.ok) {
         if (res.status === 404) {
@@ -288,10 +284,7 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
       }
       const data = await res.json()
       if (data.data) {
-        setAnamnesis({
-          motivoConsulta: data.data.motivoConsulta,
-          payload: data.data.payload || {},
-        })
+        setAnamnesis(data.data)
       } else {
         setAnamnesis(null)
       }
@@ -299,8 +292,6 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
       console.error("Error fetching anamnesis:", error)
       // Don't show toast - anamnesis is optional
       setAnamnesis(null)
-    } finally {
-      setIsLoadingAnamnesis(false)
     }
   }
 
@@ -314,6 +305,21 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
 
   const handleFinalize = async () => {
     if (!consulta) return
+    
+    // Check if anamnesis is required and missing
+    const { config } = await fetch("/api/anamnesis/config")
+      .then((res) => res.json())
+      .then((data) => ({ config: data.data?.[0]?.value }))
+      .catch(() => ({ config: null }))
+    
+    const mandatoryFirstConsultation = config?.MANDATORY_FIRST_CONSULTATION === true
+    const hasAnamnesis = anamnesis && anamnesis.motivoConsulta
+    
+    if (mandatoryFirstConsultation && !hasAnamnesis) {
+      toast.error("No se puede finalizar la consulta sin completar la anamnesis. Complete la anamnesis en la pestaña correspondiente.")
+      return
+    }
+    
     try {
       setIsSaving(true)
       const res = await fetch(`/api/agenda/citas/${citaId}/consulta/estado`, {
@@ -324,12 +330,15 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
           finishedAt: new Date().toISOString(),
         }),
       })
-      if (!res.ok) throw new Error("Error al finalizar consulta")
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Error al finalizar consulta")
+      }
       toast.success("Consulta finalizada correctamente")
       await fetchConsulta()
     } catch (error) {
       console.error("Error finalizing consulta:", error)
-      toast.error("Error al finalizar consulta")
+      toast.error(error instanceof Error ? error.message : "Error al finalizar consulta")
     } finally {
       setIsSaving(false)
     }
@@ -558,12 +567,17 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
             </TabsList>
 
             <TabsContent value="anamnesis" className="mt-6">
-              {/* MVP: Simple anamnesis form - Reference: ANAMNESIS_MVP_IMPLEMENTATION.md */}
+              {/* Professional anamnesis form with normalized structure */}
               {consulta?.pacienteId ? (
-                <AnamnesisMVPForm
+                <AnamnesisForm
                   pacienteId={consulta.pacienteId}
                   consultaId={consulta.citaId}
-                  initialData={anamnesis}
+                  initialData={anamnesis ? {
+                    ...anamnesis,
+                    antecedents: anamnesis.antecedents || [],
+                    medications: anamnesis.medications || [],
+                    allergies: anamnesis.allergies || [],
+                  } : null}
                   onSave={() => {
                     // Refetch both consulta and anamnesis after save
                     fetchConsulta()
@@ -572,6 +586,7 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
                     }
                   }}
                   canEdit={canEditModules}
+                  patientGender={consulta.paciente?.genero || undefined}
                 />
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
