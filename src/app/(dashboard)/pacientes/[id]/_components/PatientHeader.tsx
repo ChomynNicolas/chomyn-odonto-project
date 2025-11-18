@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { User, Phone, Mail, MapPin, FileText, Calendar, MoreVertical, AlertTriangle, Pill, Activity, Baby } from 'lucide-react';
 import type { PatientIdentityDTO, ContactInfoDTO, RiskFlagsDTO, RolNombre } from '@/types/patient';
+import { PatientRiskBanner } from './shared/PatientRiskBanner';
 
 interface PatientHeaderProps {
   patient: PatientIdentityDTO;
@@ -28,7 +29,11 @@ export function PatientHeader({
   currentRole,
 }: PatientHeaderProps) {
   return (
-    <Card className="p-6">
+    <div className="sticky top-0 z-10 bg-background pb-4">
+      {/* Risk Banner - shown prominently for high-severity risks */}
+      {currentRole !== 'RECEP' && <PatientRiskBanner riskFlags={riskFlags} />}
+      
+      <Card className="p-6 shadow-sm">
       <div className="flex items-start justify-between">
         {/* Left: Identity */}
         <div className="flex items-start gap-4 flex-1">
@@ -141,5 +146,6 @@ export function PatientHeader({
         </DropdownMenu>
       </div>
     </Card>
+    </div>
   );
 }

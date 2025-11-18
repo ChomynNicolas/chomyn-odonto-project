@@ -1,7 +1,29 @@
 // Patient data query builders
 
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import type { RolNombre } from '@/types/patient';
+
+// Type helper for clinical history query result
+type ClinicalHistoryQueryResult = Prisma.ConsultaGetPayload<{
+  include: {
+    cita: {
+      include: {
+        profesional: {
+          include: {
+            persona: { select: { nombres: true; apellidos: true } };
+          };
+        };
+      };
+    };
+    procedimientos: {
+      include: {
+        catalogo: { select: { nombre: true } };
+      };
+    };
+    PatientVitals: true;
+  };
+}>;
 
 export async function getPatientOverviewData(patientId: number, role: RolNombre) {
   const [patient, appointments, anamnesis, activePlans, consents, allergies, medications] = 
@@ -92,7 +114,7 @@ export async function getClinicalHistoryData(
   patientId: number,
   page: number = 1,
   limit: number = 10
-) {
+): Promise<{ consultations: ClinicalHistoryQueryResult[]; total: number }> {
   const skip = (page - 1) * limit;
   
   const [consultations, total] = await Promise.all([
@@ -110,10 +132,10 @@ export async function getClinicalHistoryData(
         },
         procedimientos: {
           include: {
-            procedimientoCatalogo: { select: { nombre: true } },
+            catalogo: { select: { nombre: true } },
           },
         },
-        vitals: {
+        PatientVitals: {
           orderBy: { measuredAt: 'desc' },
           take: 1,
         },

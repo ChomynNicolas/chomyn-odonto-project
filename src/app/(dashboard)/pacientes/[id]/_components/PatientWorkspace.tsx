@@ -6,6 +6,7 @@ import { usePatientOverview } from '@/lib/hooks/use-patient-overview';
 import { PatientHeader } from './PatientHeader';
 import { PatientSummaryCards } from './PatientSummaryCards';
 import { PatientTabs } from './PatientTabs';
+import { PatientQuickActions } from './shared/PatientQuickActions';
 import { PatientWorkspaceSkeleton } from './PatientWorkspaceSkeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
@@ -74,6 +75,9 @@ export function PatientWorkspace({ patientId }: PatientWorkspaceProps) {
           />
         </div>
       </div>
+
+      {/* Quick Actions Floating Button */}
+      <PatientQuickActions patientId={patientId} currentRole={currentRole} />
     </div>
   );
 }

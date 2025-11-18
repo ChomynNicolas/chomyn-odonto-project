@@ -15,6 +15,7 @@ export default async function PatientPage({
   return (
     <div className="container mx-auto py-6 px-4">
       <Suspense fallback={<PatientWorkspaceSkeleton />}>
+        {/* PatientTabs uses useSearchParams, so it needs Suspense boundary */}
         <PatientWorkspace patientId={patientId} />
       </Suspense>
     </div>

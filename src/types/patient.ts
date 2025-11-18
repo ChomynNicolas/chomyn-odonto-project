@@ -140,3 +140,66 @@ export interface AdministrativeDTO {
   responsibles: ResponsiblePersonDTO[];
   administrativeNotes: string | null;
 }
+
+// New DTOs for enhanced workspace features
+export interface PatientAnamnesisDTO {
+  id: number;
+  tipo: 'ADULTO' | 'PEDIATRICO';
+  motivoConsulta: string | null;
+  tieneDolorActual: boolean;
+  dolorIntensidad: number | null;
+  urgenciaPercibida: 'RUTINA' | 'PRIORITARIO' | 'URGENCIA' | null;
+  tieneEnfermedadesCronicas: boolean;
+  tieneAlergias: boolean;
+  tieneMedicacionActual: boolean;
+  embarazada: boolean | null;
+  expuestoHumoTabaco: boolean | null;
+  bruxismo: boolean | null;
+  higieneCepilladosDia: number | null;
+  usaHiloDental: boolean | null;
+  ultimaVisitaDental: string | null;
+  tieneHabitosSuccion: boolean | null;
+  lactanciaRegistrada: boolean | null;
+  updatedAt: string;
+}
+
+export interface PatientAlertDTO {
+  id: string;
+  type: 'ALLERGY' | 'MEDICATION' | 'URGENCY' | 'CONSENT' | 'TREATMENT' | 'APPOINTMENT';
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  title: string;
+  message: string;
+  actionable: boolean;
+  actionUrl?: string;
+  actionLabel?: string;
+}
+
+export interface TimelineEntryDTO {
+  id: string;
+  type: 'APPOINTMENT' | 'CONSULTATION' | 'NOTE' | 'DIAGNOSIS' | 'TREATMENT_STEP';
+  date: string;
+  title: string;
+  description: string | null;
+  professional: {
+    id: number;
+    name: string;
+  } | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AttachmentDTO {
+  id: number;
+  tipo: 'XRAY' | 'INTRAORAL_PHOTO' | 'EXTRAORAL_PHOTO' | 'IMAGE' | 'DOCUMENT' | 'PDF' | 'LAB_REPORT' | 'OTHER';
+  descripcion: string | null;
+  secureUrl: string;
+  thumbnailUrl: string | null;
+  originalFilename: string | null;
+  format: string | null;
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+  uploadedBy: string;
+  consultaId: number | null;
+  procedimientoId: number | null;
+}

@@ -3,11 +3,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionWithRoles } from '@/app/api/_lib/auth';
-import { ok, errors } from '@/app/api/_http';
 import { patientIdSchema, clinicalHistoryQuerySchema } from '@/lib/api/patients/validators';
 import { getClinicalHistoryData } from '@/lib/api/patients/queries';
-import type { RolNombre, ClinicalHistoryEntryDTO, PaginatedResponse } from '@/types/patient';
+import type { ClinicalHistoryEntryDTO, PaginatedResponse } from '@/types/patient';
 import { formatShortDate } from '@/lib/utils/date-formatters';
+import type { PatientVitals } from '@prisma/client';
 
 export async function GET(
   req: NextRequest,
@@ -49,21 +49,31 @@ export async function GET(
   try {
     const { consultations, total } = await getClinicalHistoryData(patientId, page, limit);
 
+    // Map consultations to DTO format
     const entries: ClinicalHistoryEntryDTO[] = consultations.map(consulta => {
       const professional = consulta.cita.profesional;
+      // PatientVitals is an array, get the first element (most recent due to orderBy)
+      // Type assertion needed because Prisma's type inference for nested arrays with take can be imprecise
+      const vitalsArray = consulta.PatientVitals as PatientVitals[];
+      const vital = vitalsArray && vitalsArray.length > 0 ? vitalsArray[0] : null;
+      
+      // Format blood pressure as "syst/diast" string or null
+      const bpString = vital && vital.bpSyst != null && vital.bpDiast != null
+        ? `${vital.bpSyst}/${vital.bpDiast}`
+        : null;
       
       return {
-        id: consulta.idConsulta,
+        id: consulta.citaId, // Use citaId as the unique identifier (it's the PK)
         date: formatShortDate(consulta.createdAt),
         type: 'CONSULTA' as const,
         consultation: {
-          id: consulta.idConsulta,
+          id: consulta.citaId,
           citaId: consulta.citaId,
-          status: consulta.status,
+          status: consulta.status, // ConsultaEstado enum: 'DRAFT' | 'FINAL'
           startedAt: consulta.startedAt?.toISOString() || null,
           finishedAt: consulta.finishedAt?.toISOString() || null,
-          diagnosis: consulta.diagnosticoResumido,
-          clinicalNotes: consulta.notasClinicas,
+          diagnosis: consulta.diagnosis || null,
+          clinicalNotes: consulta.clinicalNotes || null,
         },
         professional: {
           id: professional.idProfesional,
@@ -71,14 +81,15 @@ export async function GET(
         },
         procedures: consulta.procedimientos.map(proc => ({
           id: proc.idConsultaProcedimiento,
-          procedure: proc.procedimientoCatalogo?.nombre || 'Procedimiento',
+          // Use catalog name if available, otherwise fallback to serviceType or default
+          procedure: proc.catalogo?.nombre || proc.serviceType || 'Procedimiento',
           toothNumber: proc.toothNumber,
-          notes: proc.notes,
+          notes: proc.resultNotes || null,
         })),
         diagnoses: [], // Would need additional query to fetch diagnoses
-        vitals: consulta.vitals[0] ? {
-          bp: consulta.vitals[0].bloodPressure,
-          heartRate: consulta.vitals[0].heartRate,
+        vitals: vital ? {
+          bp: bpString,
+          heartRate: vital.heartRate || null,
         } : null,
         attachmentCount: 0, // Would need additional query
       };
@@ -97,8 +108,17 @@ export async function GET(
     return NextResponse.json({ ok: true, data: response }, { status: 200 });
   } catch (error) {
     console.error('[PatientWorkspace] Error fetching clinical history:', error);
+    
+    // Provide more detailed error information in development
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
     return NextResponse.json(
-      { ok: false, error: 'INTERNAL_ERROR' },
+      { 
+        ok: false, 
+        error: 'INTERNAL_ERROR',
+        ...(isDevelopment && { details: errorMessage })
+      },
       { status: 500 }
     );
   }
