@@ -2,6 +2,7 @@
 import { PrismaClient, EstadoCita, MotivoCancelacion, Prisma } from "@prisma/client";
 import type { CancelarBody } from "./_schemas";
 import type { CitaMiniDTO } from "./_dto";
+import { auditCitaCancel } from "@/lib/audit/transaction-audit";
 
 const prisma = new PrismaClient();
 
@@ -119,6 +120,21 @@ export async function cancelarCita(
         changedByUserId: userId,
         changedAt: now,
       },
+    });
+
+    // 4) Auditoría completa con motivo y notas
+    await auditCitaCancel({
+      tx,
+      actorId: userId,
+      citaId: cita.idCita,
+      motivoCancelacion: body.motivoCancelacion as MotivoCancelacion,
+      notas: body.notas ?? null,
+      estadoPrevio: cita.estado,
+      inicioISO: cita.inicio.toISOString(),
+      finISO: cita.fin.toISOString(),
+      pacienteId: cita.paciente.idPaciente,
+      profesionalId: cita.profesional.idProfesional,
+      consultorioId: cita.consultorio?.idConsultorio ?? null,
     });
 
     return { ok: true as const, data: toMini(updated) };

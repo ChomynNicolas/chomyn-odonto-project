@@ -3,6 +3,7 @@ import { PrismaClient, EstadoCita } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import type { EstadoBody } from "./_schemas";
 import type { CitaEstadoDTO } from "./_dto";
+import { auditCitaEstadoChange } from "@/lib/audit/transaction-audit";
 
 const prisma = new PrismaClient();
 
@@ -139,7 +140,7 @@ export async function changeCitaEstado(
       return { ok: false as const, status: 409, error: "CONCURRENT_MODIFICATION" };
     }
 
-    // 4) Auditoría
+    // 4) Registrar historial de estado
     await tx.citaEstadoHistorial.create({
       data: {
         citaId: idCita,
@@ -151,7 +152,17 @@ export async function changeCitaEstado(
       },
     });
 
-    // 5) Recuperar cita para DTO final
+    // 5) Auditoría: registrar cambio de estado
+    await auditCitaEstadoChange({
+      tx,
+      actorId: userId,
+      citaId: idCita,
+      estadoPrevio: previo,
+      estadoNuevo: nuevo,
+      nota: body.nota ?? null,
+    });
+
+    // 6) Recuperar cita para DTO final
     const refreshed = await tx.cita.findUnique({
       where: { idCita },
       select: {

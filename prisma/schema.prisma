@@ -175,8 +175,11 @@ model Especialidad {
   nombre         String                    @unique @map("nombre")
   descripcion    String?                   @map("descripcion")
   isActive       Boolean                   @default(true) @map("is_active")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
   profesionales  ProfesionalEspecialidad[]
 
+  @@index([isActive])
   @@map("Especialidad")
 }
 

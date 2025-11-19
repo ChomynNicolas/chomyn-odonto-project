@@ -97,6 +97,58 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         );
       }
 
+      // Manejar errores de disponibilidad con detalles
+      if (result.status === 409 && (result.code === "OUTSIDE_WORKING_HOURS" || result.code === "NO_WORKING_DAY")) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: result.error,
+            code: result.code,
+            details: result.details,
+          },
+          { status: 409 },
+        );
+      }
+      // Manejar errores de especialidad con detalles
+      if (result.status === 409 && (result.code === "INCOMPATIBLE_SPECIALTY" || result.code === "PROFESSIONAL_HAS_NO_SPECIALTIES")) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: result.error,
+            code: result.code,
+            details: result.details,
+          },
+          { status: 409 },
+        );
+      }
+      // Manejar errores de consultorio
+      if (result.status === 409 && (
+        result.code === "CONSULTORIO_INACTIVO" || 
+        result.code === "CONSULTORIO_BLOCKED" ||
+        result.code === "PROFESIONAL_BLOCKED"
+      )) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: result.error,
+            code: result.code,
+            details: result.details,
+          },
+          { status: 409 },
+        );
+      }
+      if (result.status === 404 && result.code === "CONSULTORIO_NOT_FOUND") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: result.error,
+            code: result.code,
+            details: result.details,
+          },
+          { status: 404 },
+        );
+      }
+
       return NextResponse.json(
         {
           ok: false,
