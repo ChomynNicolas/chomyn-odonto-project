@@ -244,14 +244,22 @@ export async function updateDiagnosisCatalog(
   }
 
   try {
+    // Build update data, only including fields that are explicitly provided
+    const updateData: {
+      code?: string
+      name?: string
+      description?: string | null
+      isActive?: boolean
+    } = {}
+
+    if (data.code !== undefined) updateData.code = data.code
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.description !== undefined) updateData.description = data.description
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
     const updated = await prisma.diagnosisCatalog.update({
       where: { idDiagnosisCatalog: id },
-      data: {
-        code: data.code,
-        name: data.name,
-        description: data.description ?? undefined,
-        isActive: data.isActive,
-      },
+      data: updateData,
       include: {
         _count: {
           select: {

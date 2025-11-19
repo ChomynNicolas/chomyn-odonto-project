@@ -1,31 +1,17 @@
 // Clinical history tab with consultations timeline
+// Enhanced to show diagnoses per encounter with status badges and detail links
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useClinicalHistory } from '@/lib/hooks/use-clinical-history';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import { AlertCircle, FileText, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
-import {
-  Empty,
-  EmptyHeader,
-  EmptyTitle,
-  EmptyDescription,
-  EmptyContent,
-  EmptyMedia
-} from '@/components/ui/empty';
+import { AlertCircle, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Empty, EmptyMedia, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { EncounterSection } from './EncounterSection';
 
 interface ClinicalHistoryTabProps {
   patientId: number;
@@ -34,6 +20,23 @@ interface ClinicalHistoryTabProps {
 export function ClinicalHistoryTab({ patientId }: ClinicalHistoryTabProps) {
   const [page, setPage] = useState(1);
   const { data, isLoading, error } = useClinicalHistory(patientId, { page, limit: 10 });
+
+  // Memoize pagination handlers to prevent unnecessary re-renders
+  const handlePreviousPage = useCallback(() => {
+    setPage((p) => Math.max(1, p - 1));
+  }, []);
+
+  const handleNextPage = useCallback(() => {
+    if (data) {
+      setPage((p) => Math.min(data.pagination.totalPages, p + 1));
+    }
+  }, [data]);
+
+  // Memoize total diagnoses count for display
+  const totalDiagnoses = useMemo(() => {
+    if (!data) return 0;
+    return data.data.reduce((sum, entry) => sum + (entry.diagnoses?.length || 0), 0);
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -63,108 +66,43 @@ export function ClinicalHistoryTab({ patientId }: ClinicalHistoryTabProps) {
 
   if (!data || data.data.length === 0) {
     return (
-      <Empty
-        icon={FileText}
-        title="Sin historial clínico"
-        description="No hay consultas registradas para este paciente."
-      />
+      <Empty>
+        <EmptyMedia variant="icon">
+          <FileText className="h-6 w-6" />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>Sin historial clínico</EmptyTitle>
+          <EmptyDescription>
+            No hay consultas registradas para este paciente.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Historial Clínico</h2>
-        <p className="text-sm text-muted-foreground">
-          {data.pagination.total} consulta{data.pagination.total !== 1 ? 's' : ''} registrada{data.pagination.total !== 1 ? 's' : ''}
-        </p>
+        <div>
+          <h2 className="text-lg font-semibold">Historial Clínico</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {data.pagination.total} consulta{data.pagination.total !== 1 ? 's' : ''} registrada{data.pagination.total !== 1 ? 's' : ''}
+            {totalDiagnoses > 0 && (
+              <span className="ml-2">
+                • {totalDiagnoses} diagnóstico{totalDiagnoses !== 1 ? 's' : ''}
+              </span>
+            )}
+          </p>
+        </div>
       </div>
 
       <div className="space-y-4">
         {data.data.map((entry) => (
-          <Card key={entry.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-base">{entry.date}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {entry.professional.name}
-                  </p>
-                  {entry.consultation?.status && (
-                    <Badge 
-                      variant={entry.consultation.status === 'FINAL' ? 'default' : 'secondary'} 
-                      className="text-xs mt-1"
-                    >
-                      {entry.consultation.status === 'FINAL' ? 'Finalizada' : 'Borrador'}
-                    </Badge>
-                  )}
-                </div>
-                <Badge variant="outline">{entry.type}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {entry.consultation?.diagnosis && (
-                <div>
-                  <p className="text-sm font-medium mb-1">Diagnóstico</p>
-                  <p className="text-sm text-muted-foreground">
-                    {entry.consultation.diagnosis}
-                  </p>
-                </div>
-              )}
-
-              {entry.consultation?.clinicalNotes && (
-                <div>
-                  <p className="text-sm font-medium mb-1">Notas Clínicas</p>
-                  <p className="text-sm text-muted-foreground">
-                    {entry.consultation.clinicalNotes}
-                  </p>
-                </div>
-              )}
-
-              {entry.procedures.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium mb-2">Procedimientos</p>
-                  <div className="space-y-2">
-                    {entry.procedures.map((proc) => (
-                      <div key={proc.id} className="flex flex-col gap-1 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                          <span className="flex-1">{proc.procedure}</span>
-                          {proc.toothNumber && (
-                            <Badge variant="secondary" className="text-xs">
-                              Diente {proc.toothNumber}
-                            </Badge>
-                          )}
-                        </div>
-                        {proc.notes && (
-                          <p className="text-xs text-muted-foreground ml-5 italic">
-                            {proc.notes}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {entry.vitals && (
-                <div className="flex gap-4 text-sm">
-                  {entry.vitals.bp && (
-                    <div>
-                      <span className="text-muted-foreground">PA:</span>{' '}
-                      <span className="font-medium">{entry.vitals.bp}</span>
-                    </div>
-                  )}
-                  {entry.vitals.heartRate && (
-                    <div>
-                      <span className="text-muted-foreground">FC:</span>{' '}
-                      <span className="font-medium">{entry.vitals.heartRate} bpm</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <EncounterSection
+            key={entry.id}
+            entry={entry}
+            patientId={patientId}
+          />
         ))}
       </div>
 
@@ -178,7 +116,7 @@ export function ClinicalHistoryTab({ patientId }: ClinicalHistoryTabProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
+              onClick={handlePreviousPage}
               disabled={page === 1}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -187,7 +125,7 @@ export function ClinicalHistoryTab({ patientId }: ClinicalHistoryTabProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
+              onClick={handleNextPage}
               disabled={page === data.pagination.totalPages}
             >
               Siguiente

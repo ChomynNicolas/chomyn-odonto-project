@@ -8,6 +8,8 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescripti
 import { Checkbox } from "@/components/ui/checkbox"
 import { type AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { MedicationSelector } from "../components/MedicationSelector"
+import { Pill } from "lucide-react"
+import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface MedicationsSectionProps {
   form: UseFormReturn<AnamnesisCreateUpdateBody>
@@ -16,12 +18,22 @@ interface MedicationsSectionProps {
 }
 
 export function MedicationsSection({ form, canEdit, pacienteId }: MedicationsSectionProps) {
+  const tieneMedicacionActual = form.watch("tieneMedicacionActual")
+  const medications = form.watch("medications")
+  const isComplete = !tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0)
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Medicación Actual</CardTitle>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Pill className="h-5 w-5" />
+            Medicación Actual
+          </CardTitle>
+          <SectionCompletionIndicator isComplete={isComplete} />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <FormField
           control={form.control}
           name="tieneMedicacionActual"

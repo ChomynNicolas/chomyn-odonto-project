@@ -86,7 +86,18 @@ export async function GET(
           toothNumber: proc.toothNumber,
           notes: proc.resultNotes || null,
         })),
-        diagnoses: [], // Would need additional query to fetch diagnoses
+        diagnoses: consulta.encounterDiagnoses.map(ed => ({
+          id: ed.diagnosis.idPatientDiagnosis,
+          label: ed.diagnosis.label,
+          code: ed.diagnosis.code,
+          status: ed.diagnosis.status,
+          notedAt: ed.diagnosis.notedAt.toISOString(),
+          resolvedAt: ed.diagnosis.resolvedAt?.toISOString() || null,
+          notes: ed.diagnosis.notes || null,
+          encounterNotes: ed.encounterNotes || null,
+          wasEvaluated: ed.wasEvaluated,
+          wasManaged: ed.wasManaged,
+        })),
         vitals: vital ? {
           bp: bpString,
           heartRate: vital.heartRate || null,

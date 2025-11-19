@@ -8,6 +8,8 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescripti
 import { Checkbox } from "@/components/ui/checkbox"
 import { type AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { AllergySelector } from "../components/AllergySelector"
+import { AlertTriangle } from "lucide-react"
+import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface AllergiesSectionProps {
   form: UseFormReturn<AnamnesisCreateUpdateBody>
@@ -16,12 +18,22 @@ interface AllergiesSectionProps {
 }
 
 export function AllergiesSection({ form, canEdit, pacienteId }: AllergiesSectionProps) {
+  const tieneAlergias = form.watch("tieneAlergias")
+  const allergies = form.watch("allergies")
+  const isComplete = !tieneAlergias || (tieneAlergias && allergies && allergies.length > 0)
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Alergias</CardTitle>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <AlertTriangle className="h-5 w-5" />
+            Alergias
+          </CardTitle>
+          <SectionCompletionIndicator isComplete={isComplete} />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <FormField
           control={form.control}
           name="tieneAlergias"

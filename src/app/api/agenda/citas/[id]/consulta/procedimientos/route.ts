@@ -7,6 +7,8 @@ import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
 import { TreatmentStepStatus } from "@prisma/client"
+import { auditProcedureCreate } from "./_audit"
+import { sanitizeProcedimientoForRole } from "../_utils"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/procedimientos
@@ -34,24 +36,45 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const procedimientos = await prisma.consultaProcedimiento.findMany({
       where: { consultaId: citaId },
+      include: {
+        diagnosis: {
+          select: {
+            idPatientDiagnosis: true,
+            label: true,
+            status: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     })
 
     return ok(
-      procedimientos.map((p) => ({
-        id: p.idConsultaProcedimiento,
-        procedureId: p.procedureId,
-        serviceType: p.serviceType,
-        toothNumber: p.toothNumber,
-        toothSurface: p.toothSurface,
-        quantity: p.quantity,
-        unitPriceCents: p.unitPriceCents,
-        totalCents: p.totalCents,
-        resultNotes: p.resultNotes,
-        treatmentStepId: p.treatmentStepId,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      }))
+      procedimientos.map((p) => {
+        const procDto = {
+          id: p.idConsultaProcedimiento,
+          procedureId: p.procedureId,
+          serviceType: p.serviceType,
+          toothNumber: p.toothNumber,
+          toothSurface: p.toothSurface,
+          quantity: p.quantity,
+          unitPriceCents: p.unitPriceCents,
+          totalCents: p.totalCents,
+          resultNotes: p.resultNotes,
+          treatmentStepId: p.treatmentStepId,
+          diagnosisId: p.diagnosisId ?? null,
+          diagnosis: p.diagnosis
+            ? {
+                id: p.diagnosis.idPatientDiagnosis,
+                label: p.diagnosis.label,
+                status: p.diagnosis.status,
+              }
+            : null,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+        }
+        // Apply role-based price filtering
+        return sanitizeProcedimientoForRole(procDto, rol)
+      })
     )
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
@@ -90,9 +113,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const input = validationResult.data
 
     // Asegurar que la consulta existe
-    const consulta = await prisma.consulta.findUnique({
+    let consulta = await prisma.consulta.findUnique({
       where: { citaId },
-      select: { citaId: true },
+      select: {
+        citaId: true,
+        cita: {
+          select: {
+            pacienteId: true,
+          },
+        },
+      },
     })
     if (!consulta) {
       const cita = await prisma.cita.findUnique({
@@ -100,7 +130,39 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      await ensureConsulta(citaId, cita.profesionalId, userId)
+      consulta = await ensureConsulta(citaId, cita.profesionalId, userId)
+      // Re-fetch to get pacienteId
+      const consultaWithPaciente = await prisma.consulta.findUnique({
+        where: { citaId },
+        select: {
+          citaId: true,
+          cita: {
+            select: {
+              pacienteId: true,
+            },
+          },
+        },
+      })
+      if (consultaWithPaciente) {
+        consulta = consultaWithPaciente
+      }
+    }
+
+    // Validate diagnosisId if provided
+    if (input.diagnosisId) {
+      const diagnosis = await prisma.patientDiagnosis.findUnique({
+        where: { idPatientDiagnosis: input.diagnosisId },
+        select: {
+          pacienteId: true,
+          status: true,
+        },
+      })
+      if (!diagnosis) {
+        return errors.validation("Diagnóstico no encontrado")
+      }
+      if (diagnosis.pacienteId !== consulta.cita.pacienteId) {
+        return errors.validation("El diagnóstico no pertenece al paciente de esta consulta")
+      }
     }
 
     // Calcular total si no se proporciona
@@ -118,6 +180,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         totalCents,
         resultNotes: input.resultNotes ?? null,
         treatmentStepId: input.treatmentStepId ?? null,
+        diagnosisId: input.diagnosisId ?? null,
+      },
+      include: {
+        diagnosis: {
+          select: {
+            idPatientDiagnosis: true,
+            label: true,
+            status: true,
+          },
+        },
       },
     })
 
@@ -144,7 +216,24 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
     }
 
-    return ok({
+    // Audit logging
+    await auditProcedureCreate(
+      procedimiento.idConsultaProcedimiento,
+      userId,
+      {
+        citaId,
+        consultaId: consulta.citaId, // Use the actual consultaId from the consulta object
+        procedureId: procedimiento.procedureId,
+        serviceType: procedimiento.serviceType,
+        quantity: procedimiento.quantity,
+        treatmentStepId: procedimiento.treatmentStepId,
+        toothNumber: procedimiento.toothNumber,
+        toothSurface: procedimiento.toothSurface,
+      },
+      req
+    )
+
+    const responseDto = {
       id: procedimiento.idConsultaProcedimiento,
       procedureId: procedimiento.procedureId,
       serviceType: procedimiento.serviceType,
@@ -155,9 +244,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       totalCents: procedimiento.totalCents,
       resultNotes: procedimiento.resultNotes,
       treatmentStepId: procedimiento.treatmentStepId,
+      diagnosisId: procedimiento.diagnosisId ?? null,
+      diagnosis: procedimiento.diagnosis
+        ? {
+            id: procedimiento.diagnosis.idPatientDiagnosis,
+            label: procedimiento.diagnosis.label,
+            status: procedimiento.diagnosis.status,
+          }
+        : null,
       createdAt: procedimiento.createdAt.toISOString(),
       updatedAt: procedimiento.updatedAt.toISOString(),
-    })
+    }
+    
+    // Apply role-based price filtering
+    return ok(sanitizeProcedimientoForRole(responseDto, rol))
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/procedimientos]", e)

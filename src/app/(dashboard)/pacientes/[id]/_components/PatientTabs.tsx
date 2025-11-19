@@ -11,6 +11,7 @@ import { ClinicalHistoryTab } from './tabs/ClinicalHistoryTab';
 import { TreatmentPlansTab } from './tabs/TreatmentPlansTab';
 import { AdministrativeTab } from './tabs/AdministrativeTab';
 import { OdontogramTab } from './tabs/OdontogramTab';
+import { AnamnesisTab } from './tabs/AnamnesisTab';
 import type { RolNombre } from '@/types/patient';
 
 interface PatientTabsProps {
@@ -18,14 +19,14 @@ interface PatientTabsProps {
   currentRole: RolNombre;
 }
 
-type TabValue = 'overview' | 'clinical-history' | 'treatment-plans' | 'odontogram' | 'administrative';
+type TabValue = 'overview' | 'anamnesis' | 'clinical-history' | 'treatment-plans' | 'odontogram' | 'administrative';
 
 export function PatientTabs({ patientId, currentRole }: PatientTabsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
-  const clinicalTabs: TabValue[] = ['overview', 'clinical-history', 'treatment-plans', 'odontogram'];
+  const clinicalTabs: TabValue[] = ['overview', 'anamnesis', 'clinical-history', 'treatment-plans', 'odontogram'];
   const adminTabs: TabValue[] = ['overview', 'administrative'];
   const visibleTabs = currentRole === 'RECEP' ? adminTabs : [...clinicalTabs, 'administrative'];
 
@@ -70,6 +71,7 @@ export function PatientTabs({ patientId, currentRole }: PatientTabsProps) {
         <TabsTrigger value="overview">Resumen</TabsTrigger>
         
         <RoleGuard allowedRoles={['ADMIN', 'ODONT']} currentRole={currentRole}>
+          <TabsTrigger value="anamnesis">Anamnesis</TabsTrigger>
           <TabsTrigger value="clinical-history">Historial Clínico</TabsTrigger>
           <TabsTrigger value="treatment-plans">Planes de Tratamiento</TabsTrigger>
           <TabsTrigger value="odontogram">Odontograma</TabsTrigger>
@@ -83,6 +85,10 @@ export function PatientTabs({ patientId, currentRole }: PatientTabsProps) {
       </TabsContent>
 
       <RoleGuard allowedRoles={['ADMIN', 'ODONT']} currentRole={currentRole}>
+        <TabsContent value="anamnesis" className="mt-6">
+          <AnamnesisTab patientId={patientId} currentRole={currentRole} />
+        </TabsContent>
+
         <TabsContent value="clinical-history" className="mt-6">
           <ClinicalHistoryTab patientId={patientId} />
         </TabsContent>

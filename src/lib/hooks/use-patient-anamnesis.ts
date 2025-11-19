@@ -7,8 +7,12 @@ export function usePatientAnamnesis(patientId: number) {
   return useQuery({
     queryKey: ['patient', 'anamnesis', patientId],
     queryFn: async () => {
-      const res = await fetch(`/api/pacientes/${patientId}/workspace/anamnesis`);
+      const res = await fetch(`/api/pacientes/${patientId}/anamnesis`);
       if (!res.ok) {
+        if (res.status === 404) {
+          // No anamnesis exists yet - return null
+          return null;
+        }
         const error = await res.json();
         throw new Error(error.error || 'Error al cargar anamnesis');
       }

@@ -6,6 +6,8 @@ import { paramsSchema, createDiagnosisSchema } from "../_schemas"
 import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
+import { DiagnosisStatus } from "@prisma/client"
+import { auditDiagnosisCreate } from "@/lib/audit/diagnosis"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/diagnosticos
@@ -27,11 +29,21 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const consulta = await prisma.consulta.findUnique({
       where: { citaId },
-      select: { citaId: true },
+      select: {
+        citaId: true,
+        cita: {
+          select: {
+            pacienteId: true,
+          },
+        },
+      },
     })
     if (!consulta) return errors.notFound("Consulta no encontrada")
 
-    const diagnosticos = await prisma.patientDiagnosis.findMany({
+    const pacienteId = consulta.cita.pacienteId
+
+    // Fetch diagnoses created in this encounter
+    const diagnosticosCurrentEncounter = await prisma.patientDiagnosis.findMany({
       where: { consultaId: citaId },
       include: {
         createdBy: {
@@ -50,12 +62,78 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             },
           },
         },
+        encounterDiagnoses: {
+          where: { consultaId: citaId },
+          select: {
+            encounterNotes: true,
+            wasEvaluated: true,
+            wasManaged: true,
+          },
+        },
+        consultaProcedimientos: {
+          where: { consultaId: citaId },
+          select: {
+            idConsultaProcedimiento: true,
+          },
+        },
       },
       orderBy: { notedAt: "desc" },
     })
 
-    return ok(
-      diagnosticos.map((d) => ({
+    // Fetch ALL active/under_follow_up diagnoses for patient (from previous encounters)
+    const diagnosticosPreviousEncounters = await prisma.patientDiagnosis.findMany({
+      where: {
+        pacienteId,
+        status: {
+          in: [DiagnosisStatus.ACTIVE, DiagnosisStatus.UNDER_FOLLOW_UP],
+        },
+        // Exclude diagnoses already in current encounter
+        NOT: {
+          consultaId: citaId,
+        },
+      },
+      include: {
+        createdBy: {
+          select: {
+            idUsuario: true,
+            nombreApellido: true,
+            profesional: {
+              select: {
+                persona: {
+                  select: {
+                    nombres: true,
+                    apellidos: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        encounterDiagnoses: {
+          where: { consultaId: citaId },
+          select: {
+            encounterNotes: true,
+            wasEvaluated: true,
+            wasManaged: true,
+          },
+        },
+        consultaProcedimientos: {
+          where: { consultaId: citaId },
+          select: {
+            idConsultaProcedimiento: true,
+          },
+        },
+      },
+      orderBy: { notedAt: "desc" },
+    })
+
+    // Helper function to format diagnosis
+    const formatDiagnosis = (
+      d: typeof diagnosticosCurrentEncounter[0] | typeof diagnosticosPreviousEncounters[0],
+      source: 'current_encounter' | 'previous_encounter'
+    ) => {
+      const encounterDiagnosis = d.encounterDiagnoses[0]
+      return {
         id: d.idPatientDiagnosis,
         diagnosisId: d.diagnosisId,
         code: d.code,
@@ -71,8 +149,26 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               ? `${d.createdBy.profesional.persona.nombres} ${d.createdBy.profesional.persona.apellidos}`.trim()
               : d.createdBy.nombreApellido ?? "Usuario",
         },
-      }))
+        source,
+        encounterNotes: encounterDiagnosis?.encounterNotes ?? null,
+        wasEvaluated: encounterDiagnosis?.wasEvaluated ?? false,
+        wasManaged: encounterDiagnosis?.wasManaged ?? false,
+        linkedProceduresCount: d.consultaProcedimientos.length,
+      }
+    }
+
+    // Map current encounter diagnoses
+    const currentDiagnoses = diagnosticosCurrentEncounter.map((d) =>
+      formatDiagnosis(d, 'current_encounter')
     )
+
+    // Map previous encounter diagnoses
+    const previousDiagnoses = diagnosticosPreviousEncounters.map((d) =>
+      formatDiagnosis(d, 'previous_encounter')
+    )
+
+    // Merge and return (current first, then previous)
+    return ok([...currentDiagnoses, ...previousDiagnoses])
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]/consulta/diagnosticos]", e)
@@ -150,6 +246,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           status: input.status,
           notes: input.notes ?? null,
           createdByUserId: userId,
+          resolvedAt: input.status === DiagnosisStatus.RESOLVED ? new Date() : null,
         },
         include: {
           createdBy: {
@@ -171,6 +268,42 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         },
       })
 
+      // Create EncounterDiagnosis record
+      await prisma.encounterDiagnosis.create({
+        data: {
+          consultaId: citaId,
+          diagnosisId: diagnostico.idPatientDiagnosis,
+          wasEvaluated: true,
+          wasManaged: true,
+        },
+      })
+
+      // Create initial DiagnosisStatusHistory entry
+      await prisma.diagnosisStatusHistory.create({
+        data: {
+          diagnosisId: diagnostico.idPatientDiagnosis,
+          consultaId: citaId,
+          previousStatus: null,
+          newStatus: input.status,
+          changedByUserId: userId,
+        },
+      })
+
+      // Audit: Log diagnosis creation
+      await auditDiagnosisCreate({
+        actorId: userId,
+        diagnosisId: diagnostico.idPatientDiagnosis,
+        pacienteId: nuevaConsulta.cita.pacienteId,
+        consultaId: citaId,
+        diagnosisCatalogId: input.diagnosisId ?? null,
+        code: input.code ?? null,
+        label: input.label,
+        status: input.status,
+        notes: input.notes ?? null,
+        headers: req.headers,
+        path: `/api/agenda/citas/${citaId}/consulta/diagnosticos`,
+      })
+
       return ok({
         id: diagnostico.idPatientDiagnosis,
         diagnosisId: diagnostico.diagnosisId,
@@ -187,6 +320,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
               ? `${diagnostico.createdBy.profesional.persona.nombres} ${diagnostico.createdBy.profesional.persona.apellidos}`.trim()
               : diagnostico.createdBy.nombreApellido ?? "Usuario",
         },
+        source: 'current_encounter' as const,
+        encounterNotes: null,
+        wasEvaluated: true,
+        wasManaged: true,
+        linkedProceduresCount: 0,
       })
     }
 
@@ -205,6 +343,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         status: input.status,
         notes: input.notes ?? null,
         createdByUserId: userId,
+        resolvedAt: input.status === DiagnosisStatus.RESOLVED ? new Date() : null,
       },
       include: {
         createdBy: {
@@ -226,6 +365,42 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       },
     })
 
+    // Create EncounterDiagnosis record
+    await prisma.encounterDiagnosis.create({
+      data: {
+        consultaId: citaId,
+        diagnosisId: diagnostico.idPatientDiagnosis,
+        wasEvaluated: true,
+        wasManaged: true,
+      },
+    })
+
+    // Create initial DiagnosisStatusHistory entry
+    await prisma.diagnosisStatusHistory.create({
+      data: {
+        diagnosisId: diagnostico.idPatientDiagnosis,
+        consultaId: citaId,
+        previousStatus: null,
+        newStatus: input.status,
+        changedByUserId: userId,
+      },
+    })
+
+    // Audit: Log diagnosis creation
+    await auditDiagnosisCreate({
+      actorId: userId,
+      diagnosisId: diagnostico.idPatientDiagnosis,
+      pacienteId: consulta.cita.pacienteId,
+      consultaId: citaId,
+      diagnosisCatalogId: input.diagnosisId ?? null,
+      code: input.code ?? null,
+      label: input.label,
+      status: input.status,
+      notes: input.notes ?? null,
+      headers: req.headers,
+      path: `/api/agenda/citas/${citaId}/consulta/diagnosticos`,
+    })
+
     return ok({
       id: diagnostico.idPatientDiagnosis,
       diagnosisId: diagnostico.diagnosisId,
@@ -242,6 +417,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             ? `${diagnostico.createdBy.profesional.persona.nombres} ${diagnostico.createdBy.profesional.persona.apellidos}`.trim()
             : diagnostico.createdBy.nombreApellido ?? "Usuario",
       },
+      source: 'current_encounter' as const,
+      encounterNotes: null,
+      wasEvaluated: true,
+      wasManaged: true,
+      linkedProceduresCount: 0,
     })
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "ZodError") {

@@ -78,6 +78,13 @@ export const AuditAction = {
   // AnamnesisConfig Management
   CONFIG_CREATE: "CONFIG_CREATE",
   CONFIG_UPDATE: "CONFIG_UPDATE",
+  // Patient Diagnosis Management
+  DIAGNOSIS_CREATE: "DIAGNOSIS_CREATE",
+  DIAGNOSIS_UPDATE: "DIAGNOSIS_UPDATE",
+  DIAGNOSIS_STATUS_CHANGE: "DIAGNOSIS_STATUS_CHANGE",
+  DIAGNOSIS_DELETE: "DIAGNOSIS_DELETE",
+  DIAGNOSIS_RESOLVE: "DIAGNOSIS_RESOLVE",
+  DIAGNOSIS_DISCARD: "DIAGNOSIS_DISCARD",
   // — futuras acciones comunes —
   // PATIENT_VIEW: "PATIENT_VIEW",
   // USER_LOGIN: "USER_LOGIN",
@@ -102,6 +109,7 @@ export const AuditEntity = {
   MedicationCatalog: "MedicationCatalog",
   AntecedentCatalog: "AntecedentCatalog",
   AnamnesisConfig: "AnamnesisConfig",
+  PatientDiagnosis: "PatientDiagnosis",
   // agrega las que necesites
 } as const
 export type AuditEntity = typeof AuditEntity[keyof typeof AuditEntity]

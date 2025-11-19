@@ -103,6 +103,12 @@ export interface ClinicalHistoryEntryDTO {
     label: string;
     code: string | null;
     status: string;
+    notedAt: string;
+    resolvedAt: string | null;
+    notes: string | null;
+    encounterNotes: string | null;
+    wasEvaluated: boolean;
+    wasManaged: boolean;
   }>;
   vitals: {
     bp: string | null;

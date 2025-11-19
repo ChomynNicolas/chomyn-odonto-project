@@ -7,6 +7,8 @@ import { CONSULTA_RBAC } from "../../_rbac"
 import { prisma } from "@/lib/prisma"
 import { updateProcedureSchema } from "../../_schemas"
 import type { Prisma } from "@prisma/client"
+import { auditProcedureUpdate, auditProcedureDelete } from "../_audit"
+import { sanitizeProcedimientoForRole } from "../../_utils"
 
 const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -43,6 +45,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     })
     if (!procedimiento) return errors.notFound("Procedimiento no encontrado")
 
+    // Store before state for audit
+    const beforeState = {
+      quantity: procedimiento.quantity,
+      resultNotes: procedimiento.resultNotes,
+      unitPriceCents: procedimiento.unitPriceCents,
+      totalCents: procedimiento.totalCents,
+    }
+
     const updateData: Prisma.ConsultaProcedimientoUpdateInput = {}
     if (input.quantity !== undefined) updateData.quantity = input.quantity
     if (input.unitPriceCents !== undefined) updateData.unitPriceCents = input.unitPriceCents
@@ -62,7 +72,22 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
       data: updateData,
     })
 
-    return ok({
+    // Audit logging
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
+    await auditProcedureUpdate(
+      procedimientoId,
+      userId,
+      beforeState,
+      {
+        quantity: updated.quantity,
+        resultNotes: updated.resultNotes,
+        unitPriceCents: updated.unitPriceCents,
+        totalCents: updated.totalCents,
+      },
+      req
+    )
+
+    const responseDto = {
       id: updated.idConsultaProcedimiento,
       procedureId: updated.procedureId,
       serviceType: updated.serviceType,
@@ -75,7 +100,10 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
       treatmentStepId: updated.treatmentStepId,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
-    })
+    }
+    
+    // Apply role-based price filtering
+    return ok(sanitizeProcedimientoForRole(responseDto, rol))
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "ZodError") {
       const zodError = e as { errors?: Array<{ message?: string }> }
@@ -113,9 +141,25 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     })
     if (!procedimiento) return errors.notFound("Procedimiento no encontrado")
 
+    // Store procedure data for audit before deletion
+    const procedureData = {
+      citaId,
+      consultaId: procedimiento.consultaId,
+      procedureId: procedimiento.procedureId,
+      serviceType: procedimiento.serviceType,
+      quantity: procedimiento.quantity,
+      treatmentStepId: procedimiento.treatmentStepId,
+      toothNumber: procedimiento.toothNumber,
+      toothSurface: procedimiento.toothSurface,
+    }
+
     await prisma.consultaProcedimiento.delete({
       where: { idConsultaProcedimiento: procedimientoId },
     })
+
+    // Audit logging
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
+    await auditProcedureDelete(procedimientoId, userId, procedureData, req)
 
     return ok({ deleted: true })
   } catch (e: unknown) {

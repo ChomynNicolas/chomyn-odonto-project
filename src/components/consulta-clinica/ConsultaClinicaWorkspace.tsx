@@ -1,7 +1,7 @@
 // src/components/consulta-clinica/ConsultaClinicaWorkspace.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,9 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AnamnesisForm } from "./modules/anamnesis/AnamnesisForm"
-import type { AnamnesisResponse } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisContextBanner } from "./modules/anamnesis/components/AnamnesisContextBanner"
+import { AnamnesisFormSkeleton } from "./modules/anamnesis/components/AnamnesisFormSkeleton"
+import { useAnamnesisContext } from "./modules/anamnesis/hooks/useAnamnesisContext"
 import { DiagnosticosModule } from "./modules/DiagnosticosModule"
 import { ProcedimientosModule } from "./modules/ProcedimientosModule"
 import { AdjuntosModule } from "./modules/AdjuntosModule"
@@ -269,39 +271,9 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
     clinicalNotes: "",
   })
   const [isSavingResumen, setIsSavingResumen] = useState(false)
-  const [anamnesis, setAnamnesis] = useState<AnamnesisResponse | null>(null)
-
-  const fetchAnamnesis = async (pacienteId: number) => {
-    try {
-      const res = await fetch(`/api/pacientes/${pacienteId}/anamnesis`)
-      if (!res.ok) {
-        if (res.status === 404) {
-          // No anamnesis exists yet
-          setAnamnesis(null)
-          return
-        }
-        throw new Error("Error al cargar anamnesis")
-      }
-      const data = await res.json()
-      if (data.data) {
-        setAnamnesis(data.data)
-      } else {
-        setAnamnesis(null)
-      }
-    } catch (error) {
-      console.error("Error fetching anamnesis:", error)
-      // Don't show toast - anamnesis is optional
-      setAnamnesis(null)
-    }
-  }
-
-  // Fetch anamnesis when pacienteId is available
-  // Note: fetchConsulta is handled by useConsulta hook
-  useEffect(() => {
-    if (consulta?.pacienteId) {
-      fetchAnamnesis(consulta.pacienteId)
-    }
-  }, [consulta?.pacienteId])
+  
+  // Use centralized anamnesis context hook
+  const { anamnesis, context, isLoading: isLoadingAnamnesis, refetch: refetchAnamnesis } = useAnamnesisContext(consulta?.pacienteId)
 
   const handleFinalize = async () => {
     if (!consulta) return
@@ -566,28 +538,39 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
               )}
             </TabsList>
 
-            <TabsContent value="anamnesis" className="mt-6">
+            <TabsContent value="anamnesis" className="mt-6 space-y-6">
+              {/* Anamnesis Context Banner */}
+              {consulta?.pacienteId && context && (
+                <AnamnesisContextBanner
+                  context={context}
+                  anamnesis={anamnesis}
+                />
+              )}
+              
               {/* Professional anamnesis form with normalized structure */}
               {consulta?.pacienteId ? (
-                <AnamnesisForm
-                  pacienteId={consulta.pacienteId}
-                  consultaId={consulta.citaId}
-                  initialData={anamnesis ? {
-                    ...anamnesis,
-                    antecedents: anamnesis.antecedents || [],
-                    medications: anamnesis.medications || [],
-                    allergies: anamnesis.allergies || [],
-                  } : null}
-                  onSave={() => {
-                    // Refetch both consulta and anamnesis after save
-                    fetchConsulta()
-                    if (consulta.pacienteId) {
-                      fetchAnamnesis(consulta.pacienteId)
-                    }
-                  }}
-                  canEdit={canEditModules}
-                  patientGender={consulta.paciente?.genero || undefined}
-                />
+                isLoadingAnamnesis ? (
+                  <AnamnesisFormSkeleton />
+                ) : (
+                  <AnamnesisForm
+                    pacienteId={consulta.pacienteId}
+                    consultaId={consulta.citaId}
+                    initialData={anamnesis ? {
+                      ...anamnesis,
+                      antecedents: anamnesis.antecedents || [],
+                      medications: anamnesis.medications || [],
+                      allergies: anamnesis.allergies || [],
+                    } : null}
+                    onSave={() => {
+                      // Refetch both consulta and anamnesis after save
+                      fetchConsulta()
+                      refetchAnamnesis()
+                    }}
+                    anamnesisContext={context}
+                    canEdit={canEditModules}
+                    patientGender={consulta.paciente?.genero || undefined}
+                  />
+                )
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   Cargando información del paciente...
@@ -611,7 +594,8 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
                 consulta={consulta} 
                 canEdit={canEditModules} 
                 hasConsulta={hasConsulta}
-                onUpdate={fetchConsulta} 
+                onUpdate={fetchConsulta}
+                userRole={userRole}
               />
             </TabsContent>
 

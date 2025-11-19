@@ -5,6 +5,7 @@
 import { ClinicalSummary } from './overview/ClinicalSummary';
 import { RecentActivity } from './overview/RecentActivity';
 import { QuickStats } from './overview/QuickStats';
+import { AnamnesisOverviewSection } from './overview/AnamnesisOverviewSection';
 import { PatientAlerts } from '../shared/PatientAlerts';
 import type { RolNombre } from '@/types/patient';
 
@@ -23,6 +24,11 @@ export function OverviewTab({ patientId, currentRole }: OverviewTabProps) {
 
       {/* Quick Stats */}
       <QuickStats patientId={patientId} />
+
+      {/* Anamnesis Overview Section - Prioritized for clinical roles */}
+      {currentRole !== 'RECEP' && (
+        <AnamnesisOverviewSection patientId={patientId} currentRole={currentRole} />
+      )}
 
       {/* Main Content Grid */}
       <div className="grid gap-6 md:grid-cols-2">
