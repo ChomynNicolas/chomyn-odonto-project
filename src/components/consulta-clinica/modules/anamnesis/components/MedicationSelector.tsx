@@ -224,6 +224,11 @@ export function MedicationSelector({
       customRoute: value.customRoute,
       notes: value.notes,
       isActive: value.isActive ?? true,
+      // Include display fields if available (from loaded anamnesis)
+      label: value.label ?? undefined,
+      dose: value.dose ?? undefined,
+      freq: value.freq ?? undefined,
+      route: value.route ?? undefined,
     }
   })
 

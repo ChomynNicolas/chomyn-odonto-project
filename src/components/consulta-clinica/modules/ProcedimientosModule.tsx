@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Activity, Trash2, Edit, Search, Clock } from "lucide-react"
+import { Plus, Activity, Trash2, Edit, Search, Clock, ClipboardList } from "lucide-react"
 import { toast } from "sonner"
 import type { ConsultaClinicaDTO, ProcedimientoDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
 import { TreatmentStepStatus, DienteSuperficie } from "@prisma/client"
@@ -31,6 +32,7 @@ interface ProcedimientosModuleProps {
   canEdit: boolean
   hasConsulta?: boolean // Indica si la consulta ya fue iniciada (createdAt !== null)
   onUpdate: () => void
+  userRole?: "ADMIN" | "ODONT" | "RECEP" // Rol del usuario para controlar visibilidad de precios
 }
 
 /**
@@ -39,7 +41,8 @@ interface ProcedimientosModuleProps {
  * Permite a los odontólogos agregar, editar y visualizar procedimientos
  * realizados durante la consulta.
  */
-export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: ProcedimientosModuleProps) {
+export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate, userRole = "ADMIN" }: ProcedimientosModuleProps) {
+  const canViewPrices = userRole === "ADMIN" // Only ADMIN can see prices
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<ProcedimientoDTO | null>(null)
   const [serviceType, setServiceType] = useState("")
@@ -53,26 +56,50 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
+  const [diagnosisId, setDiagnosisId] = useState<number | null>(null)
+  const [filterByDiagnosisId, setFilterByDiagnosisId] = useState<number | null>(null)
   
   // Estados para catálogo
   const [catalogOptions, setCatalogOptions] = useState<ProcedimientoCatalogoDTO[]>([])
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<ProcedimientoCatalogoDTO | null>(null)
 
-  // Filtrar procedimientos por búsqueda
+  // Get active diagnoses for linking
+  const activeDiagnoses = useMemo(() => {
+    return (consulta.diagnosticos || []).filter(
+      (d) => {
+        const status = d.status as string
+        return status === "ACTIVE" || status === "UNDER_FOLLOW_UP"
+      }
+    )
+  }, [consulta.diagnosticos])
+
+  // Filtrar procedimientos por búsqueda y diagnóstico
   const filteredProcedimientos = useMemo(() => {
     const procedimientosList = consulta.procedimientos || []
     if (procedimientosList.length === 0) return []
-    if (!searchQuery.trim()) return procedimientosList
+    
+    let filtered = procedimientosList
 
-    const query = searchQuery.toLowerCase().trim()
-    return procedimientosList.filter(
-      (p) =>
-        p.serviceType?.toLowerCase().includes(query) ||
-        p.resultNotes?.toLowerCase().includes(query) ||
-        (p.toothNumber && String(p.toothNumber).includes(query))
-    )
-  }, [consulta.procedimientos, searchQuery])
+    // Filter by diagnosis if selected
+    if (filterByDiagnosisId) {
+      filtered = filtered.filter((p) => p.diagnosisId === filterByDiagnosisId)
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = filtered.filter(
+        (p) =>
+          p.serviceType?.toLowerCase().includes(query) ||
+          p.resultNotes?.toLowerCase().includes(query) ||
+          (p.toothNumber && String(p.toothNumber).includes(query)) ||
+          p.diagnosis?.label.toLowerCase().includes(query)
+      )
+    }
+
+    return filtered
+  }, [consulta.procedimientos, searchQuery, filterByDiagnosisId])
 
   const resetForm = () => {
     setEditing(null)
@@ -85,6 +112,7 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
     setToothNumber("")
     setToothSurface(null)
     setSelectedCatalogItem(null)
+    setDiagnosisId(null)
   }
 
   // Cargar catálogo al abrir el diálogo
@@ -212,26 +240,43 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
         : `/api/agenda/citas/${citaId}/consulta/procedimientos`
       const method = editing ? "PUT" : "POST"
 
+      // Helper function to remove null/undefined values from object (only for creation)
+      const cleanNullValues = (obj: Record<string, unknown>) => {
+        const cleaned: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(obj)) {
+          if (value !== null && value !== undefined) {
+            cleaned[key] = value
+          }
+        }
+        return cleaned
+      }
+
+      const requestBody = editing
+        ? {
+            quantity: qty,
+            resultNotes: resultNotes.trim() || null,
+          }
+        : {
+            procedureId: procedureId || null,
+            serviceType: serviceType.trim() || null,
+            quantity: qty,
+            // Only send price data if user can view prices (ADMIN role)
+            unitPriceCents: canViewPrices && unitPriceCents ? Number.parseInt(unitPriceCents, 10) : null,
+            toothNumber: toothNumber ? Number.parseInt(toothNumber, 10) : null,
+            toothSurface: toothSurface || null,
+            resultNotes: resultNotes.trim() || null,
+            treatmentStepId: treatmentStepId || null,
+            diagnosisId: diagnosisId || null,
+          }
+
+      // For creation, remove null values to avoid validation errors
+      // For update, keep null values as they may be needed to clear fields
+      const bodyToSend = editing ? requestBody : cleanNullValues(requestBody)
+
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          editing
-            ? {
-                quantity: qty,
-                resultNotes: resultNotes.trim() || null,
-              }
-            : {
-                procedureId: procedureId || null,
-                serviceType: serviceType.trim() || null,
-                quantity: qty,
-                unitPriceCents: unitPriceCents ? Number.parseInt(unitPriceCents, 10) : null,
-                toothNumber: toothNumber ? Number.parseInt(toothNumber, 10) : null,
-                toothSurface: toothSurface || null,
-                resultNotes: resultNotes.trim() || null,
-                treatmentStepId: treatmentStepId || null,
-              }
-        ),
+        body: JSON.stringify(bodyToSend),
       })
 
       if (!res.ok) {
@@ -267,6 +312,7 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
     setUnitPriceCents(procedimiento.unitPriceCents ? String(procedimiento.unitPriceCents) : "")
     setToothNumber(procedimiento.toothNumber ? String(procedimiento.toothNumber) : "")
     setToothSurface(procedimiento.toothSurface || null)
+    setDiagnosisId(procedimiento.diagnosisId || null)
     
     // Si tiene procedureId, buscar en catálogo para habilitar/deshabilitar campos
     if (procedimiento.procedureId) {
@@ -488,27 +534,36 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
                       </p>
                     </div>
 
-                    {/* Precio unitario */}
-                    <div className="space-y-2">
-                      <Label htmlFor="unitPriceCents">
-                        Precio Unitario (centavos) <span className="text-muted-foreground text-xs">(opcional)</span>
-                      </Label>
-                      <Input
-                        id="unitPriceCents"
-                        type="number"
-                        min="0"
-                        value={unitPriceCents}
-                        onChange={(e) => setUnitPriceCents(e.target.value)}
-                        placeholder="Precio en centavos"
-                        disabled={!!treatmentStepId}
-                        className={selectedCatalogItem?.defaultPriceCents ? "bg-muted" : ""}
-                      />
-                      {selectedCatalogItem?.defaultPriceCents && (
+                    {/* Precio unitario - Solo visible para ADMIN */}
+                    {canViewPrices && (
+                      <div className="space-y-2">
+                        <Label htmlFor="unitPriceCents">
+                          Precio Unitario (centavos) <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Input
+                          id="unitPriceCents"
+                          type="number"
+                          min="0"
+                          value={unitPriceCents}
+                          onChange={(e) => setUnitPriceCents(e.target.value)}
+                          placeholder="Precio en centavos"
+                          disabled={!!treatmentStepId}
+                          className={selectedCatalogItem?.defaultPriceCents ? "bg-muted" : ""}
+                        />
+                        {selectedCatalogItem?.defaultPriceCents && (
+                          <p className="text-xs text-muted-foreground">
+                            Precio por defecto del catálogo: {selectedCatalogItem.defaultPriceCents.toLocaleString()} centavos
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!canViewPrices && (
+                      <div className="rounded-md border border-muted bg-muted/50 p-3">
                         <p className="text-xs text-muted-foreground">
-                          Precio por defecto del catálogo: {selectedCatalogItem.defaultPriceCents.toLocaleString()} centavos
+                          Los precios son gestionados por la administración
                         </p>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Diente */}
                     <div className="space-y-2">
@@ -598,6 +653,40 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
                     required
                   />
                 </div>
+
+                {/* Diagnosis Link */}
+                {activeDiagnoses.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="diagnosisLink">
+                      Vincular a Diagnóstico <span className="text-muted-foreground text-xs">(opcional)</span>
+                    </Label>
+                    <Select
+                      value={diagnosisId?.toString() || "__none__"}
+                      onValueChange={(value) => {
+                        setDiagnosisId(value === "__none__" ? null : (value ? Number.parseInt(value, 10) : null))
+                      }}
+                      disabled={!canEdit}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione un diagnóstico..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sin vincular</SelectItem>
+                        {activeDiagnoses.map((diagnosis) => {
+                          const status = diagnosis.status as string
+                          return (
+                            <SelectItem key={diagnosis.id} value={diagnosis.id.toString()}>
+                              {diagnosis.label} {status === "UNDER_FOLLOW_UP" && "(En Seguimiento)"}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Vincule este procedimiento a un diagnóstico activo para seguimiento clínico
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="resultNotes">
                     Notas del Resultado <span className="text-muted-foreground text-xs">(opcional)</span>
@@ -626,17 +715,47 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
         )}
       </div>
 
-      {/* Búsqueda */}
+      {/* Búsqueda y Filtros */}
       {hasProcedimientos && (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Buscar por tipo de procedimiento, notas o diente..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Buscar por tipo de procedimiento, notas o diente..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          {activeDiagnoses.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="filterDiagnosis" className="text-sm whitespace-nowrap">
+                Filtrar por diagnóstico:
+              </Label>
+              <Select
+                value={filterByDiagnosisId?.toString() || "__none__"}
+                onValueChange={(value) => {
+                  setFilterByDiagnosisId(value === "__none__" ? null : (value ? Number.parseInt(value, 10) : null))
+                }}
+              >
+                <SelectTrigger id="filterDiagnosis" className="w-full sm:w-[300px]">
+                  <SelectValue placeholder="Todos los procedimientos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Todos los procedimientos</SelectItem>
+                  {activeDiagnoses.map((diagnosis) => {
+                    const status = diagnosis.status as string
+                    return (
+                      <SelectItem key={diagnosis.id} value={diagnosis.id.toString()}>
+                        {diagnosis.label} {status === "UNDER_FOLLOW_UP" && "(En Seguimiento)"}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       )}
 
@@ -671,6 +790,15 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate }: Pr
                     <CardTitle className="text-base">
                       {proc.serviceType || "Procedimiento sin especificar"}
                     </CardTitle>
+                    {proc.diagnosis && (
+                      <div className="mt-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">
+                          <ClipboardList className="h-3 w-3 mr-1" />
+                          Vinculado a: {proc.diagnosis.label}
+                          {(proc.diagnosis.status as string) === "UNDER_FOLLOW_UP" && " (En Seguimiento)"}
+                        </Badge>
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mt-2">
                       <span>Cantidad: {proc.quantity}</span>
                       {proc.toothNumber && <span>Diente: {proc.toothNumber}</span>}

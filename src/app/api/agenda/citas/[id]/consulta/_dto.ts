@@ -92,11 +92,27 @@ export interface DiagnosticoDTO {
     id: number
     nombre: string
   }
+  // NEW fields for encounter-diagnosis tracking
+  source: 'current_encounter' | 'previous_encounter'
+  encounterNotes?: string | null
+  wasEvaluated?: boolean
+  wasManaged?: boolean
+  linkedProceduresCount?: number
 }
 
 // ============================================================================
 // PROCEDIMIENTOS
 // ============================================================================
+/**
+ * DTO for procedure data
+ * 
+ * Note: Price fields (unitPriceCents, totalCents) are filtered based on user role:
+ * - ODONT: Prices are set to null (dentists should not see monetary values)
+ * - ADMIN: Full price data is available
+ * - RECEP: Full price data is available (though RECEP typically doesn't see procedures)
+ * 
+ * Use sanitizeProcedimientoForRole() from _utils.ts to apply role-based filtering
+ */
 export interface ProcedimientoDTO {
   id: number
   procedureId: number | null
@@ -108,6 +124,13 @@ export interface ProcedimientoDTO {
   totalCents: number | null
   resultNotes: string | null
   treatmentStepId: number | null
+  // NEW: Link to diagnosis
+  diagnosisId?: number | null
+  diagnosis?: {
+    id: number
+    label: string
+    status: DiagnosisStatus
+  } | null
   createdAt: string
   updatedAt: string
 }

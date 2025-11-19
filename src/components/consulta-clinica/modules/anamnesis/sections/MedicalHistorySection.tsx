@@ -8,6 +8,8 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescripti
 import { Checkbox } from "@/components/ui/checkbox"
 import { type AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { AntecedentSelector } from "../components/AntecedentSelector"
+import { Heart } from "lucide-react"
+import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface MedicalHistorySectionProps {
   form: UseFormReturn<AnamnesisCreateUpdateBody>
@@ -16,12 +18,22 @@ interface MedicalHistorySectionProps {
 }
 
 export function MedicalHistorySection({ form, canEdit }: MedicalHistorySectionProps) {
+  const tieneEnfermedadesCronicas = form.watch("tieneEnfermedadesCronicas")
+  const antecedents = form.watch("antecedents")
+  const isComplete = !tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0)
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Antecedentes Médicos</CardTitle>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Heart className="h-5 w-5" />
+            Antecedentes Médicos
+          </CardTitle>
+          <SectionCompletionIndicator isComplete={isComplete} />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <FormField
           control={form.control}
           name="tieneEnfermedadesCronicas"

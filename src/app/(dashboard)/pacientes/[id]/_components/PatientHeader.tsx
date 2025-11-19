@@ -14,12 +14,16 @@ import {
 import { User, Phone, Mail, MapPin, FileText, Calendar, MoreVertical, AlertTriangle, Pill, Activity, Baby } from 'lucide-react';
 import type { PatientIdentityDTO, ContactInfoDTO, RiskFlagsDTO, RolNombre } from '@/types/patient';
 import { PatientRiskBanner } from './shared/PatientRiskBanner';
+import { AnamnesisStatusBadge } from './shared/AnamnesisStatusBadge';
+import { AnamnesisQuickIndicators } from './shared/AnamnesisQuickIndicators';
+import { usePatientAnamnesis } from '@/lib/hooks/use-patient-anamnesis';
 
 interface PatientHeaderProps {
   patient: PatientIdentityDTO;
   contacts: ContactInfoDTO;
   riskFlags: RiskFlagsDTO;
   currentRole: RolNombre;
+  patientId: number;
 }
 
 export function PatientHeader({
@@ -27,7 +31,10 @@ export function PatientHeader({
   contacts,
   riskFlags,
   currentRole,
+  patientId,
 }: PatientHeaderProps) {
+  const { data: anamnesis, isLoading: isLoadingAnamnesis } = usePatientAnamnesis(patientId);
+
   return (
     <div className="sticky top-0 z-10 bg-background pb-4">
       {/* Risk Banner - shown prominently for high-severity risks */}
@@ -77,6 +84,14 @@ export function PatientHeader({
                 </span>
               )}
             </div>
+
+            {/* Anamnesis Status & Quick Indicators - Clinical roles only */}
+            {currentRole !== 'RECEP' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <AnamnesisStatusBadge anamnesis={anamnesis || null} isLoading={isLoadingAnamnesis} />
+                {anamnesis && <AnamnesisQuickIndicators anamnesis={anamnesis} compact />}
+              </div>
+            )}
 
             {/* Risk Flags */}
             <div className="flex flex-wrap gap-2">

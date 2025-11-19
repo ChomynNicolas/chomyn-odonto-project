@@ -75,6 +75,7 @@ model Usuario {
   AnamnesisAllergyRemovedBy    AnamnesisAllergy[]       @relation("AnamnesisAllergyRemovedBy")
   AnamnesisMedicationAuditPerformedBy AnamnesisMedicationAudit[] @relation("AnamnesisMedicationAuditPerformedBy")
   AnamnesisAllergyAuditPerformedBy    AnamnesisAllergyAudit[]    @relation("AnamnesisAllergyAuditPerformedBy")
+  DiagnosisStatusHistoryChangedBy     DiagnosisStatusHistory[]   @relation("DiagnosisStatusHistoryChangedBy")
 
   @@index([rolId])
   @@map("Usuario")
@@ -540,6 +541,8 @@ model Consulta {
   OdontogramSnapshot     OdontogramSnapshot[]
   PeriodontogramSnapshot PeriodontogramSnapshot[]
   anamnesisVersiones     PatientAnamnesisVersion[]
+  encounterDiagnoses     EncounterDiagnosis[]
+  diagnosisStatusHistory DiagnosisStatusHistory[]
 
   @@map("Consulta")
 }
@@ -568,6 +571,10 @@ model ConsultaProcedimiento {
   treatmentStepId Int?           @map("TreatmentStep_idTreatmentStep")
   treatmentStep   TreatmentStep? @relation(fields: [treatmentStepId], references: [idTreatmentStep], onDelete: SetNull)
 
+  // Vínculo con diagnóstico (opcional)
+  diagnosisId Int?              @map("PatientDiagnosis_idPatientDiagnosis")
+  diagnosis   PatientDiagnosis? @relation(fields: [diagnosisId], references: [idPatientDiagnosis], onDelete: SetNull)
+
   resultNotes String? @map("result_notes")
 
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -577,6 +584,7 @@ model ConsultaProcedimiento {
   @@index([consultaId])
   @@index([procedureId])
   @@index([treatmentStepId])
+  @@index([diagnosisId])
   @@map("ConsultaProcedimiento")
 }
 
@@ -713,8 +721,10 @@ model ClinicalHistoryEntry {
 
 enum DiagnosisStatus {
   ACTIVE
+  UNDER_FOLLOW_UP
   RESOLVED
-  RULED_OUT
+  DISCARDED
+  RULED_OUT // Keep for backward compatibility
 }
 
 model DiagnosisCatalog {
@@ -754,9 +764,58 @@ model PatientDiagnosis {
 
   paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
 
+  // Relaciones nuevas
+  encounterDiagnoses EncounterDiagnosis[]
+  consultaProcedimientos ConsultaProcedimiento[]
+  statusHistory DiagnosisStatusHistory[]
+
   @@index([pacienteId, status, notedAt])
   @@index([consultaId])
   @@map("PatientDiagnosis")
+}
+
+// Encounter-Diagnosis junction table for tracking diagnosis evaluation per encounter
+model EncounterDiagnosis {
+  idEncounterDiagnosis Int @id @default(autoincrement()) @map("idEncounterDiagnosis")
+  consultaId Int @map("Consulta_Cita_idCita")
+  diagnosisId Int @map("PatientDiagnosis_idPatientDiagnosis")
+  
+  // Encounter-specific context
+  encounterNotes String? @map("encounter_notes") @db.VarChar(1000)
+  wasEvaluated Boolean @default(true) @map("was_evaluated")
+  wasManaged Boolean @default(false) @map("was_managed")
+  
+  consulta Consulta @relation(fields: [consultaId], references: [citaId], onDelete: Cascade)
+  diagnosis PatientDiagnosis @relation(fields: [diagnosisId], references: [idPatientDiagnosis], onDelete: Cascade)
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@unique([consultaId, diagnosisId])
+  @@index([consultaId])
+  @@index([diagnosisId])
+  @@map("EncounterDiagnosis")
+}
+
+// Audit trail for diagnosis status changes
+model DiagnosisStatusHistory {
+  idDiagnosisStatusHistory Int @id @default(autoincrement()) @map("idDiagnosisStatusHistory")
+  diagnosisId Int @map("PatientDiagnosis_idPatientDiagnosis")
+  consultaId Int? @map("Consulta_Cita_idCita")
+  
+  previousStatus DiagnosisStatus? @map("previous_status")
+  newStatus DiagnosisStatus @map("new_status")
+  reason String? @map("reason") @db.VarChar(500)
+  
+  changedByUserId Int @map("Usuario_idUsuario_changedBy")
+  changedAt DateTime @default(now()) @map("changed_at")
+  
+  diagnosis PatientDiagnosis @relation(fields: [diagnosisId], references: [idPatientDiagnosis], onDelete: Cascade)
+  consulta Consulta? @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  changedBy Usuario @relation("DiagnosisStatusHistoryChangedBy", fields: [changedByUserId], references: [idUsuario])
+  
+  @@index([diagnosisId, changedAt])
+  @@index([consultaId])
+  @@map("DiagnosisStatusHistory")
 }
 
 // ============== 3) Alergias y medicación =====================

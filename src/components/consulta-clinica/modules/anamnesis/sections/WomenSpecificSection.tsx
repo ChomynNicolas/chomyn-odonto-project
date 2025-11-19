@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { type AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { User } from "lucide-react"
+import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface WomenSpecificSectionProps {
   form: UseFormReturn<AnamnesisCreateUpdateBody>
@@ -16,12 +18,21 @@ interface WomenSpecificSectionProps {
 }
 
 export function WomenSpecificSection({ form, canEdit }: WomenSpecificSectionProps) {
+  const womenSpecific = form.watch("womenSpecific")
+  const isComplete = womenSpecific?.embarazada !== null && womenSpecific?.embarazada !== undefined
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Información Específica para Mujeres</CardTitle>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <User className="h-5 w-5" />
+            Información Específica para Mujeres
+          </CardTitle>
+          <SectionCompletionIndicator isComplete={isComplete} />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <FormField
           control={form.control}
           name="womenSpecific.embarazada"

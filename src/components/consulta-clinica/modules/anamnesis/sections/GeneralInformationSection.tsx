@@ -4,13 +4,14 @@
 
 import { UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { type AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form"
 import { Checkbox } from "@/components/ui/checkbox"
+import { FileText } from "lucide-react"
+import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface GeneralInformationSectionProps {
   form: UseFormReturn<AnamnesisCreateUpdateBody>
@@ -18,12 +19,24 @@ interface GeneralInformationSectionProps {
 }
 
 export function GeneralInformationSection({ form, canEdit }: GeneralInformationSectionProps) {
+  // Calculate completion
+  const motivoConsulta = form.watch("motivoConsulta")
+  const tieneDolorActual = form.watch("tieneDolorActual")
+  const dolorIntensidad = form.watch("dolorIntensidad")
+  const isComplete = !!motivoConsulta && (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined))
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Información General</CardTitle>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <FileText className="h-5 w-5" />
+            Información General
+          </CardTitle>
+          <SectionCompletionIndicator isComplete={isComplete} />
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <FormField
           control={form.control}
           name="motivoConsulta"

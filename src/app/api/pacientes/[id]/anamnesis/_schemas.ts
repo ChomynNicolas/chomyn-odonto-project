@@ -60,6 +60,11 @@ export const AnamnesisMedicationLinkSchema = z.object({
   customRoute: z.string().max(100).optional(),
   notes: z.string().max(500).optional(),
   isActive: z.boolean().default(true),
+  // Display fields (from medication relation - for UI only, not sent to server)
+  label: z.string().nullable().optional(), // From PatientMedication.label or MedicationCatalog.name
+  dose: z.string().nullable().optional(), // From PatientMedication.dose
+  freq: z.string().nullable().optional(), // From PatientMedication.freq
+  route: z.string().nullable().optional(), // From PatientMedication.route
 }).refine(
   (data) => data.medicationId || data.catalogId || data.customLabel,
   { message: "Must provide medicationId, catalogId, or customLabel" }
@@ -77,6 +82,8 @@ export const AnamnesisAllergyLinkSchema = z.object({
   reaction: z.string().max(500).optional(),
   notes: z.string().max(500).optional(),
   isActive: z.boolean().default(true),
+  // Display field (from allergy relation - for UI only, not sent to server)
+  label: z.string().nullable().optional(), // From PatientAllergy.label or AllergyCatalog.name
 }).refine(
   (data) => data.allergyId || data.catalogId || data.customLabel,
   { message: "Must provide allergyId, catalogId, or customLabel" }

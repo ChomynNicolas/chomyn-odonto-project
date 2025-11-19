@@ -86,15 +86,32 @@ export const createDiagnosisSchema = z.object({
     .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
 })
 
-export const updateDiagnosisSchema = z.object({
-  status: z.nativeEnum(DiagnosisStatus).optional(),
-  notes: z
-    .string()
-    .max(1000)
-    .optional()
-    .nullable()
-    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
-})
+export const updateDiagnosisSchema = z
+  .object({
+    status: z.nativeEnum(DiagnosisStatus).optional(),
+    reason: z
+      .string()
+      .max(500)
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+    notes: z
+      .string()
+      .max(1000)
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+  })
+  .superRefine((data, ctx) => {
+    // If status is DISCARDED, reason is required
+    if (data.status === DiagnosisStatus.DISCARDED && (!data.reason || data.reason.trim() === "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La razón es obligatoria cuando se descarta un diagnóstico",
+        path: ["reason"],
+      })
+    }
+  })
 
 export type CreateDiagnosisInput = z.infer<typeof createDiagnosisSchema>
 export type UpdateDiagnosisInput = z.infer<typeof updateDiagnosisSchema>
@@ -104,15 +121,26 @@ export type UpdateDiagnosisInput = z.infer<typeof updateDiagnosisSchema>
 // ============================================================================
 export const createProcedureSchema = z
   .object({
-    procedureId: z.number().int().positive().optional(),
-    serviceType: z.string().max(200).optional(),
-    toothNumber: z.number().int().min(1).max(85).optional(),
-    toothSurface: z.nativeEnum(DienteSuperficie).optional(),
+    procedureId: z.number().int().positive().optional().nullable(),
+    serviceType: z
+      .string()
+      .max(200)
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+    toothNumber: z.number().int().min(1).max(85).optional().nullable(),
+    toothSurface: z.nativeEnum(DienteSuperficie).optional().nullable(),
     quantity: z.number().int().positive().default(1),
-    unitPriceCents: z.number().int().nonnegative().optional(),
-    totalCents: z.number().int().nonnegative().optional(),
-    resultNotes: z.string().max(2000).optional(),
-    treatmentStepId: z.number().int().positive().optional(),
+    unitPriceCents: z.number().int().nonnegative().optional().nullable(),
+    totalCents: z.number().int().nonnegative().optional().nullable(),
+    resultNotes: z
+      .string()
+      .max(2000)
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+    treatmentStepId: z.number().int().positive().optional().nullable(),
+    diagnosisId: z.number().int().positive().optional().nullable(),
   })
   .superRefine((data, ctx) => {
     // Validación condicional: debe haber procedureId O serviceType no vacío
@@ -135,9 +163,14 @@ export const createProcedureSchema = z
 
 export const updateProcedureSchema = z.object({
   quantity: z.number().int().positive().optional(),
-  unitPriceCents: z.number().int().nonnegative().optional(),
-  totalCents: z.number().int().nonnegative().optional(),
-  resultNotes: z.string().max(2000).optional(),
+  unitPriceCents: z.number().int().nonnegative().optional().nullable(),
+  totalCents: z.number().int().nonnegative().optional().nullable(),
+  resultNotes: z
+    .string()
+    .max(2000)
+    .optional()
+    .nullable()
+    .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
 })
 
 export type CreateProcedureInput = z.infer<typeof createProcedureSchema>

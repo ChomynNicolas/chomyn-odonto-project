@@ -225,6 +225,8 @@ export function AllergySelector({
       reaction: value.reaction,
       notes: value.notes,
       isActive: value.isActive ?? true,
+      // Include display field if available (from loaded anamnesis)
+      label: value.label ?? undefined,
     }
   })
 

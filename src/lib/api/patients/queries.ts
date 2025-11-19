@@ -21,6 +21,21 @@ type ClinicalHistoryQueryResult = Prisma.ConsultaGetPayload<{
         catalogo: { select: { nombre: true } };
       };
     };
+    encounterDiagnoses: {
+      include: {
+        diagnosis: {
+          select: {
+            idPatientDiagnosis: true;
+            label: true;
+            code: true;
+            status: true;
+            notedAt: true;
+            resolvedAt: true;
+            notes: true;
+          };
+        };
+      };
+    };
     PatientVitals: true;
   };
 }>;
@@ -133,6 +148,21 @@ export async function getClinicalHistoryData(
         procedimientos: {
           include: {
             catalogo: { select: { nombre: true } },
+          },
+        },
+        encounterDiagnoses: {
+          include: {
+            diagnosis: {
+              select: {
+                idPatientDiagnosis: true,
+                label: true,
+                code: true,
+                status: true,
+                notedAt: true,
+                resolvedAt: true,
+                notes: true,
+              },
+            },
           },
         },
         PatientVitals: {

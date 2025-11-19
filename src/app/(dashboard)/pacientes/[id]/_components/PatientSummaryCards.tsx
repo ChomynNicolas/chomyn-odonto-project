@@ -8,21 +8,29 @@ import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RestrictedSection } from '@/lib/rbac/guards';
 import { Calendar, Clock, TrendingUp, XCircle, ClipboardList, FileCheck, AlertTriangle } from 'lucide-react';
+import { AnamnesisSummaryCard } from './shared/AnamnesisSummaryCard';
 import type { PatientOverviewDTO, RolNombre } from '@/types/patient';
 
 interface PatientSummaryCardsProps {
   summaryCards: PatientOverviewDTO['summaryCards'];
   riskFlags: PatientOverviewDTO['riskFlags'];
   currentRole: RolNombre;
+  patientId: number;
 }
 
 export function PatientSummaryCards({
   summaryCards,
   riskFlags,
   currentRole,
+  patientId,
 }: PatientSummaryCardsProps) {
   return (
     <div className="space-y-4">
+      {/* Anamnesis Summary Card - First for clinical roles */}
+      {currentRole !== 'RECEP' && (
+        <AnamnesisSummaryCard patientId={patientId} currentRole={currentRole} />
+      )}
+
       {/* Next Appointment */}
       {summaryCards.nextAppointment ? (
         <Card className="transition-shadow hover:shadow-md">

@@ -60,6 +60,7 @@ export function PatientWorkspace({ patientId }: PatientWorkspaceProps) {
         contacts={data.contacts}
         riskFlags={data.riskFlags}
         currentRole={currentRole}
+        patientId={patientId}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -72,6 +73,7 @@ export function PatientWorkspace({ patientId }: PatientWorkspaceProps) {
             summaryCards={data.summaryCards}
             riskFlags={data.riskFlags}
             currentRole={currentRole}
+            patientId={patientId}
           />
         </div>
       </div>

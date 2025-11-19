@@ -1,11 +1,12 @@
 // src/app/api/agenda/citas/[id]/consulta/_service.ts
 import { prisma } from "@/lib/prisma"
-import { ConsultaEstado } from "@prisma/client"
+import { ConsultaEstado, DiagnosisStatus } from "@prisma/client"
 import type { Prisma } from "@prisma/client"
 import type {
   ConsultaClinicaDTO,
   ConsultaAdminDTO,
 } from "./_dto"
+import { sanitizeProcedimientoForRole } from "./_utils"
 
 const userMiniSelect = {
   idUsuario: true,
@@ -36,8 +37,13 @@ function displayUser(user: UserMini | null | undefined): string {
 
 /**
  * Obtiene la consulta completa con todos sus módulos (solo ODONT/ADMIN)
+ * @param citaId - ID de la cita
+ * @param userRole - Rol del usuario para filtrar datos sensibles (precios para ODONT)
  */
-export async function getConsultaClinica(citaId: number): Promise<ConsultaClinicaDTO | null> {
+export async function getConsultaClinica(
+  citaId: number,
+  userRole?: "ADMIN" | "ODONT" | "RECEP"
+): Promise<ConsultaClinicaDTO | null> {
   const consulta = await prisma.consulta.findUnique({
     where: { citaId },
     include: {
@@ -87,10 +93,33 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
           createdBy: {
             select: userMiniSelect,
           },
+          encounterDiagnoses: {
+            where: { consultaId: citaId },
+            select: {
+              encounterNotes: true,
+              wasEvaluated: true,
+              wasManaged: true,
+            },
+          },
+          consultaProcedimientos: {
+            where: { consultaId: citaId },
+            select: {
+              idConsultaProcedimiento: true,
+            },
+          },
         },
         orderBy: { notedAt: "desc" },
       },
       procedimientos: {
+        include: {
+          diagnosis: {
+            select: {
+              idPatientDiagnosis: true,
+              label: true,
+              status: true,
+            },
+          },
+        },
         orderBy: { createdAt: "desc" },
       },
       adjuntos: {
@@ -240,6 +269,80 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
     (c) => c.tipo === "PHONE" && c.esPrincipal
   )?.valorNorm || null
 
+  // Fetch active diagnoses from previous encounters
+  const diagnosticosPreviousEncounters = await prisma.patientDiagnosis.findMany({
+    where: {
+      pacienteId: consulta.cita.pacienteId,
+      status: {
+        in: [DiagnosisStatus.ACTIVE, DiagnosisStatus.UNDER_FOLLOW_UP],
+      },
+      // Exclude diagnoses already in current encounter
+      NOT: {
+        consultaId: citaId,
+      },
+    },
+    include: {
+      createdBy: {
+        select: userMiniSelect,
+      },
+      encounterDiagnoses: {
+        where: { consultaId: citaId },
+        select: {
+          encounterNotes: true,
+          wasEvaluated: true,
+          wasManaged: true,
+        },
+      },
+      consultaProcedimientos: {
+        where: { consultaId: citaId },
+        select: {
+          idConsultaProcedimiento: true,
+        },
+      },
+    },
+    orderBy: { notedAt: "desc" },
+  })
+
+  // Helper function to format diagnosis
+  const formatDiagnosis = (
+    d: typeof consulta.PatientDiagnosis[0] | typeof diagnosticosPreviousEncounters[0],
+    source: 'current_encounter' | 'previous_encounter'
+  ) => {
+    const encounterDiagnosis = d.encounterDiagnoses[0]
+    return {
+      id: d.idPatientDiagnosis,
+      diagnosisId: d.diagnosisId,
+      code: d.code,
+      label: d.label,
+      status: d.status,
+      notedAt: d.notedAt.toISOString(),
+      resolvedAt: d.resolvedAt?.toISOString() ?? null,
+      notes: d.notes,
+      createdBy: {
+        id: d.createdBy.idUsuario,
+        nombre: displayUser(d.createdBy),
+      },
+      source,
+      encounterNotes: encounterDiagnosis?.encounterNotes ?? null,
+      wasEvaluated: encounterDiagnosis?.wasEvaluated ?? false,
+      wasManaged: encounterDiagnosis?.wasManaged ?? false,
+      linkedProceduresCount: d.consultaProcedimientos.length,
+    }
+  }
+
+  // Map current encounter diagnoses
+  const currentDiagnoses = consulta.PatientDiagnosis.map((d) =>
+    formatDiagnosis(d, 'current_encounter')
+  )
+
+  // Map previous encounter diagnoses
+  const previousDiagnoses = diagnosticosPreviousEncounters.map((d) =>
+    formatDiagnosis(d, 'previous_encounter')
+  )
+
+  // Merge diagnoses (current first, then previous)
+  const allDiagnoses = [...currentDiagnoses, ...previousDiagnoses]
+
   const dto: ConsultaClinicaDTO = {
     citaId: consulta.citaId,
     pacienteId: consulta.cita.pacienteId,
@@ -286,35 +389,34 @@ export async function getConsultaClinica(citaId: number): Promise<ConsultaClinic
       createdAt: e.createdAt.toISOString(),
     })),
 
-    diagnosticos: consulta.PatientDiagnosis.map((d) => ({
-      id: d.idPatientDiagnosis,
-      diagnosisId: d.diagnosisId,
-      code: d.code,
-      label: d.label,
-      status: d.status,
-      notedAt: d.notedAt.toISOString(),
-      resolvedAt: d.resolvedAt?.toISOString() ?? null,
-      notes: d.notes,
-      createdBy: {
-        id: d.createdBy.idUsuario,
-        nombre: displayUser(d.createdBy),
-      },
-    })),
+    diagnosticos: allDiagnoses,
 
-    procedimientos: consulta.procedimientos.map((p) => ({
-      id: p.idConsultaProcedimiento,
-      procedureId: p.procedureId,
-      serviceType: p.serviceType,
-      toothNumber: p.toothNumber,
-      toothSurface: p.toothSurface,
-      quantity: p.quantity,
-      unitPriceCents: p.unitPriceCents,
-      totalCents: p.totalCents,
-      resultNotes: p.resultNotes,
-      treatmentStepId: p.treatmentStepId,
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
-    })),
+    procedimientos: consulta.procedimientos.map((p) => {
+      const procDto = {
+        id: p.idConsultaProcedimiento,
+        procedureId: p.procedureId,
+        serviceType: p.serviceType,
+        toothNumber: p.toothNumber,
+        toothSurface: p.toothSurface,
+        quantity: p.quantity,
+        unitPriceCents: p.unitPriceCents,
+        totalCents: p.totalCents,
+        resultNotes: p.resultNotes,
+        treatmentStepId: p.treatmentStepId,
+        diagnosisId: p.diagnosisId ?? null,
+        diagnosis: p.diagnosis
+          ? {
+              id: p.diagnosis.idPatientDiagnosis,
+              label: p.diagnosis.label,
+              status: p.diagnosis.status,
+            }
+          : null,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+      }
+      // Apply role-based price filtering
+      return sanitizeProcedimientoForRole(procDto, userRole ?? "ADMIN")
+    }),
 
     medicaciones: medicaciones.map((m) => ({
       id: m.idPatientMedication,

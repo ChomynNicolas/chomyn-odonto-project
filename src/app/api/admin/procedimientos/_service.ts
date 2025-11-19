@@ -317,18 +317,31 @@ export async function updateProcedimiento(
   }
 
   try {
+    // Build update data, only including fields that are explicitly provided
+    // This allows us to distinguish between "not provided" (undefined) and "set to null"
+    const updateData: {
+      code?: string
+      nombre?: string
+      descripcion?: string | null
+      defaultDurationMin?: number | null
+      defaultPriceCents?: number | null
+      aplicaDiente?: boolean
+      aplicaSuperficie?: boolean
+      activo?: boolean
+    } = {}
+
+    if (data.code !== undefined) updateData.code = data.code
+    if (data.nombre !== undefined) updateData.nombre = data.nombre
+    if (data.descripcion !== undefined) updateData.descripcion = data.descripcion
+    if (data.defaultDurationMin !== undefined) updateData.defaultDurationMin = data.defaultDurationMin
+    if (data.defaultPriceCents !== undefined) updateData.defaultPriceCents = data.defaultPriceCents
+    if (data.aplicaDiente !== undefined) updateData.aplicaDiente = data.aplicaDiente
+    if (data.aplicaSuperficie !== undefined) updateData.aplicaSuperficie = data.aplicaSuperficie
+    if (data.activo !== undefined) updateData.activo = data.activo
+
     const updated = await prisma.procedimientoCatalogo.update({
       where: { idProcedimiento: id },
-      data: {
-        code: data.code,
-        nombre: data.nombre,
-        descripcion: data.descripcion ?? undefined,
-        defaultDurationMin: data.defaultDurationMin ?? undefined,
-        defaultPriceCents: data.defaultPriceCents ?? undefined,
-        aplicaDiente: data.aplicaDiente,
-        aplicaSuperficie: data.aplicaSuperficie,
-        activo: data.activo,
-      },
+      data: updateData,
       include: {
         _count: {
           select: {

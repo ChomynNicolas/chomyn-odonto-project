@@ -37,7 +37,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     // PERO: El componente frontend siempre espera ConsultaClinicaDTO, así que siempre retornamos ese formato
     if (CONSULTA_RBAC.canViewClinicalData(rol)) {
       // ODONT/ADMIN: datos clínicos completos
-      const consulta = await getConsultaClinica(citaId)
+      const consulta = await getConsultaClinica(citaId, rol)
       if (!consulta) {
         // Si no existe consulta, obtener datos de la cita para construir respuesta inicial
         const cita = await prisma.cita.findUnique({
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return ok(consulta)
     } else if (CONSULTA_RBAC.canViewAdminData(rol)) {
       // RECEP: puede ver pero necesita formato ConsultaClinicaDTO con arrays vacíos
-      const consulta = await getConsultaClinica(citaId)
+      const consulta = await getConsultaClinica(citaId, rol)
       if (!consulta) {
         // Si no existe consulta, obtener datos básicos de la cita
         const cita = await prisma.cita.findUnique({
@@ -361,7 +361,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     await updateConsultaResumen(citaId, validatedBody.data)
 
     // Obtener consulta actualizada y retornar
-    const consultaActualizada = await getConsultaClinica(citaId)
+    const consultaActualizada = await getConsultaClinica(citaId, rol)
     if (!consultaActualizada) {
       return errors.notFound("Error al obtener consulta actualizada")
     }
