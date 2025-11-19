@@ -61,6 +61,7 @@ export function useDisponibilidadValidator({
       setIsValid(false)
       setError(null)
       setRecomendaciones([])
+      setIsChecking(false)
       return
     }
 
@@ -72,7 +73,27 @@ export function useDisponibilidadValidator({
     try {
       // Redondear hora de inicio a intervalos de 15 minutos (sincronizado con BE)
       const [h, m] = horaInicio.split(":").map(Number)
+      
+      // Validar que la fecha y hora sean válidas antes de continuar
+      if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        setIsValid(false)
+        setError("Hora inválida")
+        setRecomendaciones([])
+        setIsChecking(false)
+        return
+      }
+      
       const fechaHoraLocal = new Date(`${fecha}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`)
+      
+      // Validar que la fecha sea válida
+      if (isNaN(fechaHoraLocal.getTime())) {
+        setIsValid(false)
+        setError("Fecha u hora inválida")
+        setRecomendaciones([])
+        setIsChecking(false)
+        return
+      }
+      
       const fechaHoraRedondeada = roundToMinutes(fechaHoraLocal, 15)
       
       // Convertir de vuelta a HH:mm para la validación

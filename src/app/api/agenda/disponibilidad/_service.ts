@@ -3,40 +3,12 @@ import { PrismaClient, type EstadoCita } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import type { GetDisponibilidadQuery } from "./_schemas";
 import type { SlotDTO } from "./_dto";
-
-// Tipo para la disponibilidad del profesional (JSON almacenado en BD)
-type ProfesionalDisponibilidad = {
-  dow?: {
-    [key: string]: [string, string][];
-  };
-} | null;
-
-// Valida y convierte Prisma.JsonValue a ProfesionalDisponibilidad
-function parseProfesionalDisponibilidad(
-  json: Prisma.JsonValue | null | undefined
-): ProfesionalDisponibilidad {
-  if (!json || typeof json !== "object" || Array.isArray(json)) {
-    return null;
-  }
-  const obj = json as Record<string, unknown>;
-  if (!obj.dow || typeof obj.dow !== "object" || Array.isArray(obj.dow)) {
-    return null;
-  }
-  const dow = obj.dow as Record<string, unknown>;
-  const parsedDow: Record<string, [string, string][]> = {};
-  for (const [key, value] of Object.entries(dow)) {
-    if (Array.isArray(value)) {
-      const segments = value.filter((seg): seg is [string, string] => 
-        Array.isArray(seg) && seg.length === 2 && 
-        typeof seg[0] === "string" && typeof seg[1] === "string"
-      );
-      if (segments.length > 0) {
-        parsedDow[key] = segments;
-      }
-    }
-  }
-  return Object.keys(parsedDow).length > 0 ? { dow: parsedDow } : null;
-}
+import {
+  parseProfesionalDisponibilidad,
+  buildWorkingWindows,
+  dayBoundsUtc,
+  type ProfesionalDisponibilidad,
+} from "@/lib/utils/availability-validation";
 
 const prisma = new PrismaClient();
 
@@ -48,130 +20,9 @@ const ACTIVE_CITA_STATES: EstadoCita[] = [
   "IN_PROGRESS",
 ];
 
-// Zona de la clínica
-const CLINIC_TZ = process.env.CLINIC_TZ || "America/Asuncion";
-
 // ----------------------- Utils básicos -----------------------
 function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60 * 1000);
-}
-function isBefore(a: Date, b: Date) {
-  return a.getTime() < b.getTime();
-}
-
-// Convierte una Date (instante UTC) a componentes Y-M-D-H-M-S en zona dada
-function getLocalParts(utcDate: Date, timeZone: string) {
-  const dtf = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  const parts = dtf.formatToParts(utcDate);
-  const map: Record<string, number> = {};
-  for (const p of parts) {
-    if (p.type !== "literal") map[p.type] = parseInt(p.value, 10);
-  }
-  return {
-    year: map.year,
-    month: map.month,
-    day: map.day,
-    hour: map.hour,
-    minute: map.minute,
-    second: map.second ?? 0,
-  };
-}
-
-// Offset (ms) de la zona en un instante dado
-function tzOffsetFor(utcDate: Date, timeZone: string): number {
-  const lp = getLocalParts(utcDate, timeZone);
-  const asUTC = Date.UTC(lp.year, lp.month - 1, lp.day, lp.hour, lp.minute, lp.second);
-  return asUTC - utcDate.getTime();
-}
-
-/**
- * Construye un instante UTC a partir de una fecha local (YYYY-MM-DD) y una hora local (HH:mm)
- * en la zona `timeZone`.
- */
-function zonedYmdTimeToUtc(fechaYMD: string, hhmm: string, timeZone: string): Date {
-  const [y, mo, d] = fechaYMD.split("-").map(Number);
-  const [h, m] = hhmm.split(":").map(Number);
-  // Partimos de una "Date UTC con esos mismos componentes"
-  const utcGuess = new Date(Date.UTC(y, mo - 1, d, h, m, 0));
-  // Ajustamos por el offset de la zona en ese instante (maneja DST)
-  const offset = tzOffsetFor(utcGuess, timeZone);
-  return new Date(utcGuess.getTime() - offset);
-}
-
-/**
- * Devuelve 0..6 (domingo..sábado) del día local (fecha YMD) en la zona dada.
- * (No dependemos del sistema local)
- */
-function localDow(fechaYMD: string, timeZone: string): number {
-  // Instante UTC que corresponde a las 12:00 locales (evita bordes de día)
-  const noonUtc = zonedYmdTimeToUtc(fechaYMD, "12:00", timeZone);
-  // Volvemos a extraer Y-M-D local para ese instante y reconstruimos un UTC puro a medianoche
-  const lp = getLocalParts(noonUtc, timeZone);
-  const midUtc = new Date(Date.UTC(lp.year, lp.month - 1, lp.day, 0, 0, 0));
-  return midUtc.getUTCDay(); // 0=Dom, 1=Lun, ...
-}
-
-// Dado YYYY-MM-DD (día local), devuelve [dayStartUtc, nextDayUtc]
-function dayBoundsUtc(fechaYMD?: string): { dayStartUtc: Date; nextDayUtc: Date; ymd: string } {
-  const ymd = fechaYMD ?? new Date().toISOString().slice(0, 10);
-  const dayStartUtc = zonedYmdTimeToUtc(ymd, "00:00", CLINIC_TZ);
-  const nextDayUtc = addMinutes(dayStartUtc, 24 * 60);
-  return { dayStartUtc, nextDayUtc, ymd };
-}
-
-// ---------------- Ventanas laborales 08:00–16:00 (fallback) ----------------
-function fallbackWorkingWindowsUtc(fechaYMD: string) {
-  return [
-    {
-      start: zonedYmdTimeToUtc(fechaYMD, "08:00", CLINIC_TZ),
-      end: zonedYmdTimeToUtc(fechaYMD, "16:00", CLINIC_TZ),
-    },
-  ];
-}
-
-/**
- * Si existe `profesional.disponibilidad` (JSON) con estructura:
- * {
- *   "dow": {
- *     "1": [["08:00","12:00"],["13:00","16:00"]], // Lunes
- *     ...
- *   }
- * }
- * la usamos. Si no, caemos al fallback 08:00–16:00.
- */
-function buildWorkingWindowsUtc(
-  fechaYMD: string,
-  profesionalDisponibilidad: ProfesionalDisponibilidad
-): Array<{ start: Date; end: Date }> {
-  if (!profesionalDisponibilidad?.dow) return fallbackWorkingWindowsUtc(fechaYMD);
-
-  const dowNum = localDow(fechaYMD, CLINIC_TZ); // 0..6 (Dom..Sáb)
-  // intentamos dos claves comunes: "0..6" y "1..7 (Lun=1, Dom=7)"
-  const key0to6 = String(dowNum);
-  const key1to7 = String(((dowNum + 6) % 7) + 1); // 1..7
-  const segments: [string, string][] =
-    profesionalDisponibilidad.dow[key0to6] ??
-    profesionalDisponibilidad.dow[key1to7] ??
-    [];
-
-  if (!segments.length) return fallbackWorkingWindowsUtc(fechaYMD);
-
-  const result: Array<{ start: Date; end: Date }> = [];
-  for (const [from, to] of segments) {
-    const s = zonedYmdTimeToUtc(fechaYMD, from, CLINIC_TZ);
-    const e = zonedYmdTimeToUtc(fechaYMD, to, CLINIC_TZ);
-    if (isBefore(s, e)) result.push({ start: s, end: e });
-  }
-  return result.length ? result : fallbackWorkingWindowsUtc(fechaYMD);
 }
 
 // ---------------- Grilla de slots y exclusiones ----------------
@@ -227,8 +78,9 @@ export async function getDisponibilidad(query: GetDisponibilidadQuery): Promise<
   }
 
   // 2) Ventanas laborales (preferencia disponibilidad; si no, 08–16 local)
+  // Usar función compartida de availability-validation.ts para consistencia
   const disponibilidad = parseProfesionalDisponibilidad(profesional?.disponibilidad ?? null);
-  const working = buildWorkingWindowsUtc(ymd, disponibilidad);
+  const working = buildWorkingWindows(ymd, disponibilidad);
 
   // 3) Citas activas que intersecten el día
   const whereCita: Prisma.CitaWhereInput = {

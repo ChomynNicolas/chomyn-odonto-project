@@ -16,6 +16,7 @@ import { apiTransitionCita } from "@/lib/api/agenda/citas"
 import { UploadConsentDialog } from "@/components/pacientes/consentimientos/UploadConsentDialog"
 import { NuevaCitaSheet } from "./NuevaCitaSheet"
 import type { CitaConsentimientoStatus } from "@/app/api/agenda/citas/[id]/_dto"
+import { handleApiError, showSuccessToast, showErrorToast } from "@/lib/messages/agenda-toast-helpers"
 import {
   Calendar,
   Clock,
@@ -149,12 +150,10 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
       }
       // Para CHECKIN, mostrar advertencia pero permitir (el bloqueo real es en START)
       if (action === "CHECKIN" && !consentimientoStatus.consentimientoVigente) {
-        // Usar dynamic import para toast (evitar bloquear la UI)
-        import("sonner").then(({ toast }) => {
-          toast.warning("Advertencia: Consentimiento pendiente", {
-            description: "El paciente es menor y aún no tiene consentimiento. Debe subirlo antes de iniciar la consulta.",
-            duration: 5000,
-          })
+        const { toast } = await import("sonner")
+        toast.warning("Advertencia: Consentimiento pendiente", {
+          description: "El paciente es menor y aún no tiene consentimiento. Debe subirlo antes de iniciar la consulta.",
+          duration: 5000,
         })
       }
     }
@@ -164,6 +163,29 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
       await apiTransitionCita(idCita, action, note) // otras acciones
       await loadData()
       onAfterChange?.()
+      
+      // Mostrar mensaje de éxito según la acción realizada
+      switch (action) {
+        case "CONFIRM":
+          showSuccessToast("CITA_CONFIRMADA")
+          break
+        case "CHECKIN":
+          showSuccessToast("CHECKIN_REALIZADO")
+          break
+        case "START":
+          showSuccessToast("CONSULTA_INICIADA")
+          break
+        case "COMPLETE":
+          showSuccessToast("CONSULTA_COMPLETADA")
+          break
+        case "NO_SHOW":
+          // NO_SHOW no tiene mensaje de éxito específico, usar genérico
+          showSuccessToast("ESTADO_ACTUALIZADO")
+          break
+        default:
+          // Para otras acciones, usar mensaje genérico
+          showSuccessToast("ESTADO_ACTUALIZADO")
+      }
     } catch (e: unknown) {
       // Manejar error de consentimiento requerido de manera profesional
       const errorCode = (e as { code?: string })?.code
@@ -175,11 +197,8 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
         )
         setConsentErrorOpen(true)
       } else {
-        // Para otros errores, usar toast
-        const { toast } = await import("sonner")
-        toast.error("Error en transición", {
-          description: errorMessage || "No se pudo realizar la acción solicitada",
-        })
+        // Para otros errores, usar helper centralizado
+        handleApiError(e)
       }
     } finally {
       setActionLoading(null)
@@ -198,9 +217,12 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
       await loadData()
       onAfterChange?.()
       setCancelOpen(false)
+      
+      // Mostrar mensaje de éxito profesional
+      showSuccessToast("CITA_CANCELADA")
     } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : "No se pudo cancelar la cita"
-      alert(errorMessage)
+      // Manejar errores con helper centralizado
+      handleApiError(e)
     } finally {
       setCancelSubmitting(false)
     }
@@ -822,22 +844,14 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
               
               // Mostrar mensaje de éxito si estaba bloqueado antes
               if (estabaBloqueado) {
-                const { toast } = await import("sonner")
-                toast.success("Consentimiento registrado", {
-                  description: "El consentimiento ha sido subido exitosamente. Ahora puede iniciar la consulta.",
-                  duration: 4000,
-                })
+                showSuccessToast("CONSENTIMIENTO_REGISTRADO")
               }
             } catch (error) {
               console.error("[CitaDrawer] Error recargando datos después de subir consentimiento:", error)
               // Aún así notificar al calendario para que se actualice
               onAfterChange?.()
               
-              const { toast } = await import("sonner")
-              toast.error("Error al actualizar", {
-                description: "El consentimiento se subió correctamente, pero hubo un problema al actualizar la vista. Por favor, recarga la página.",
-                duration: 5000,
-              })
+              showErrorToast("INTERNAL_ERROR", undefined, "El consentimiento se subió correctamente, pero hubo un problema al actualizar la vista. Por favor, recarga la página.")
             }
           }}
         />
@@ -869,10 +883,7 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
             setRescheduleOpen(false)
             await loadData()
             onAfterChange?.()
-            const { toast } = await import("sonner")
-            toast.success("Cita reprogramada", {
-              description: "La cita ha sido reprogramada exitosamente. La cita original fue cancelada.",
-            })
+            showSuccessToast("CITA_REPROGRAMADA")
           }}
         />
       )}

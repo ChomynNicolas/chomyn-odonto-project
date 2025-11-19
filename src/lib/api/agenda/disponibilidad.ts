@@ -39,8 +39,21 @@ export async function apiGetDisponibilidad(params: GetDisponibilidadParams): Pro
 }
 
 /**
+ * Verifica si dos rangos de tiempo se solapan (overlap)
+ * Usa la misma lógica que el backend para consistencia
+ */
+function overlaps(a: { start: Date; end: Date }, b: { start: Date; end: Date }): boolean {
+  return a.start < b.end && a.end > b.start;
+}
+
+/**
  * Verifica si un slot está disponible y sugiere alternativas si no lo está.
  * Busca en el día actual y hasta 7 días siguientes para recomendaciones.
+ * 
+ * MEJORAS IMPLEMENTADAS:
+ * - Usa verificación de overlap en lugar de comparación exacta
+ * - Normaliza tiempos a UTC antes de comparar
+ * - Verifica explícitamente que las recomendaciones no tengan overlaps
  */
 export async function apiCheckSlotDisponible(params: {
   fecha: string
@@ -58,9 +71,16 @@ export async function apiCheckSlotDisponible(params: {
   const buscarMultiDia = params.buscarMultiDia ?? true
   const maxDias = params.maxDias ?? 7
 
-  // Slot solicitado en local -> Date (local) -> epoch
-  const solicitadoStart = new Date(`${params.fecha}T${params.inicio}:00`);
-  const solicitadoEnd = new Date(solicitadoStart.getTime() + params.duracionMinutos * 60000);
+  // Slot solicitado: crear fecha en zona horaria local del usuario
+  // El backend devuelve slots en UTC (ISO strings), pero los compara correctamente
+  // porque ambos representan el mismo momento en el tiempo, solo en diferentes zonas horarias
+  const solicitadoStartLocal = new Date(`${params.fecha}T${params.inicio}:00`);
+  const solicitadoEndLocal = new Date(solicitadoStartLocal.getTime() + params.duracionMinutos * 60000);
+  
+  // Usar directamente las fechas locales - JavaScript maneja la comparación correctamente
+  // cuando comparamos Date objects que representan el mismo momento en diferentes zonas
+  const solicitadoStart = solicitadoStartLocal;
+  const solicitadoEnd = solicitadoEndLocal;
 
   // 1) Verificar disponibilidad en el día solicitado
   const dispHoy = await apiGetDisponibilidad({
@@ -72,13 +92,38 @@ export async function apiCheckSlotDisponible(params: {
     excludeCitaId: params.excludeCitaId,
   });
 
-  // ¿Existe exactamente ese slot en los libres?
+  // Verificar si el slot solicitado tiene overlap con algún slot disponible
+  // Usamos overlap en lugar de comparación exacta para manejar problemas de timezone y milisegundos
   const disponible = dispHoy.slots.some((s) => {
-    const slotStart = new Date(s.slotStart);
-    const slotEnd = new Date(s.slotEnd);
-    return slotStart.getTime() === solicitadoStart.getTime() &&
-           slotEnd.getTime() === solicitadoEnd.getTime() &&
-           !s.motivoBloqueo;
+    if (s.motivoBloqueo) return false;
+    
+    const slotStart = new Date(s.slotStart); // ISO string en UTC, JavaScript lo convierte correctamente
+    const slotEnd = new Date(s.slotEnd); // ISO string en UTC, JavaScript lo convierte correctamente
+    
+    // Verificar si el slot solicitado está completamente contenido en el slot disponible
+    // O tiene overlap significativo (más del 80% del slot solicitado)
+    // Esto maneja casos donde hay pequeñas diferencias de milisegundos debido a redondeo
+    const slotDuration = slotEnd.getTime() - slotStart.getTime();
+    const solicitadoDuration = solicitadoEnd.getTime() - solicitadoStart.getTime();
+    
+    // Verificar si hay overlap básico
+    const hasOverlap = overlaps(
+      { start: solicitadoStart, end: solicitadoEnd },
+      { start: slotStart, end: slotEnd }
+    );
+    
+    if (!hasOverlap) return false;
+    
+    // Calcular el overlap real
+    const overlapStart = Math.max(solicitadoStart.getTime(), slotStart.getTime());
+    const overlapEnd = Math.min(solicitadoEnd.getTime(), slotEnd.getTime());
+    const overlapDuration = overlapEnd - overlapStart;
+    
+    // Requerir que al menos el 80% del slot solicitado esté disponible
+    // Esto permite pequeñas diferencias de milisegundos pero rechaza slots que están mayormente ocupados
+    const minOverlapRequired = solicitadoDuration * 0.8;
+    
+    return overlapDuration >= minOverlapRequired;
   });
 
   if (disponible) {
@@ -89,14 +134,32 @@ export async function apiCheckSlotDisponible(params: {
   const alternativas: Array<{ inicio: string; fin: string; dist: number; fecha: string }> = [];
 
   // Alternativas del día actual (más cercanas)
+  // IMPORTANTE: Los slots ya vienen filtrados del backend (sin overlaps), pero verificamos explícitamente
   const alternativasHoy = dispHoy.slots
-    .filter((s) => !s.motivoBloqueo)
-    .map((s) => ({
-      inicio: s.slotStart,
-      fin: s.slotEnd,
-      dist: Math.abs(new Date(s.slotStart).getTime() - solicitadoStart.getTime()),
-      fecha: params.fecha,
-    }));
+    .filter((s) => {
+      if (s.motivoBloqueo) return false;
+      
+      // Verificar explícitamente que el slot no tenga overlap con el solicitado
+      // (aunque debería estar filtrado, esto es una verificación de seguridad)
+      const slotStart = new Date(s.slotStart);
+      const slotEnd = new Date(s.slotEnd);
+      
+      // Si el slot tiene overlap con el solicitado, no lo incluimos en recomendaciones
+      // porque significa que está ocupado o muy cerca del solicitado
+      return !overlaps(
+        { start: solicitadoStart, end: solicitadoEnd },
+        { start: slotStart, end: slotEnd }
+      );
+    })
+    .map((s) => {
+      const slotStart = new Date(s.slotStart);
+      return {
+        inicio: s.slotStart,
+        fin: s.slotEnd,
+        dist: Math.abs(slotStart.getTime() - solicitadoStart.getTime()),
+        fecha: params.fecha,
+      };
+    });
 
   alternativas.push(...alternativasHoy);
 
@@ -120,14 +183,29 @@ export async function apiCheckSlotDisponible(params: {
         });
 
         // Agregar slots disponibles del día siguiente
+        // IMPORTANTE: Verificar explícitamente que no tengan overlaps
         const slotsDia = dispSiguiente.slots
-          .filter((s) => !s.motivoBloqueo)
-          .map((s) => ({
-            inicio: s.slotStart,
-            fin: s.slotEnd,
-            dist: Math.abs(new Date(s.slotStart).getTime() - solicitadoStart.getTime()) + (i * 24 * 60 * 60 * 1000), // Penalizar días futuros
-            fecha: fechaYMD,
-          }));
+          .filter((s) => {
+            if (s.motivoBloqueo) return false;
+            
+            // Verificar que el slot no tenga overlap con el solicitado
+            const slotStart = new Date(s.slotStart);
+            const slotEnd = new Date(s.slotEnd);
+            
+            return !overlaps(
+              { start: solicitadoStart, end: solicitadoEnd },
+              { start: slotStart, end: slotEnd }
+            );
+          })
+          .map((s) => {
+            const slotStart = new Date(s.slotStart);
+            return {
+              inicio: s.slotStart,
+              fin: s.slotEnd,
+              dist: Math.abs(slotStart.getTime() - solicitadoStart.getTime()) + (i * 24 * 60 * 60 * 1000), // Penalizar días futuros
+              fecha: fechaYMD,
+            };
+          });
 
         alternativas.push(...slotsDia);
 

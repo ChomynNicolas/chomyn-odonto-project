@@ -4,6 +4,21 @@
 import { PrismaClient, type EstadoCita } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import type { CreateCitaBody } from "./_create.schema";
+import {
+  validateWorkingHours,
+  parseProfesionalDisponibilidad,
+  type AvailabilityValidationResult,
+} from "@/lib/utils/availability-validation";
+import {
+  validateSpecialtyCompatibility,
+  type SpecialtyValidationResult,
+} from "@/lib/utils/specialty-validation";
+import {
+  validateConsultorioIsActive,
+  validateConsultorioAvailability,
+} from "@/lib/utils/consultorio-validation";
+import { auditCitaCreate } from "@/lib/audit/transaction-audit";
+import { getErrorMessage, type ErrorCode } from "@/lib/messages/agenda-messages";
 
 const prisma = new PrismaClient();
 const ACTIVE_STATES: EstadoCita[] = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"];
@@ -171,58 +186,154 @@ export async function createCita(
   status: number;
   code?: string;
   conflicts?: ConflictInfo[];
+  details?: unknown; // For availability validation details
 }> {
   try {
     const inicio = new Date(body.inicio);
     if (Number.isNaN(inicio.getTime())) {
-      return { ok: false, error: "INVALID_DATETIME", status: 400 };
+      const errorMsg = getErrorMessage("INVALID_DATETIME");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 400 };
     }
     const fin = new Date(inicio.getTime() + body.duracionMinutos * 60_000);
 
     // Validar que fin > inicio
     if (fin <= inicio) {
-      return { ok: false, error: "INVALID_TIME_RANGE", code: "INVALID_TIME_RANGE", status: 400 };
+      const errorMsg = getErrorMessage("INVALID_TIME_RANGE");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 400 };
     }
 
     // (1) FKs existen y están activos
-    const [pac, prof, cons] = await Promise.all([
+    const [pac, prof] = await Promise.all([
       prisma.paciente.findUnique({
         where: { idPaciente: body.pacienteId },
         select: { idPaciente: true, estaActivo: true },
       }),
       prisma.profesional.findUnique({
         where: { idProfesional: body.profesionalId },
-        select: { idProfesional: true, estaActivo: true },
+        select: {
+          idProfesional: true,
+          estaActivo: true,
+          disponibilidad: true,
+          especialidades: {
+            select: {
+              especialidad: {
+                select: {
+                  nombre: true,
+                },
+              },
+            },
+          },
+        },
       }),
-      body.consultorioId
-        ? prisma.consultorio.findUnique({
-            where: { idConsultorio: body.consultorioId },
-            select: { idConsultorio: true, activo: true },
-          })
-        : Promise.resolve(null),
     ]);
 
-    if (!pac) return { ok: false, error: "PACIENTE_NOT_FOUND", status: 404 };
-    if (!prof) return { ok: false, error: "PROFESIONAL_NOT_FOUND", status: 404 };
-    if (body.consultorioId && !cons) return { ok: false, error: "CONSULTORIO_NOT_FOUND", status: 404 };
-    if (pac.estaActivo === false) return { ok: false, error: "PACIENTE_INACTIVO", status: 409 };
-    if (prof.estaActivo === false) return { ok: false, error: "PROFESIONAL_INACTIVO", status: 409 };
-    if (cons && cons.activo === false) return { ok: false, error: "CONSULTORIO_INACTIVO", status: 409 };
+    if (!pac) {
+      const errorMsg = getErrorMessage("PACIENTE_NOT_FOUND");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 404 };
+    }
+    if (!prof) {
+      const errorMsg = getErrorMessage("PROFESIONAL_NOT_FOUND");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 404 };
+    }
+    if (pac.estaActivo === false) {
+      const errorMsg = getErrorMessage("PACIENTE_INACTIVO");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 409 };
+    }
+    if (prof.estaActivo === false) {
+      const errorMsg = getErrorMessage("PROFESIONAL_INACTIVO");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 409 };
+    }
+
+    // (1.1) Validar consultorio existe y está activo
+    const consultorioValidation = await validateConsultorioIsActive(body.consultorioId, prisma);
+    if (!consultorioValidation.isValid) {
+      const errorCode = consultorioValidation.error!.code as ErrorCode;
+      const errorMsg = getErrorMessage(errorCode, consultorioValidation.error!.details);
+      return {
+        ok: false,
+        error: errorMsg.userMessage,
+        code: errorMsg.code,
+        status: consultorioValidation.error!.status,
+        details: consultorioValidation.error!.details,
+      };
+    }
+
+    // (1.5) Validar horarios de trabajo del profesional
+    const disponibilidad = parseProfesionalDisponibilidad(prof.disponibilidad);
+    const availabilityValidation = validateWorkingHours(inicio, fin, disponibilidad);
+    if (!availabilityValidation.isValid) {
+      const errorCode = (availabilityValidation.error?.code || "OUTSIDE_WORKING_HOURS") as ErrorCode;
+      const errorMsg = getErrorMessage(errorCode, availabilityValidation.error?.details);
+      return {
+        ok: false,
+        error: errorMsg.userMessage,
+        code: errorMsg.code,
+        status: 409,
+        details: availabilityValidation.error?.details,
+      };
+    }
+
+    // (1.6) Validar compatibilidad de especialidad
+    const profesionalEspecialidades = prof.especialidades.map((pe) => pe.especialidad.nombre);
+    const specialtyValidation = validateSpecialtyCompatibility(body.tipo, profesionalEspecialidades);
+    if (!specialtyValidation.isValid) {
+      const errorCode = (specialtyValidation.error?.code || "INCOMPATIBLE_SPECIALTY") as ErrorCode;
+      const errorDetails = {
+        ...specialtyValidation.error?.details,
+        requiredEspecialidades: specialtyValidation.error?.details?.requiredEspecialidades,
+        profesionalEspecialidades,
+      };
+      const errorMsg = getErrorMessage(errorCode, errorDetails);
+      return {
+        ok: false,
+        error: errorMsg.userMessage,
+        code: errorMsg.code,
+        status: 409,
+        details: errorDetails,
+      };
+    }
 
     // (2) Política: no crear citas en el pasado
     if (inicio < new Date()) {
-      return { ok: false, error: "NO_PAST_APPOINTMENTS", status: 400 };
+      const errorMsg = getErrorMessage("NO_PAST_APPOINTMENTS");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 400 };
     }
 
     // (3) Verificar bloqueos de agenda
-    const hasBlock = await hasBlocking({
+    // (3.1) Validar bloqueos de consultorio específicamente
+    const consultorioAvailability = await validateConsultorioAvailability(
+      body.consultorioId ?? null,
+      inicio,
+      fin,
+      prisma
+    );
+    if (!consultorioAvailability.isValid) {
+      const errorCode = consultorioAvailability.error!.code as ErrorCode;
+      const errorMsg = getErrorMessage(errorCode, consultorioAvailability.error!.details);
+      return {
+        ok: false,
+        error: errorMsg.userMessage,
+        code: errorMsg.code,
+        status: consultorioAvailability.error!.status,
+        details: consultorioAvailability.error!.details,
+      };
+    }
+
+    // (3.2) Validar bloqueos de profesional (mantener lógica existente)
+    const hasProfBlock = await hasBlocking({
       profesionalId: body.profesionalId,
-      consultorioId: body.consultorioId ?? null,
+      consultorioId: null, // Solo profesional
       inicio,
       fin,
     });
-    if (hasBlock) {
-      return { ok: false, error: "BLOCKED_SLOT", code: "BLOCKED_SLOT", status: 409 };
+    if (hasProfBlock) {
+      const errorMsg = getErrorMessage("PROFESIONAL_BLOCKED");
+      return { 
+        ok: false, 
+        error: errorMsg.userMessage, 
+        code: errorMsg.code, 
+        status: 409 
+      };
     }
 
     // (4) Chequeo de solape en servidor con detalles
@@ -234,44 +345,65 @@ export async function createCita(
     });
     
     if (conflicts.length > 0) {
+      const errorMsg = getErrorMessage("OVERLAP");
       return { 
         ok: false, 
-        error: "OVERLAP", 
-        code: "OVERLAP",
+        error: errorMsg.userMessage, 
+        code: errorMsg.code,
         status: 409,
         conflicts,
       };
     }
 
-    // (5) Crear con relaciones via connect (best practice)
-    const created = await prisma.cita.create({
-      data: {
-        inicio,
-        fin,
-        duracionMinutos: body.duracionMinutos,
+    // (5) Crear con relaciones via connect (best practice) y auditoría
+    const created = await prisma.$transaction(async (tx) => {
+      const cita = await tx.cita.create({
+        data: {
+          inicio,
+          fin,
+          duracionMinutos: body.duracionMinutos,
+          tipo: body.tipo,
+          estado: "SCHEDULED",
+          motivo: body.motivo,
+          notas: body.notas ?? null,
+
+          paciente: { connect: { idPaciente: body.pacienteId } },
+          profesional: { connect: { idProfesional: body.profesionalId } },
+          ...(body.consultorioId
+            ? { consultorio: { connect: { idConsultorio: body.consultorioId } } }
+            : {}),
+
+          // OJO: el nombre de la relación es "creadoPor" y la PK es idUsuario
+          creadoPor: { connect: { idUsuario: body.createdByUserId } },
+        },
+        select: {
+          idCita: true,
+          inicio: true,
+          fin: true,
+          tipo: true,
+          estado: true,
+          motivo: true,
+          duracionMinutos: true,
+        },
+      });
+
+      // Auditoría: registrar creación de cita
+      await auditCitaCreate({
+        tx,
+        actorId: body.createdByUserId,
+        citaId: cita.idCita,
         tipo: body.tipo,
-        estado: "SCHEDULED",
+        inicioISO: cita.inicio.toISOString(),
+        finISO: cita.fin.toISOString(),
+        duracionMinutos: body.duracionMinutos,
+        pacienteId: body.pacienteId,
+        profesionalId: body.profesionalId,
+        consultorioId: body.consultorioId ?? null,
         motivo: body.motivo,
         notas: body.notas ?? null,
+      });
 
-        paciente: { connect: { idPaciente: body.pacienteId } },
-        profesional: { connect: { idProfesional: body.profesionalId } },
-        ...(body.consultorioId
-          ? { consultorio: { connect: { idConsultorio: body.consultorioId } } }
-          : {}),
-
-        // OJO: el nombre de la relación es "creadoPor" y la PK es idUsuario
-        creadoPor: { connect: { idUsuario: body.createdByUserId } },
-      },
-      select: {
-        idCita: true,
-        inicio: true,
-        fin: true,
-        tipo: true,
-        estado: true,
-        motivo: true,
-        duracionMinutos: true,
-      },
+      return cita;
     });
 
     return {
@@ -291,9 +423,16 @@ export async function createCita(
     // Errores típicos Prisma
     const code = (e as { code?: string })?.code;
     const errorMessage = e instanceof Error ? e.message : String(e);
-    if (code === "P2003") return { ok: false, error: "FOREIGN_KEY_CONSTRAINT", status: 400 };
-    if (code === "P2002") return { ok: false, error: "DUPLICATE", status: 409 };
+    if (code === "P2003") {
+      const errorMsg = getErrorMessage("FOREIGN_KEY_CONSTRAINT");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 400 };
+    }
+    if (code === "P2002") {
+      const errorMsg = getErrorMessage("DUPLICATE");
+      return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 409 };
+    }
     console.error("createCita error:", code || errorMessage);
-    return { ok: false, error: "INTERNAL_ERROR", status: 500 };
+    const errorMsg = getErrorMessage("INTERNAL_ERROR");
+    return { ok: false, error: errorMsg.userMessage, code: errorMsg.code, status: 500 };
   }
 }

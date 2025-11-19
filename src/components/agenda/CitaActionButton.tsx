@@ -3,8 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, Play, Ban } from "lucide-react"
-import { toast } from "sonner"
 import type { CitaConsentimientoStatus } from "@/app/api/agenda/citas/[id]/_dto"
+import { handleApiError, showSuccessToast, showErrorToast } from "@/lib/messages/agenda-toast-helpers"
+import { getErrorMessage } from "@/lib/messages/agenda-messages"
 
 interface CitaActionButtonProps {
   citaId: number
@@ -19,9 +20,8 @@ export function CitaActionButton({ citaId, estadoActual, consentimientoStatus, o
   const handleIniciarConsulta = async () => {
     // Validar consentimiento antes de iniciar
     if (consentimientoStatus?.bloqueaInicio) {
-      toast.error("No se puede iniciar la consulta", {
-        description: consentimientoStatus.mensajeBloqueo,
-      })
+      const errorMsg = getErrorMessage("CONSENT_REQUIRED_FOR_MINOR")
+      showErrorToast("CONSENT_REQUIRED_FOR_MINOR", undefined, consentimientoStatus.mensajeBloqueo || errorMsg.userMessage)
       return
     }
 
@@ -37,29 +37,16 @@ export function CitaActionButton({ citaId, estadoActual, consentimientoStatus, o
 
       if (!response.ok) {
         const error = await response.json()
-
-        // Manejar error específico de consentimiento
-        if (error.code === "CONSENT_REQUIRED_FOR_MINOR") {
-          toast.error("Consentimiento requerido", {
-            description: error.error,
-          })
-          return
-        }
-
-        throw new Error(error.error || "Error al iniciar consulta")
+        handleApiError(error)
+        return
       }
 
-      toast.success("Consulta iniciada", {
-        description: "La consulta ha comenzado correctamente",
-      })
-
+      // Mostrar mensaje de éxito profesional
+      showSuccessToast("CONSULTA_INICIADA")
       onSuccess?.()
     } catch (error: unknown) {
       console.error("[v0] Error starting consultation:", error)
-      const errorMessage = error instanceof Error ? error.message : "No se pudo iniciar la consulta"
-      toast.error("Error", {
-        description: errorMessage,
-      })
+      handleApiError(error)
     } finally {
       setLoading(false)
     }

@@ -19,6 +19,8 @@ import { PacienteAsyncSelect } from "@/components/selectors/PacienteAsyncSelect"
 import { ProfesionalAsyncSelect } from "@/components/selectors/ProfesionalAsyncSelect";
 import { useDisponibilidadValidator, roundToMinutes } from "@/hooks/useDisponibilidadValidator";
 import { SlotRecommendations } from "./SlotRecommendations";
+import { handleApiError, showErrorToast, showSuccessToast } from "@/lib/messages/agenda-toast-helpers";
+import { getErrorMessage } from "@/lib/messages/agenda-messages";
 
 
 // Schema base - pacienteId es opcional porque en modo reschedule no se requiere
@@ -133,6 +135,12 @@ export function NuevaCitaSheet({
   const consultorioIdValue = watch("consultorioId")
   const duracionMinutosValue = watch("duracionMinutos") || 30
   
+  // Asegurar que excludeCitaId se mantenga constante durante la reprogramación
+  // Esto es crítico para que la validación funcione correctamente al cambiar la fecha
+  const excludeCitaIdValue = React.useMemo(() => {
+    return mode === "reschedule" && citaId ? citaId : undefined
+  }, [mode, citaId])
+
   const disponibilidadValidation = useDisponibilidadValidator({
     fecha: fechaValue || null,
     horaInicio: horaInicioValue || null,
@@ -140,7 +148,7 @@ export function NuevaCitaSheet({
     profesionalId: profesionalIdValue,
     consultorioId: consultorioIdValue,
     enabled: !!fechaValue && !!horaInicioValue && !!profesionalIdValue, // Requerir también profesionalId
-    excludeCitaId: mode === "reschedule" && citaId ? citaId : undefined, // Excluir cita actual en reschedule
+    excludeCitaId: excludeCitaIdValue, // Excluir cita actual en reschedule (memoizado para estabilidad)
   })
 
   // Estado para conflictos detectados por el backend (modo reschedule)
@@ -242,11 +250,8 @@ export function NuevaCitaSheet({
       !disponibilidadValidation.isChecking &&
       !disponibilidadValidation.isValid
     ) {
-      const { toast } = await import("sonner")
-      toast.error("Horario no disponible", {
-        description: disponibilidadValidation.error || "Por favor, seleccione un horario disponible de las recomendaciones.",
-        duration: 5000,
-      })
+      const errorMsg = getErrorMessage("OUTSIDE_WORKING_HOURS")
+      showErrorToast("OUTSIDE_WORKING_HOURS", undefined, disponibilidadValidation.error || errorMsg.userMessage)
       return // Bloquear submit en ambos modos si no está disponible
     }
 
@@ -283,8 +288,10 @@ export function NuevaCitaSheet({
               consultorio?: { id: number; nombre: string }
             }>
             message?: string
+            details?: unknown
           }
-          // Manejar error 409 OVERLAP con conflictos (igual que en create)
+          
+          // Manejar error 409 OVERLAP con conflictos
           if (error?.status === 409 && error?.code === "OVERLAP" && error?.conflicts && Array.isArray(error.conflicts)) {
             setConflictos(error.conflicts)
             
@@ -293,13 +300,23 @@ export function NuevaCitaSheet({
               setValue("fecha", watch("fecha") || "", { shouldValidate: true })
             }, 100)
             
-            const { toast } = await import("sonner")
-            toast.error("Conflicto de horario", {
-              description: `El horario seleccionado se solapa con ${error.conflicts.length} cita(s) existente(s). Verifique los conflictos y seleccione otro horario.`,
-              duration: 6000,
-            })
+            handleApiError(rescheduleError)
             return // No cerrar el formulario, permitir reintento
           }
+          
+          // Manejar otros errores específicos que no deben cerrar el formulario
+          if (error?.code && (
+            error.code === "INCOMPATIBLE_SPECIALTY" ||
+            error.code === "PROFESSIONAL_HAS_NO_SPECIALTIES" ||
+            error.code === "CONSULTORIO_INACTIVO" ||
+            error.code === "CONSULTORIO_BLOCKED" ||
+            error.code === "PROFESIONAL_BLOCKED" ||
+            error.code === "CONSULTORIO_NOT_FOUND"
+          )) {
+            handleApiError(rescheduleError)
+            return // No cerrar el formulario, permitir cambiar valores
+          }
+          
           // Re-throw otros errores para que se manejen en el catch general
           throw rescheduleError
         }
@@ -328,8 +345,10 @@ export function NuevaCitaSheet({
               consultorio?: { id: number; nombre: string }
             }>
             message?: string
+            details?: unknown
           }
-          // Manejar error 409 OVERLAP con conflictos (igual que en reschedule)
+          
+          // Manejar error 409 OVERLAP con conflictos
           if (error?.status === 409 && error?.code === "OVERLAP" && error?.conflicts && Array.isArray(error.conflicts)) {
             setConflictos(error.conflicts)
             
@@ -338,13 +357,23 @@ export function NuevaCitaSheet({
               setValue("fecha", watch("fecha") || "", { shouldValidate: true })
             }, 100)
             
-            const { toast } = await import("sonner")
-            toast.error("Conflicto de horario", {
-              description: `El horario seleccionado se solapa con ${error.conflicts.length} cita(s) existente(s). Verifique los conflictos y seleccione otro horario.`,
-              duration: 6000,
-            })
+            handleApiError(createError)
             return // No cerrar el formulario, permitir reintento
           }
+          
+          // Manejar otros errores específicos que no deben cerrar el formulario
+          if (error?.code && (
+            error.code === "INCOMPATIBLE_SPECIALTY" ||
+            error.code === "PROFESSIONAL_HAS_NO_SPECIALTIES" ||
+            error.code === "CONSULTORIO_INACTIVO" ||
+            error.code === "CONSULTORIO_BLOCKED" ||
+            error.code === "PROFESIONAL_BLOCKED" ||
+            error.code === "CONSULTORIO_NOT_FOUND"
+          )) {
+            handleApiError(createError)
+            return // No cerrar el formulario, permitir cambiar valores
+          }
+          
           // Re-throw otros errores para que se manejen en el catch general
           throw createError
         }
@@ -353,27 +382,18 @@ export function NuevaCitaSheet({
       reset()
       setConflictos(null)
       onOpenChange(false)
+      
+      // Mostrar mensaje de éxito
+      if (mode === "reschedule") {
+        showSuccessToast("CITA_REPROGRAMADA")
+      } else {
+        showSuccessToast("CITA_CREATED")
+      }
+      
       onSuccess?.()
     } catch (e: unknown) {
-      const { toast } = await import("sonner")
-      
-      // Manejar otros errores que no sean 409 OVERLAP (ya manejados arriba)
-      const error = e as { status?: number; code?: string; message?: string }
-      
-      // Si es un error 409 OVERLAP que no fue manejado arriba, manejarlo aquí también
-      if (error?.status === 409 && error?.code === "OVERLAP") {
-        // Este caso ya debería estar manejado arriba, pero por si acaso...
-        toast.error("Conflicto de horario", {
-          description: "El horario seleccionado tiene conflictos. Por favor, seleccione otro horario.",
-          duration: 6000,
-        })
-        return
-      }
-
-      // Otros errores
-      toast.error(mode === "reschedule" ? "Error reprogramando cita" : "Error creando cita", {
-        description: error?.message ?? "No se pudo completar la operación",
-      })
+      // Manejar errores no capturados arriba
+      handleApiError(e)
     }
   }
   
@@ -488,6 +508,8 @@ export function NuevaCitaSheet({
                     setConflictos(null)
                     // Resetear ref para permitir que el efecto de redondeo funcione con la nueva fecha
                     lastHoraInicioRef.current = null
+                    // El hook useDisponibilidadValidator reaccionará automáticamente al cambio de fecha
+                    // gracias a sus dependencias. No necesitamos forzar validación manualmente.
                   }
                 })} 
                 aria-invalid={!!errors.fecha} 

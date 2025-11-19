@@ -10,7 +10,7 @@ import {
   PageIcon,
 } from "../icons/index";
 
-import { BookUser, CalendarDays, CalendarSearch, FileText, LogIn, UserRoundCog, UserRoundPlus, Users } from "lucide-react";
+import { BookUser, CalendarDays, CalendarSearch, FileText, LogIn, UserRoundCog, UserRoundPlus, Users, DoorOpen, Pill, ClipboardList } from "lucide-react";
 import { PiToothLight } from "react-icons/pi";
 import { HiOutlineIdentification } from "react-icons/hi";
 import { MdOutlineMedicalInformation } from "react-icons/md";
@@ -49,10 +49,13 @@ const navItems: NavItem[] = [
   { group: "Clínica", name: "Citas del paciente", path: "/pacientes/citas", icon: <CalendarSearch /> },
   { group: "Clínica", name: "Adjuntos del paciente", path: "/pacientes/adjuntos", icon: <BookUser /> },
 
-  // Configuración (solo ADMIN)
+  // Configuración
   { group: "Configuración", name: "Usuarios y roles", path: "/configuracion/usuarios", icon: <UserRoundCog />, roles: ["ADMIN"] },
   { group: "Configuración", name: "Profesionales", path: "/configuracion/profesionales", icon: <HiOutlineIdentification size={26} />, roles: ["ADMIN"] },
   { group: "Configuración", name: "Tratamientos/Servicios", path: "/configuracion/servicios", icon: <MdOutlineMedicalInformation size={26} />, roles: ["ADMIN"] },
+  { group: "Configuración", name: "Medicamentos", path: "/configuracion/medications", icon: <Pill size={26} />, roles: ["ADMIN"] },
+  { group: "Configuración", name: "Antecedentes", path: "/configuracion/antecedent-catalog", icon: <ClipboardList size={26} />, roles: ["ADMIN"] },
+  { group: "Configuración", name: "Consultorios", path: "/configuracion/consultorios", icon: <DoorOpen size={26} />, roles: ["ADMIN", "RECEP", "ODONT"] },
 
   // Utilidades
   { group: "Utilidades", name: "Iniciar sesión", path: "/signin", icon: <LogIn /> },
