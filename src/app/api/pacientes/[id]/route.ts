@@ -7,6 +7,11 @@ import { updatePaciente } from "./_service.update"
 import { deletePacienteById, DeletePacienteError } from "./_service.delete"
 import { prisma as db } from "@/lib/prisma"
 import { ok, errors, generateETag, checkETag, checkRateLimit, safeLog } from "../_http"
+import type { PatientUpdatePayload } from "@/types/patient-edit.types"
+import { hasCriticalChanges } from "@/lib/audit/diff-utils"
+import { patientEditBaseSchema, patientEditWithCriticalSchema } from "@/lib/validation/patient-edit.schema"
+import { AuditAction } from "@/lib/audit/actions"
+import { createPatientAuditLog } from "@/lib/audit/patient-audit.service"
 
 
 
@@ -82,43 +87,150 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   try {
     const { id } = pathParamsSchema.parse(await ctx.params)
-    const body = patientUpdateBodySchema.parse(await req.json())
+    const rawBody = await req.json()
+
+    // Parse as PatientUpdatePayload (with changes and optional motivo)
+    // Support both old format (direct PatientUpdateBody) and new format (PatientUpdatePayload)
+    let payload: PatientUpdatePayload
+    let changes: PatientUpdatePayload["changes"]
+    let motivoCambioCritico: string | undefined
+
+    if (rawBody.data && rawBody.changes) {
+      // New format: PatientUpdatePayload
+      payload = rawBody as PatientUpdatePayload
+      changes = payload.changes
+      motivoCambioCritico = payload.motivoCambioCritico
+    } else {
+      // Old format: direct PatientUpdateBody (backward compatibility)
+      // For backward compatibility, we'll create empty changes array
+      // In practice, the client should always send changes
+      payload = {
+        data: rawBody,
+        changes: [],
+      }
+      changes = []
+    }
+
+    // Determine if there are critical changes
+    const isCritical = hasCriticalChanges(changes)
+
+    // Conditional validation: use critical schema if there are critical changes
+    const validationSchema = isCritical ? patientEditWithCriticalSchema : patientEditBaseSchema
+
+    // Prepare validation data (add motivo if critical)
+    const validationData = {
+      ...payload.data,
+      ...(isCritical && motivoCambioCritico && { motivoCambioCritico }),
+    }
+
+    // Validate with appropriate schema
+    const validationResult = validationSchema.safeParse(validationData)
+    if (!validationResult.success) {
+      safeLog("warn", "Validation failed", {
+        requestId,
+        pacienteId: id,
+        errors: validationResult.error.flatten().fieldErrors,
+      })
+      return errors.validation("Datos inválidos", validationResult.error.flatten().fieldErrors)
+    }
+
+    // Verify patient exists
+    const pacienteActual = await db.paciente.findUnique({
+      where: { idPaciente: id },
+      include: {
+        persona: {
+          include: {
+            documento: true,
+          },
+        },
+      },
+    })
+
+    if (!pacienteActual) {
+      safeLog("warn", "Patient not found", { requestId, pacienteId: id })
+      return errors.notFound("Paciente no encontrado")
+    }
+
+    // Check for duplicate document (exclude current patient)
+    if (payload.data.documentNumber && payload.data.documentNumber !== pacienteActual.persona.documento?.numero) {
+      const existingPersona = await db.persona.findFirst({
+        where: {
+          idPersona: { not: pacienteActual.personaId },
+          documento: {
+            numero: payload.data.documentNumber,
+            ...(payload.data.documentType && {
+              tipo: payload.data.documentType === "CI" ? "CI" : payload.data.documentType === "PASSPORT" ? "PASAPORTE" : "OTRO",
+            }),
+          },
+        },
+      })
+
+      if (existingPersona) {
+        safeLog("warn", "Duplicate document detected", { requestId, pacienteId: id, documentNumber: payload.data.documentNumber })
+        return errors.conflict("El documento ya está registrado para otro paciente")
+      }
+    }
 
     // Check If-Match header for optimistic locking
     const ifMatch = req.headers.get("If-Match")
     if (ifMatch) {
-      // Fetch current version to compare
-      const current = await db.paciente.findUnique({
-        where: { idPaciente: id },
-        select: { updatedAt: true },
-      })
-
-      if (current) {
-        const currentETag = generateETag({ updatedAt: current.updatedAt.toISOString() })
-        if (!checkETag(ifMatch, currentETag)) {
-          safeLog("warn", "Optimistic lock failed", { requestId, pacienteId: id })
-          return errors.optimisticLock()
-        }
+      const currentETag = generateETag({ updatedAt: pacienteActual.updatedAt.toISOString() })
+      if (!checkETag(ifMatch, currentETag)) {
+        safeLog("warn", "Optimistic lock failed", { requestId, pacienteId: id })
+        return errors.optimisticLock()
       }
     }
 
-    // Get client IP for audit
+    // Get client IP and User-Agent for audit
     const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? undefined
+    const userAgent = req.headers.get("user-agent") ?? undefined
 
-    // Build update context (userId is already validated above)
+    // Get user email from session
+    const usuarioEmail = gate.session.user?.email ?? undefined
+
+    // Build update context
     const context = {
       userId: gate.userId,
       role: gate.role,
       ip,
     }
 
-    safeLog("info", "Updating patient", { requestId, pacienteId: id, userId: gate.userId })
+    safeLog("info", "Updating patient", { requestId, pacienteId: id, userId: gate.userId, hasCriticalChanges: isCritical })
 
-    const result = await updatePaciente(id, body, context)
+    // Update patient (this will be enhanced in _service.update.ts)
+    const result = await updatePaciente(id, payload.data, context)
+
+    // Create audit log using the new service
+    let auditLogId: number | null = null
+    try {
+      auditLogId = await createPatientAuditLog({
+        actorId: gate.userId,
+        actorEmail: usuarioEmail,
+        pacienteId: id,
+        changes,
+        ipAddress: ip,
+        userAgent,
+        motivo: motivoCambioCritico || null,
+        metadata: {
+          criticalChanges: isCritical,
+        },
+      })
+      if (auditLogId) {
+        safeLog("info", "Audit log created", { requestId, pacienteId: id, auditLogId })
+      }
+    } catch (auditError) {
+      // Audit log failure should not fail the update, but log it
+      safeLog("error", "Failed to create audit log", { requestId, pacienteId: id, error: String(auditError) })
+    }
 
     safeLog("info", "Patient updated successfully", { requestId, pacienteId: id })
 
-    return ok(result)
+    // Return response with audit log ID and critical changes info
+    return ok({
+      ...result,
+      auditLogId,
+      ...(isCritical && { criticalChanges: changes.filter((c) => c.isCritical) }),
+    })
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
     safeLog("error", "Error updating patient", { requestId, error: errorMessage })

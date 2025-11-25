@@ -123,7 +123,13 @@ export const AnamnesisCreateUpdateBodySchema = z.object({
   
   // Pediatric-specific fields
   tieneHabitosSuccion: z.boolean().optional().nullable(),
-  lactanciaRegistrada: z.boolean().optional().nullable(),
+  lactanciaRegistrada: z
+    .union([
+      z.enum(["EXCLUSIVA", "MIXTA", "FORMULA", "NO_APLICA"]),
+      z.boolean(),
+    ])
+    .optional()
+    .nullable(), // Allow enum string or boolean for backward compatibility
   
   // Normalized data arrays
   antecedents: z.array(AnamnesisAntecedentInputSchema).default([]),

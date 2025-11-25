@@ -49,7 +49,6 @@ import { ProcedimientosModule } from "./modules/ProcedimientosModule"
 import { AdjuntosModule } from "./modules/AdjuntosModule"
 import { OdontogramaModule } from "./modules/OdontogramaModule"
 import { PlanesTratamientoModule } from "./modules/PlanesTratamientoModule"
-import { VitalesModule } from "./modules/VitalesModule"
 import { MedicacionModule } from "./modules/MedicacionModule"
 import { CitaStatusBadge } from "./CitaStatusBadge"
 import { useConsulta } from "./hooks/useConsulta"
@@ -840,15 +839,7 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
                 <span className="sm:hidden text-xs">Odont</span>
               </TabsTrigger>
 
-              <TabsTrigger
-                value="vitales"
-                className="flex items-center gap-2 data-[state=active]:bg-background"
-                aria-label="Signos vitales"
-              >
-                <Heart className="h-4 w-4" />
-                <span className="hidden sm:inline">Vitales</span>
-                <span className="sm:hidden text-xs">SV</span>
-              </TabsTrigger>
+              
 
               <TabsTrigger
                 value="medicacion"
@@ -886,26 +877,28 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
                   <AnamnesisFormSkeleton />
                 ) : (
                   <AnamnesisForm
-                    pacienteId={consulta.pacienteId}
-                    consultaId={consulta.citaId}
-                    initialData={
-                      anamnesis
-                        ? {
-                            ...anamnesis,
-                            antecedents: anamnesis.antecedents || [],
-                            medications: anamnesis.medications || [],
-                            allergies: anamnesis.allergies || [],
-                          }
-                        : null
-                    }
-                    onSave={() => {
-                      fetchConsulta()
-                      refetchAnamnesis()
-                    }}
-                    anamnesisContext={context}
-                    canEdit={canEditModules}
-                    patientGender={consulta.paciente?.genero || undefined}
-                  />
+  pacienteId={consulta.pacienteId}
+  consultaId={consulta.citaId}
+  initialData={
+    anamnesis
+      ? {
+          ...anamnesis,
+          antecedents: anamnesis.antecedents,
+          medications: anamnesis.medications,
+          allergies: anamnesis.allergies,
+        }
+      : null
+  }
+  onSave={() => {
+    fetchConsulta()
+    refetchAnamnesis()
+  }}
+  anamnesisContext={context}
+  canEdit={canEditModules}
+  patientGender={consulta.paciente?.genero}
+  patientBirthDate={consulta.paciente?.fechaNacimiento} // Nueva prop
+  isLoadingAnamnesis={isLoadingAnamnesis}
+/>
                 )
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -955,15 +948,7 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
               />
             </TabsContent>
 
-            <TabsContent value="vitales" className="mt-6">
-              <VitalesModule
-                citaId={citaId}
-                consulta={consulta}
-                canEdit={canEditModules}
-                hasConsulta={hasConsulta}
-                onUpdate={fetchConsulta}
-              />
-            </TabsContent>
+            
 
             <TabsContent value="medicacion" className="mt-6">
               <MedicacionModule

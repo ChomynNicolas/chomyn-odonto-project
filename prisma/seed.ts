@@ -287,8 +287,13 @@ async function seedSpecialties() {
   for (const spec of specialties) {
     await prisma.especialidad.upsert({
       where: { nombre: spec.nombre },
-      update: {},
-      create: spec
+      update: {
+        descripcion: spec.descripcion,
+      },
+      create: {
+        nombre: spec.nombre,
+        descripcion: spec.descripcion,
+      },
     });
   }
 

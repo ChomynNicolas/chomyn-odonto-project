@@ -287,87 +287,63 @@ export async function updatePaciente(id: number, body: PatientUpdateBody, contex
       }
     }
 
-    // 11. Update Paciente notes (legacy fields)
-    const notasData: Record<string, unknown> = current.notas ? (JSON.parse(current.notas as string) as Record<string, unknown>) : {}
-    const oldNotasData: Record<string, unknown> = { ...notasData }
-
-    if (body.insurance !== undefined) {
-      notasData.obraSocial = body.insurance
-      oldPersonaData.insurance = oldNotasData.obraSocial
-    }
-    if (body.emergencyContactName !== undefined) {
-      notasData.emergencyContactName = body.emergencyContactName
-      oldPersonaData.emergencyContactName = oldNotasData.emergencyContactName
-    }
-    if (body.emergencyContactPhone !== undefined) {
-      notasData.emergencyContactPhone = body.emergencyContactPhone
-      oldPersonaData.emergencyContactPhone = oldNotasData.emergencyContactPhone
-    }
-
-    // 12. Update Paciente status if allowed
-    const pacienteUpdateData: Prisma.PacienteUpdateInput = {
-      notas: JSON.stringify(notasData),
-    }
+    // 11. Update Paciente status if allowed
+    // Note: emergencyContactName and emergencyContactPhone are stored in Persona table
+    // The field "notas" doesn't exist in Paciente model - only "notasAdministrativas" exists
+    const pacienteUpdateData: Prisma.PacienteUpdateInput = {}
 
     if (canEditStatus && body.status !== undefined) {
       pacienteUpdateData.estaActivo = body.status === "ACTIVE"
       oldPersonaData.status = current.estaActivo ? "ACTIVE" : "INACTIVE"
     }
 
-    const updatedPaciente = await tx.paciente.update({
-      where: { idPaciente: id },
-      data: pacienteUpdateData,
-      include: {
-        persona: {
-          include: {
-            documento: true,
-            contactos: {
-              where: { activo: true },
-              orderBy: { esPrincipal: "desc" },
+    // Fetch updated paciente - if no changes to Paciente table, just fetch current
+    // updatedAt is automatically updated by Prisma's @updatedAt decorator
+    let updatedPaciente
+    if (Object.keys(pacienteUpdateData).length > 0) {
+      // Update only if there are changes
+      updatedPaciente = await tx.paciente.update({
+        where: { idPaciente: id },
+        data: pacienteUpdateData,
+        include: {
+          persona: {
+            include: {
+              documento: true,
+              contactos: {
+                where: { activo: true },
+                orderBy: { esPrincipal: "desc" },
+              },
             },
           },
         },
-      },
-    })
-
-    // 13. Calculate diff for audit
-    const newData: Record<string, unknown> = {
-      firstName: body.firstName,
-      lastName: body.lastName,
-      gender: body.gender,
-      dateOfBirth: body.dateOfBirth,
-      address: body.address,
-      phone: normalizedPhone,
-      email: normalizedEmail,
-      insurance: body.insurance,
-      emergencyContactName: body.emergencyContactName,
-      emergencyContactPhone: body.emergencyContactPhone,
-      status: body.status,
-    }
-
-    const diff = calculateDiff(oldPersonaData, newData)
-
-    // 14. Create audit log
-    try {
-      await tx.auditLog.create({
-        data: {
-          actorId: context.userId,
-          action: "PATIENT_UPDATE",
-          entity: "Patient",
-          entityId: id,
-          ip: context.ip ?? null,
-          metadata: {
-            diff,
-            role: context.role,
-          } as Prisma.InputJsonValue,
+      })
+    } else {
+      // No changes to Paciente, just fetch with includes
+      updatedPaciente = await tx.paciente.findUnique({
+        where: { idPaciente: id },
+        include: {
+          persona: {
+            include: {
+              documento: true,
+              contactos: {
+                where: { activo: true },
+                orderBy: { esPrincipal: "desc" },
+              },
+            },
+          },
         },
       })
-    } catch (auditError) {
-      // Audit log is non-critical, log but don't fail transaction
-      console.error("[v0] Failed to create audit log:", auditError)
+
+      if (!updatedPaciente) {
+        const error = new Error("Paciente no encontrado después de actualizar") as Error & { status: number }
+        error.status = 404
+        throw error
+      }
     }
 
-    // 15. Return updated patient
+    // 12. Return updated patient
+    // Note: Audit log is now created at the route level using createPatientAuditLog
+    // which includes detailed diff, motivo for critical changes, and additional metadata
     return {
       id: updatedPaciente.idPaciente,
       firstName: updatedPaciente.persona.nombres,

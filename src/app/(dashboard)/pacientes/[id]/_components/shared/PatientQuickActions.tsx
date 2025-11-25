@@ -15,10 +15,12 @@ import {
 import { Plus, Stethoscope, Calendar, FileText, Activity, Image } from 'lucide-react';
 import Link from 'next/link';
 import type { RolNombre } from '@/types/patient';
+import type { RBACPermissions } from '@/lib/utils/rbac';
 
 interface PatientQuickActionsProps {
   patientId: number;
   currentRole: RolNombre;
+  permissions?: RBACPermissions | null;
 }
 
 export function PatientQuickActions({ patientId, currentRole }: PatientQuickActionsProps) {

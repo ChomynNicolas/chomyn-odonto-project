@@ -17,6 +17,7 @@ export interface RBACPermissions {
   canUploadConsentimientos: boolean
   canViewConsentDetails: boolean
   canDownloadConsentimientos: boolean
+  canViewRiskFlags: boolean
 }
 
 // Bandera para permitir exportar PDF a RECEP (configurable por env)
@@ -45,6 +46,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canUploadConsentimientos: true,
         canViewConsentDetails: true,
         canDownloadConsentimientos: true,
+        canViewRiskFlags: true,
       }
     case "ODONT":
       return {
@@ -63,6 +65,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canUploadConsentimientos: true,
         canViewConsentDetails: true,
         canDownloadConsentimientos: true,
+        canViewRiskFlags: true,
       }
     case "RECEP":
       return {
@@ -81,6 +84,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canUploadConsentimientos: false,
         canViewConsentDetails: true,
         canDownloadConsentimientos: true,
+        canViewRiskFlags: false, // RECEP no ve detalles clínicos de riesgo
       }
     default:
       return {
@@ -99,6 +103,7 @@ export function getPermissions(role: UserRole): RBACPermissions {
         canUploadConsentimientos: false,
         canViewConsentDetails: false,
         canDownloadConsentimientos: false,
+        canViewRiskFlags: false,
       }
   }
 }

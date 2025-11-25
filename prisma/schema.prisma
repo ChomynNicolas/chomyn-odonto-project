@@ -36,46 +36,48 @@ model AuditLog {
 /// *
 /// * Tabla Usuarios
 model Usuario {
-  idUsuario                   Int                       @id @default(autoincrement()) @map("idUsuario")
-  usuario                     String                    @unique @map("usuario")
-  email                       String?                   @unique @map("email")
-  passwordHash                String
-  nombreApellido              String                    @map("nombre_apellido")
-  rolId                       Int                       @map("Rol_idRol")
-  createdAt                   DateTime                  @default(now()) @map("created_at")
-  updatedAt                   DateTime                  @updatedAt @map("updated_at")
-  estaActivo                  Boolean                   @default(true) @map("esta_activo")
-  ultimoLoginAt               DateTime?                 @map("ultimo_login_at")
-  profesional                 Profesional?
-  rol                         Rol                       @relation(fields: [rolId], references: [idRol])
-  citasCreadas                Cita[]                    @relation("CitaCreadaPor")
-  citasCanceladas             Cita[]                    @relation("CitaCanceladaPor")
-  CitaEstadoHistorial         CitaEstadoHistorial[]
-  BloqueoAgenda               BloqueoAgenda[]
-  Consulta                    Consulta[]
-  ConsultaAdjunto             Adjunto[]
-  TreatmentPlan               TreatmentPlan[]
-  ClinicalHistoryEntry        ClinicalHistoryEntry[]
-  PatientDiagnosis            PatientDiagnosis[]
-  PatientAllergy              PatientAllergy[]
-  PatientMedication           PatientMedication[]
-  PatientVitals               PatientVitals[]
-  OdontogramSnapshot          OdontogramSnapshot[]
-  PeriodontogramSnapshot      PeriodontogramSnapshot[]
-  Adjunto                     Adjunto[]                 @relation("AdjuntoUploadedBy")
-  consentimientosRegistrados  Consentimiento[]
-  PatientAnamnesis            PatientAnamnesis[]        @relation("AnamnesisCreadaPor")
-  PatientAnamnesisActualizada PatientAnamnesis[]        @relation("AnamnesisActualizadaPor")
-  PatientAnamnesisVersion     PatientAnamnesisVersion[]
-  AnamnesisConfig              AnamnesisConfig[]
-  AuditLog                    AuditLog[]
-  AnamnesisMedicationAddedBy   AnamnesisMedication[]    @relation("AnamnesisMedicationAddedBy")
-  AnamnesisMedicationRemovedBy AnamnesisMedication[]    @relation("AnamnesisMedicationRemovedBy")
-  AnamnesisAllergyAddedBy      AnamnesisAllergy[]       @relation("AnamnesisAllergyAddedBy")
-  AnamnesisAllergyRemovedBy    AnamnesisAllergy[]       @relation("AnamnesisAllergyRemovedBy")
+  idUsuario                           Int                        @id @default(autoincrement()) @map("idUsuario")
+  usuario                             String                     @unique @map("usuario")
+  email                               String?                    @unique @map("email")
+  passwordHash                        String
+  nombreApellido                      String                     @map("nombre_apellido")
+  rolId                               Int                        @map("Rol_idRol")
+  createdAt                           DateTime                   @default(now()) @map("created_at")
+  updatedAt                           DateTime                   @updatedAt @map("updated_at")
+  estaActivo                          Boolean                    @default(true) @map("esta_activo")
+  ultimoLoginAt                       DateTime?                  @map("ultimo_login_at")
+  profesional                         Profesional?
+  rol                                 Rol                        @relation(fields: [rolId], references: [idRol])
+  citasCreadas                        Cita[]                     @relation("CitaCreadaPor")
+  citasCanceladas                     Cita[]                     @relation("CitaCanceladaPor")
+  CitaEstadoHistorial                 CitaEstadoHistorial[]
+  BloqueoAgenda                       BloqueoAgenda[]
+  Consulta                            Consulta[]
+  ConsultaAdjunto                     Adjunto[]
+  TreatmentPlan                       TreatmentPlan[]
+  ClinicalHistoryEntry                ClinicalHistoryEntry[]
+  PatientDiagnosis                    PatientDiagnosis[]
+  PatientAllergy                      PatientAllergy[]
+  PatientMedication                   PatientMedication[]
+  PatientVitals                       PatientVitals[]
+  OdontogramSnapshot                  OdontogramSnapshot[]
+  PeriodontogramSnapshot              PeriodontogramSnapshot[]
+  Adjunto                             Adjunto[]                  @relation("AdjuntoUploadedBy")
+  consentimientosRegistrados          Consentimiento[]
+  PatientAnamnesis                    PatientAnamnesis[]         @relation("AnamnesisCreadaPor")
+  PatientAnamnesisActualizada         PatientAnamnesis[]         @relation("AnamnesisActualizadaPor")
+  PatientAnamnesisVersion             PatientAnamnesisVersion[]
+  AnamnesisConfig                     AnamnesisConfig[]
+  AuditLog                            AuditLog[]
+  AnamnesisMedicationAddedBy          AnamnesisMedication[]      @relation("AnamnesisMedicationAddedBy")
+  AnamnesisMedicationRemovedBy        AnamnesisMedication[]      @relation("AnamnesisMedicationRemovedBy")
+  AnamnesisAllergyAddedBy             AnamnesisAllergy[]         @relation("AnamnesisAllergyAddedBy")
+  AnamnesisAllergyRemovedBy           AnamnesisAllergy[]         @relation("AnamnesisAllergyRemovedBy")
   AnamnesisMedicationAuditPerformedBy AnamnesisMedicationAudit[] @relation("AnamnesisMedicationAuditPerformedBy")
   AnamnesisAllergyAuditPerformedBy    AnamnesisAllergyAudit[]    @relation("AnamnesisAllergyAuditPerformedBy")
   DiagnosisStatusHistoryChangedBy     DiagnosisStatusHistory[]   @relation("DiagnosisStatusHistoryChangedBy")
+  AnamnesisAuditLogActor              AnamnesisAuditLog[]        @relation("AnamnesisAuditLogActor")
+  AnamnesisDeletedBy                  PatientAnamnesis[]         @relation("AnamnesisDeletedBy")
 
   @@index([rolId])
   @@map("Usuario")
@@ -278,6 +280,7 @@ model Paciente {
   consentimientos        Consentimiento[]
   anamnesisActual        PatientAnamnesis?
   anamnesisHistorial     PatientAnamnesisVersion[]
+  anamnesisAuditLogs     AnamnesisAuditLog[]
 
   @@map("Paciente")
 }
@@ -542,6 +545,7 @@ model Consulta {
   OdontogramSnapshot     OdontogramSnapshot[]
   PeriodontogramSnapshot PeriodontogramSnapshot[]
   anamnesisVersiones     PatientAnamnesisVersion[]
+  anamnesisAuditLogs     AnamnesisAuditLog[]
   encounterDiagnoses     EncounterDiagnosis[]
   diagnosisStatusHistory DiagnosisStatusHistory[]
 
@@ -766,9 +770,9 @@ model PatientDiagnosis {
   paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
 
   // Relaciones nuevas
-  encounterDiagnoses EncounterDiagnosis[]
+  encounterDiagnoses     EncounterDiagnosis[]
   consultaProcedimientos ConsultaProcedimiento[]
-  statusHistory DiagnosisStatusHistory[]
+  statusHistory          DiagnosisStatusHistory[]
 
   @@index([pacienteId, status, notedAt])
   @@index([consultaId])
@@ -778,19 +782,19 @@ model PatientDiagnosis {
 // Encounter-Diagnosis junction table for tracking diagnosis evaluation per encounter
 model EncounterDiagnosis {
   idEncounterDiagnosis Int @id @default(autoincrement()) @map("idEncounterDiagnosis")
-  consultaId Int @map("Consulta_Cita_idCita")
-  diagnosisId Int @map("PatientDiagnosis_idPatientDiagnosis")
-  
+  consultaId           Int @map("Consulta_Cita_idCita")
+  diagnosisId          Int @map("PatientDiagnosis_idPatientDiagnosis")
+
   // Encounter-specific context
   encounterNotes String? @map("encounter_notes") @db.VarChar(1000)
-  wasEvaluated Boolean @default(true) @map("was_evaluated")
-  wasManaged Boolean @default(false) @map("was_managed")
-  
-  consulta Consulta @relation(fields: [consultaId], references: [citaId], onDelete: Cascade)
+  wasEvaluated   Boolean @default(true) @map("was_evaluated")
+  wasManaged     Boolean @default(false) @map("was_managed")
+
+  consulta  Consulta         @relation(fields: [consultaId], references: [citaId], onDelete: Cascade)
   diagnosis PatientDiagnosis @relation(fields: [diagnosisId], references: [idPatientDiagnosis], onDelete: Cascade)
-  
+
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   @@unique([consultaId, diagnosisId])
   @@index([consultaId])
   @@index([diagnosisId])
@@ -799,21 +803,21 @@ model EncounterDiagnosis {
 
 // Audit trail for diagnosis status changes
 model DiagnosisStatusHistory {
-  idDiagnosisStatusHistory Int @id @default(autoincrement()) @map("idDiagnosisStatusHistory")
-  diagnosisId Int @map("PatientDiagnosis_idPatientDiagnosis")
-  consultaId Int? @map("Consulta_Cita_idCita")
-  
+  idDiagnosisStatusHistory Int  @id @default(autoincrement()) @map("idDiagnosisStatusHistory")
+  diagnosisId              Int  @map("PatientDiagnosis_idPatientDiagnosis")
+  consultaId               Int? @map("Consulta_Cita_idCita")
+
   previousStatus DiagnosisStatus? @map("previous_status")
-  newStatus DiagnosisStatus @map("new_status")
-  reason String? @map("reason") @db.VarChar(500)
-  
-  changedByUserId Int @map("Usuario_idUsuario_changedBy")
-  changedAt DateTime @default(now()) @map("changed_at")
-  
+  newStatus      DiagnosisStatus  @map("new_status")
+  reason         String?          @map("reason") @db.VarChar(500)
+
+  changedByUserId Int      @map("Usuario_idUsuario_changedBy")
+  changedAt       DateTime @default(now()) @map("changed_at")
+
   diagnosis PatientDiagnosis @relation(fields: [diagnosisId], references: [idPatientDiagnosis], onDelete: Cascade)
-  consulta Consulta? @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
-  changedBy Usuario @relation("DiagnosisStatusHistoryChangedBy", fields: [changedByUserId], references: [idUsuario])
-  
+  consulta  Consulta?        @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  changedBy Usuario          @relation("DiagnosisStatusHistoryChangedBy", fields: [changedByUserId], references: [idUsuario])
+
   @@index([diagnosisId, changedAt])
   @@index([consultaId])
   @@map("DiagnosisStatusHistory")
@@ -856,7 +860,7 @@ model PatientAllergy {
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
   createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
 
-  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  paciente           Paciente           @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
   anamnesisAllergies AnamnesisAllergy[]
 
   @@index([pacienteId, isActive])
@@ -894,7 +898,7 @@ model PatientMedication {
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
   createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
 
-  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  paciente             Paciente              @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
   anamnesisMedications AnamnesisMedication[]
 
   @@index([pacienteId, isActive])
@@ -1052,6 +1056,29 @@ enum AnamnesisTipo {
   PEDIATRICO
 }
 
+enum AnamnesisAuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  RESTORE
+  EXPORT
+  PRINT
+}
+
+enum AnamnesisChangeSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum FieldChangeType {
+  ADDED
+  REMOVED
+  MODIFIED
+}
+
 enum AnamnesisUrgencia {
   RUTINA
   PRIORITARIO
@@ -1127,17 +1154,17 @@ model Consentimiento {
 
 // Antecedent Catalog for normalized medical history
 model AntecedentCatalog {
-  idAntecedentCatalog Int      @id @default(autoincrement()) @map("idAntecedentCatalog")
-  code                String   @unique @map("code") // e.g., "HYPERTENSION", "DIABETES"
-  name                String   @map("name")
+  idAntecedentCatalog Int                @id @default(autoincrement()) @map("idAntecedentCatalog")
+  code                String             @unique @map("code") // e.g., "HYPERTENSION", "DIABETES"
+  name                String             @map("name")
   category            AntecedentCategory @map("category")
-  description         String?  @map("description")
-  isActive            Boolean  @default(true) @map("is_active")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  
-  antecedents         AnamnesisAntecedent[]
-  
+  description         String?            @map("description")
+  isActive            Boolean            @default(true) @map("is_active")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  antecedents AnamnesisAntecedent[]
+
   @@index([category])
   @@index([isActive])
   @@map("AntecedentCatalog")
@@ -1149,19 +1176,19 @@ model AnamnesisAntecedent {
   anamnesisId           Int                @map("PatientAnamnesis_id")
   antecedentId          Int?               @map("AntecedentCatalog_id")
   antecedentCatalog     AntecedentCatalog? @relation(fields: [antecedentId], references: [idAntecedentCatalog], onDelete: SetNull)
-  
+
   // Custom antecedent (if not in catalog)
-  customName             String?            @map("custom_name")
-  customCategory         AntecedentCategory? @map("custom_category")
-  notes                  String?            @map("notes")
-  
+  customName     String?             @map("custom_name")
+  customCategory AntecedentCategory? @map("custom_category")
+  notes          String?             @map("notes")
+
   // Timing/status
-  diagnosedAt            DateTime?          @map("diagnosed_at")
-  isActive               Boolean            @default(true) @map("is_active")
-  resolvedAt             DateTime?         @map("resolved_at")
-  
-  anamnesis              PatientAnamnesis   @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
-  
+  diagnosedAt DateTime? @map("diagnosed_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+
   @@index([anamnesisId])
   @@index([antecedentId])
   @@index([isActive])
@@ -1179,24 +1206,24 @@ enum AnamnesisMedicationAllergyAction {
 
 // Junction table linking anamnesis to medications
 model AnamnesisMedication {
-  idAnamnesisMedication Int              @id @default(autoincrement()) @map("idAnamnesisMedication")
-  anamnesisId           Int              @map("PatientAnamnesis_id")
-  medicationId          Int              @map("PatientMedication_id")
-  anamnesis             PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  idAnamnesisMedication Int               @id @default(autoincrement()) @map("idAnamnesisMedication")
+  anamnesisId           Int               @map("PatientAnamnesis_id")
+  medicationId          Int               @map("PatientMedication_id")
+  anamnesis             PatientAnamnesis  @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
   medication            PatientMedication @relation(fields: [medicationId], references: [idPatientMedication], onDelete: Cascade)
-  
+
   // Metadata fields for tracking
-  isActive              Boolean          @default(true) @map("is_active")
-  addedAt               DateTime         @default(now()) @map("added_at")
-  removedAt             DateTime?       @map("removed_at")
-  notes                 String?          @map("notes")
-  addedByUserId         Int              @map("Usuario_idUsuario_addedBy")
-  removedByUserId       Int?             @map("Usuario_idUsuario_removedBy")
-  
-  addedBy               Usuario          @relation("AnamnesisMedicationAddedBy", fields: [addedByUserId], references: [idUsuario])
-  removedBy             Usuario?         @relation("AnamnesisMedicationRemovedBy", fields: [removedByUserId], references: [idUsuario])
-  auditEntries          AnamnesisMedicationAudit[]
-  
+  isActive        Boolean   @default(true) @map("is_active")
+  addedAt         DateTime  @default(now()) @map("added_at")
+  removedAt       DateTime? @map("removed_at")
+  notes           String?   @map("notes")
+  addedByUserId   Int       @map("Usuario_idUsuario_addedBy")
+  removedByUserId Int?      @map("Usuario_idUsuario_removedBy")
+
+  addedBy      Usuario                    @relation("AnamnesisMedicationAddedBy", fields: [addedByUserId], references: [idUsuario])
+  removedBy    Usuario?                   @relation("AnamnesisMedicationRemovedBy", fields: [removedByUserId], references: [idUsuario])
+  auditEntries AnamnesisMedicationAudit[]
+
   @@unique([anamnesisId, medicationId])
   @@index([anamnesisId])
   @@index([medicationId])
@@ -1209,22 +1236,22 @@ model AnamnesisMedication {
 model AnamnesisAllergy {
   idAnamnesisAllergy Int              @id @default(autoincrement()) @map("idAnamnesisAllergy")
   anamnesisId        Int              @map("PatientAnamnesis_id")
-  allergyId           Int              @map("PatientAllergy_id")
-  anamnesis           PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
-  allergy             PatientAllergy   @relation(fields: [allergyId], references: [idPatientAllergy], onDelete: Cascade)
-  
+  allergyId          Int              @map("PatientAllergy_id")
+  anamnesis          PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  allergy            PatientAllergy   @relation(fields: [allergyId], references: [idPatientAllergy], onDelete: Cascade)
+
   // Metadata fields for tracking
-  isActive            Boolean          @default(true) @map("is_active")
-  addedAt             DateTime         @default(now()) @map("added_at")
-  removedAt           DateTime?        @map("removed_at")
-  notes               String?          @map("notes")
-  addedByUserId       Int              @map("Usuario_idUsuario_addedBy")
-  removedByUserId     Int?             @map("Usuario_idUsuario_removedBy")
-  
-  addedBy             Usuario          @relation("AnamnesisAllergyAddedBy", fields: [addedByUserId], references: [idUsuario])
-  removedBy           Usuario?         @relation("AnamnesisAllergyRemovedBy", fields: [removedByUserId], references: [idUsuario])
-  auditEntries        AnamnesisAllergyAudit[]
-  
+  isActive        Boolean   @default(true) @map("is_active")
+  addedAt         DateTime  @default(now()) @map("added_at")
+  removedAt       DateTime? @map("removed_at")
+  notes           String?   @map("notes")
+  addedByUserId   Int       @map("Usuario_idUsuario_addedBy")
+  removedByUserId Int?      @map("Usuario_idUsuario_removedBy")
+
+  addedBy      Usuario                 @relation("AnamnesisAllergyAddedBy", fields: [addedByUserId], references: [idUsuario])
+  removedBy    Usuario?                @relation("AnamnesisAllergyRemovedBy", fields: [removedByUserId], references: [idUsuario])
+  auditEntries AnamnesisAllergyAudit[]
+
   @@unique([anamnesisId, allergyId])
   @@index([anamnesisId])
   @@index([allergyId])
@@ -1243,10 +1270,10 @@ model AnamnesisMedicationAudit {
   performedAt                DateTime                         @default(now()) @map("performed_at")
   performedByUserId          Int                              @map("Usuario_idUsuario_performedBy")
   notes                      String?                          @map("notes")
-  
-  anamnesisMedication        AnamnesisMedication              @relation(fields: [anamnesisMedicationId], references: [idAnamnesisMedication], onDelete: Cascade)
-  performedBy                Usuario                          @relation("AnamnesisMedicationAuditPerformedBy", fields: [performedByUserId], references: [idUsuario])
-  
+
+  anamnesisMedication AnamnesisMedication @relation(fields: [anamnesisMedicationId], references: [idAnamnesisMedication], onDelete: Cascade)
+  performedBy         Usuario             @relation("AnamnesisMedicationAuditPerformedBy", fields: [performedByUserId], references: [idUsuario])
+
   @@index([anamnesisMedicationId])
   @@index([performedAt])
   @@index([action])
@@ -1263,10 +1290,10 @@ model AnamnesisAllergyAudit {
   performedAt             DateTime                         @default(now()) @map("performed_at")
   performedByUserId       Int                              @map("Usuario_idUsuario_performedBy")
   notes                   String?                          @map("notes")
-  
-  anamnesisAllergy        AnamnesisAllergy                 @relation(fields: [anamnesisAllergyId], references: [idAnamnesisAllergy], onDelete: Cascade)
-  performedBy             Usuario                          @relation("AnamnesisAllergyAuditPerformedBy", fields: [performedByUserId], references: [idUsuario])
-  
+
+  anamnesisAllergy AnamnesisAllergy @relation(fields: [anamnesisAllergyId], references: [idAnamnesisAllergy], onDelete: Cascade)
+  performedBy      Usuario          @relation("AnamnesisAllergyAuditPerformedBy", fields: [performedByUserId], references: [idUsuario])
+
   @@index([anamnesisAllergyId])
   @@index([performedAt])
   @@index([action])
@@ -1281,9 +1308,9 @@ model AnamnesisConfig {
   description       String?  @map("description")
   updatedAt         DateTime @updatedAt @map("updated_at")
   updatedByUserId   Int      @map("Usuario_idUsuario_updatedBy")
-  
-  updatedBy         Usuario  @relation(fields: [updatedByUserId], references: [idUsuario])
-  
+
+  updatedBy Usuario @relation(fields: [updatedByUserId], references: [idUsuario])
+
   @@map("AnamnesisConfig")
 }
 
@@ -1325,19 +1352,32 @@ model PatientAnamnesis {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // 🔹 Auditoría y versionado
+  versionNumber   Int       @default(1) @map("version_number")
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at")
+  deletedByUserId Int?      @map("Usuario_idUsuario_deletedBy")
+  deletedReason   String?   @map("deleted_reason")
+  deletedBy       Usuario?  @relation("AnamnesisDeletedBy", fields: [deletedByUserId], references: [idUsuario])
+
   // Historial de versiones
   versiones PatientAnamnesisVersion[]
-  
+
   // Normalized relationships
   antecedents AnamnesisAntecedent[]
   medications AnamnesisMedication[]
-  allergies AnamnesisAllergy[]
+  allergies   AnamnesisAllergy[]
+
+  // Auditoría
+  auditLogs AnamnesisAuditLog[]
 
   @@index([tipo])
   @@index([tieneEnfermedadesCronicas, tieneAlergias])
   @@index([urgenciaPercibida])
   @@index([pacienteId, updatedAt]) // Para obtener anamnesis más reciente por paciente
   @@index([tieneDolorActual, urgenciaPercibida]) // Para filtros de urgencia
+  @@index([versionNumber])
+  @@index([isDeleted, deletedAt])
   @@map("PatientAnamnesis")
 }
 
@@ -1370,12 +1410,22 @@ model PatientAnamnesisVersion {
 
   motivoCambio String? @map("motivo_cambio") // ej: "control anual", "pre-operatorio"
 
+  // 🔹 Campos de auditoría mejorados
+  versionNumber         Int     @map("version_number")
+  changeSummary         Json?   @map("change_summary")
+  restoredFromVersionId Int?    @map("restored_from_version_id")
+  ipAddress             String? @map("ip_address")
+  userAgent             String? @map("user_agent")
+  reason                String? @map("reason")
+
   creadoPorUserId Int     @map("Usuario_idUsuario_creadoPor")
   creadoPor       Usuario @relation(fields: [creadoPorUserId], references: [idUsuario])
 
-  paciente  Paciente         @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
-  anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
-  consulta  Consulta?        @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  paciente            Paciente                  @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  anamnesis           PatientAnamnesis          @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  consulta            Consulta?                 @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+  restoredFromVersion PatientAnamnesisVersion?  @relation("AnamnesisVersionRestoredFrom", fields: [restoredFromVersionId], references: [idPatientAnamnesisVersion], onDelete: SetNull)
+  restoredVersions    PatientAnamnesisVersion[] @relation("AnamnesisVersionRestoredFrom")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -1384,5 +1434,91 @@ model PatientAnamnesisVersion {
   @@index([anamnesisId, createdAt])
   @@index([tipo, createdAt]) // Para reportes por tipo
   @@index([urgenciaPercibida, createdAt]) // Para análisis de urgencias históricas
+  @@index([versionNumber])
+  @@index([restoredFromVersionId])
   @@map("PatientAnamnesisVersion")
+}
+
+// 🔹 Sistema de Auditoría Completo para Anamnesis
+model AnamnesisAuditLog {
+  idAnamnesisAuditLog Int @id @default(autoincrement()) @map("idAnamnesisAuditLog")
+  anamnesisId         Int @map("PatientAnamnesis_id")
+  pacienteId          Int @map("Paciente_idPaciente") // Denormalizado para consultas rápidas
+
+  // Acción realizada
+  action AnamnesisAuditAction @map("action")
+
+  // Actor (quién)
+  actorId   Int       @map("Usuario_idUsuario_actor")
+  actorRole RolNombre @map("actor_role") // Denormalizado para filtros rápidos
+
+  // Contexto de la operación
+  ipAddress   String? @map("ip_address")
+  userAgent   String? @map("user_agent")
+  sessionId   String? @map("session_id") // Opcional: ID de sesión NextAuth
+  requestPath String? @map("request_path") // Ruta API que generó la acción
+
+  // Cambios realizados
+  previousState  Json? @map("previous_state") // Estado completo antes del cambio
+  newState       Json? @map("new_state") // Estado completo después del cambio
+  fieldDiffs     Json? @map("field_diffs") // Array de cambios campo por campo
+  changesSummary Json? @map("changes_summary") // Resumen estructurado de cambios
+
+  // Metadatos adicionales
+  reason     String?                  @map("reason") // Razón del cambio
+  severity   AnamnesisChangeSeverity? @map("severity")
+  consultaId Int?                     @map("Consulta_Cita_idCita") // Si el cambio ocurrió en una consulta
+
+  // Versionado
+  previousVersionNumber Int? @map("previous_version_number")
+  newVersionNumber      Int? @map("new_version_number")
+
+  // Integridad
+  integrityHash String? @map("integrity_hash") // Hash SHA-256 del registro
+
+  // Timestamp
+  performedAt DateTime @default(now()) @map("performed_at")
+
+  // Relaciones
+  anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  paciente  Paciente         @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  actor     Usuario          @relation("AnamnesisAuditLogActor", fields: [actorId], references: [idUsuario])
+  consulta  Consulta?        @relation(fields: [consultaId], references: [citaId], onDelete: SetNull)
+
+  // Relación con field diffs
+  fieldDiffsDetails AnamnesisFieldDiff[]
+
+  // Índices para consultas eficientes
+  @@index([anamnesisId, performedAt])
+  @@index([pacienteId, performedAt])
+  @@index([actorId, performedAt])
+  @@index([action, performedAt])
+  @@index([consultaId])
+  @@index([severity, performedAt])
+  @@index([performedAt]) // Para particionado futuro por fecha
+  @@map("AnamnesisAuditLog")
+}
+
+model AnamnesisFieldDiff {
+  idAnamnesisFieldDiff Int @id @default(autoincrement()) @map("idAnamnesisFieldDiff")
+  auditLogId           Int @map("AnamnesisAuditLog_id")
+
+  fieldPath  String @map("field_path") // Ej: "motivoConsulta", "womenSpecific.embarazada"
+  fieldLabel String @map("field_label") // Etiqueta legible: "Motivo de consulta"
+  fieldType  String @map("field_type") // "string", "boolean", "number", "object", "array"
+
+  oldValue        Json?   @map("old_value")
+  newValue        Json?   @map("new_value")
+  oldValueDisplay String? @map("old_value_display") // Valor formateado para UI
+  newValueDisplay String? @map("new_value_display")
+
+  isCritical Boolean         @default(false) @map("is_critical")
+  changeType FieldChangeType @map("change_type")
+
+  auditLog AnamnesisAuditLog @relation(fields: [auditLogId], references: [idAnamnesisAuditLog], onDelete: Cascade)
+
+  @@index([auditLogId])
+  @@index([fieldPath])
+  @@index([isCritical])
+  @@map("AnamnesisFieldDiff")
 }

@@ -1,6 +1,10 @@
 // src/lib/audit/actions.ts
 
 export const AuditAction = {
+  // Patient Management
+  PATIENT_CREATE: "PATIENT_CREATE",
+  PATIENT_UPDATE: "PATIENT_UPDATE",
+  PATIENT_DELETE: "PATIENT_DELETE",
   PATIENT_PRINT: "PATIENT_PRINT",
   PATIENT_PDF_EXPORT: "PATIENT_PDF_EXPORT",
   ODONTOGRAM_CREATE: "ODONTOGRAM_CREATE",
@@ -92,6 +96,14 @@ export const AuditAction = {
   CONSENTIMIENTO_CREATE: "CONSENTIMIENTO_CREATE",
   CONSENTIMIENTO_REVOKE: "CONSENTIMIENTO_REVOKE",
   CONSENTIMIENTO_UPDATE: "CONSENTIMIENTO_UPDATE",
+  // Anamnesis Operations
+  ANAMNESIS_CREATE: "ANAMNESIS_CREATE",
+  ANAMNESIS_UPDATE: "ANAMNESIS_UPDATE",
+  ANAMNESIS_DELETE: "ANAMNESIS_DELETE",
+  ANAMNESIS_VIEW: "ANAMNESIS_VIEW",
+  ANAMNESIS_RESTORE: "ANAMNESIS_RESTORE",
+  ANAMNESIS_EXPORT: "ANAMNESIS_EXPORT",
+  ANAMNESIS_PRINT: "ANAMNESIS_PRINT",
   // — futuras acciones comunes —
   // PATIENT_VIEW: "PATIENT_VIEW",
   // USER_LOGIN: "USER_LOGIN",
@@ -120,6 +132,9 @@ export const AuditEntity = {
   // Attachment and Consent Entities
   Adjunto: "Adjunto",
   Consentimiento: "Consentimiento",
+  // Anamnesis Entity
+  PatientAnamnesis: "PatientAnamnesis",
+  Anamnesis: "Anamnesis", // Alias en español
   // agrega las que necesites
 } as const
 export type AuditEntity = typeof AuditEntity[keyof typeof AuditEntity]

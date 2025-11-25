@@ -1,34 +1,54 @@
-// Anamnesis tab - comprehensive anamnesis view and edit
+"use client"
 
-'use client';
-
-import { usePatientAnamnesis } from '@/lib/hooks/use-patient-anamnesis';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileText, AlertCircle, Edit, Loader2 } from 'lucide-react';
-import { AnamnesisForm } from '@/components/consulta-clinica/modules/anamnesis/AnamnesisForm';
-import { useRouter } from 'next/navigation';
-import type { RolNombre } from '@/types/patient';
+import { useState, useMemo } from "react"
+import { usePatientAnamnesis } from "@/lib/hooks/use-patient-anamnesis"
+import { usePatientOverview } from "@/lib/hooks/use-patient-overview"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { FileText, AlertCircle, History, Eye } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import type { RolNombre } from "@/types/patient"
+import { AnamnesisDisplayView } from "../anamnesis/anamnesis-display-view"
+import { AnamnesisEditModal } from "../anamnesis/anamnesis-edit-modal"
+import { AnamnesisHistoryView } from "../anamnesis/anamnesis-history-view"
 
 interface AnamnesisTabProps {
-  patientId: number;
-  currentRole: RolNombre;
+  patientId: number
+  currentRole: RolNombre
 }
 
 export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
-  const router = useRouter();
-  const { data: anamnesis, isLoading, error, refetch } = usePatientAnamnesis(patientId);
+  const { data: anamnesis, isLoading, error, refetch } = usePatientAnamnesis(patientId)
+  const { data: patientOverview } = usePatientOverview(patientId)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [activeView, setActiveView] = useState<"display" | "history">("display")
+
+  // Get patient gender from overview or from anamnesis metadata
+  const patientGender = useMemo(() => {
+    if (patientOverview?.patient.gender) {
+      return patientOverview.patient.gender as "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
+    }
+    // Try to get from anamnesis metadata
+    if (anamnesis?.payload && typeof anamnesis.payload === "object" && "_metadata" in anamnesis.payload) {
+      const metadata = (anamnesis.payload as any)._metadata
+      if (metadata?.patientGender) {
+        return metadata.patientGender as "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
+      }
+    }
+    return "NO_ESPECIFICADO" as const
+  }, [patientOverview?.patient.gender, anamnesis?.payload])
 
   // Don't show for receptionists
-  if (currentRole === 'RECEP') {
+  if (currentRole === "RECEP") {
     return (
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>No tiene permisos para ver esta información.</AlertDescription>
       </Alert>
-    );
+    )
   }
 
   if (isLoading) {
@@ -37,11 +57,15 @@ export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
         <CardHeader>
           <Skeleton className="h-6 w-48" />
         </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
+        <CardContent className="space-y-4">
+          <Skeleton className="h-32 w-full" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
         </CardContent>
       </Card>
-    );
+    )
   }
 
   if (error) {
@@ -50,64 +74,96 @@ export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Error al cargar anamnesis: {error.message}
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-4"
-            onClick={() => refetch()}
-          >
+          <Button variant="outline" size="sm" className="ml-4 bg-transparent" onClick={() => refetch()}>
             Reintentar
           </Button>
         </AlertDescription>
       </Alert>
-    );
+    )
+  }
+
+  if (!anamnesis) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-lg font-semibold mb-2">No hay anamnesis registrada</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Este paciente aún no tiene una anamnesis completa en el sistema.
+          </p>
+          {(currentRole === "ADMIN" || currentRole === "ODONT") && (
+            <Button onClick={() => setIsEditModalOpen(true)}>Crear Anamnesis</Button>
+          )}
+        </CardContent>
+      </Card>
+    )
   }
 
   // Determine if user can edit (ADMIN and ODONT can edit)
-  const canEdit = currentRole === 'ADMIN' || currentRole === 'ODONT';
+  const canEdit = currentRole === "ADMIN" || currentRole === "ODONT"
 
   return (
     <div className="space-y-6">
+      {/* Header Card with View Switcher */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                Anamnesis
+                Anamnesis del Paciente
               </CardTitle>
-              <CardDescription className="mt-1">
-                Información clínica completa del paciente. Los campos marcados con * son obligatorios.
-              </CardDescription>
+              <p className="text-sm text-muted-foreground mt-1">Información clínica completa y actualizada</p>
             </div>
             {!canEdit && (
-              <Badge variant="secondary">Solo lectura</Badge>
+              <Badge variant="secondary" className="shrink-0">
+                Solo lectura
+              </Badge>
             )}
           </div>
         </CardHeader>
         <CardContent>
-          <AnamnesisForm
-            pacienteId={patientId}
-            initialData={anamnesis ? {
-              ...anamnesis,
-              antecedents: (anamnesis as any).antecedents || [],
-              medications: (anamnesis as any).medications || [],
-              allergies: (anamnesis as any).allergies || [],
-            } : null}
-            onSave={() => {
-              refetch();
-              // Optionally navigate back to overview
-              // router.push(`/pacientes/${patientId}?tab=overview`);
-            }}
-            canEdit={canEdit}
-            patientGender={undefined} // Could be passed from patient data if available
-          />
+          <Tabs value={activeView} onValueChange={(v) => setActiveView(v as "display" | "history")} className="w-full">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="display" className="flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                Vista Actual
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Historial
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="display" className="mt-6">
+              <AnamnesisDisplayView
+                anamnesis={anamnesis}
+                canEdit={canEdit}
+                onEdit={() => setIsEditModalOpen(true)}
+                patientGender={patientGender}
+              />
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-6">
+              <AnamnesisHistoryView patientId={patientId} currentAnamnesis={anamnesis} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
+
+      {/* Edit Modal */}
+      {canEdit && (
+        <AnamnesisEditModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          patientId={patientId}
+          initialData={anamnesis}
+          onSave={() => {
+            refetch()
+            setIsEditModalOpen(false)
+          }}
+        />
+      )}
     </div>
-  );
+  )
 }
-
-// Add missing import
-import { Badge } from '@/components/ui/badge';
-
