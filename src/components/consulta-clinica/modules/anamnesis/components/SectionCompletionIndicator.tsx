@@ -1,44 +1,44 @@
-// Completion indicator for form sections
+// Enhanced completion indicator with color-coded status
 
-'use client';
+"use client"
 
-import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle, AlertCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
 interface SectionCompletionIndicatorProps {
-  isComplete: boolean;
-  completionPercentage?: number;
-  showPercentage?: boolean;
+  isComplete: boolean
+  isPartial?: boolean
 }
 
-export function SectionCompletionIndicator({
-  isComplete,
-  completionPercentage,
-  showPercentage = false,
-}: SectionCompletionIndicatorProps) {
+export function SectionCompletionIndicator({ isComplete, isPartial = false }: SectionCompletionIndicatorProps) {
   if (isComplete) {
     return (
-      <Badge variant="default" className="gap-1.5 bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200">
-        <CheckCircle2 className="h-3 w-3" />
-        <span className="text-xs">Completo</span>
+      <Badge
+        variant="outline"
+        className="gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400"
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Completo
       </Badge>
-    );
+    )
   }
 
-  if (showPercentage && completionPercentage !== undefined) {
+  if (isPartial) {
     return (
-      <Badge variant="secondary" className="gap-1.5">
-        <Circle className="h-3 w-3" />
-        <span className="text-xs">{completionPercentage}%</span>
+      <Badge
+        variant="outline"
+        className="gap-1.5 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-400"
+      >
+        <AlertCircle className="h-3.5 w-3.5" />
+        Parcial
       </Badge>
-    );
+    )
   }
 
   return (
-    <Badge variant="outline" className="gap-1.5">
-      <Circle className="h-3 w-3" />
-      <span className="text-xs">Pendiente</span>
+    <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+      <Circle className="h-3.5 w-3.5" />
+      Pendiente
     </Badge>
-  );
+  )
 }
-

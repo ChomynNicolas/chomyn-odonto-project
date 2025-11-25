@@ -1,9 +1,9 @@
 // Skeleton loader for anamnesis form matching actual structure
 
-'use client';
+"use client"
 
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export function AnamnesisFormSkeleton() {
   return (
@@ -73,6 +73,5 @@ export function AnamnesisFormSkeleton() {
         <Skeleton className="h-10 w-32" />
       </div>
     </div>
-  );
+  )
 }
-

@@ -219,6 +219,11 @@ export interface OdontogramSnapshot {
   recordedAt: string
   teeth: ToothRecord[]
   notes?: string
+  createdBy?: {
+    id: number
+    name: string
+  }
+  consultaId?: number | null
 }
 
 export interface ToothRecord {
@@ -226,6 +231,35 @@ export interface ToothRecord {
   condition: ToothCondition
   surfaces?: string[]
   notes?: string
+}
+
+// API Response Types for Odontogram History
+export interface OdontogramEntryAPI {
+  id: number
+  toothNumber: number
+  surface: string | null
+  condition: ToothCondition
+  notes: string | null
+}
+
+export interface OdontogramSnapshotAPI {
+  id: number
+  takenAt: string // ISO 8601
+  notes: string | null
+  consultaId: number | null
+  createdBy: {
+    id: number
+    name: string
+  }
+  entries: OdontogramEntryAPI[]
+}
+
+export interface OdontogramHistoryResponse {
+  patientId: number
+  snapshots: OdontogramSnapshotAPI[]
+  total: number
+  limit: number
+  offset: number
 }
 
 // Periodontogram

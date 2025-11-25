@@ -85,6 +85,13 @@ export const AuditAction = {
   DIAGNOSIS_DELETE: "DIAGNOSIS_DELETE",
   DIAGNOSIS_RESOLVE: "DIAGNOSIS_RESOLVE",
   DIAGNOSIS_DISCARD: "DIAGNOSIS_DISCARD",
+  // Attachment Operations
+  ADJUNTO_CREATE: "ADJUNTO_CREATE",
+  ADJUNTO_DELETE: "ADJUNTO_DELETE",
+  // Consent Operations
+  CONSENTIMIENTO_CREATE: "CONSENTIMIENTO_CREATE",
+  CONSENTIMIENTO_REVOKE: "CONSENTIMIENTO_REVOKE",
+  CONSENTIMIENTO_UPDATE: "CONSENTIMIENTO_UPDATE",
   // — futuras acciones comunes —
   // PATIENT_VIEW: "PATIENT_VIEW",
   // USER_LOGIN: "USER_LOGIN",
@@ -110,6 +117,9 @@ export const AuditEntity = {
   AntecedentCatalog: "AntecedentCatalog",
   AnamnesisConfig: "AnamnesisConfig",
   PatientDiagnosis: "PatientDiagnosis",
+  // Attachment and Consent Entities
+  Adjunto: "Adjunto",
+  Consentimiento: "Consentimiento",
   // agrega las que necesites
 } as const
 export type AuditEntity = typeof AuditEntity[keyof typeof AuditEntity]

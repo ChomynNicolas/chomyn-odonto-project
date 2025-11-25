@@ -11,6 +11,9 @@ export const consentimientoRepo = {
         idPaciente: true,
         persona: {
           select: {
+            idPersona: true, // Add idPersona for adult surgery consent validation
+            nombres: true, // Add nombres for debugging
+            apellidos: true, // Add apellidos for debugging
             fechaNacimiento: true,
           },
         },

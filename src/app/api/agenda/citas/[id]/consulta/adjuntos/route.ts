@@ -6,6 +6,7 @@ import { paramsSchema, createAttachmentSchema } from "../_schemas"
 import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
+import { auditAttachmentCreate } from "@/lib/audit/attachments"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/adjuntos
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           secureUrl: input.secureUrl,
           tipo: input.tipo,
           descripcion: input.descripcion ?? null,
+          accessMode: "AUTHENTICATED", // Consultation attachments are always authenticated
           uploadedByUserId: userId,
         },
         include: {
@@ -175,6 +177,32 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         },
       })
+
+      // Audit logging - AFTER successful creation
+      try {
+        await auditAttachmentCreate({
+          actorId: userId,
+          entityId: adjunto.idAdjunto,
+          metadata: {
+            pacienteId: nuevaConsulta.cita.pacienteId,
+            consultaId: citaId,
+            procedimientoId: null,
+            tipo: adjunto.tipo,
+            format: adjunto.format ?? null,
+            bytes: adjunto.bytes,
+            originalFilename: adjunto.originalFilename ?? null,
+            publicId: adjunto.publicId,
+            accessMode: adjunto.accessMode,
+            descripcion: adjunto.descripcion ?? null,
+            source: "consultation",
+            path: req.url,
+          },
+          headers: req.headers,
+          path: req.url,
+        })
+      } catch (auditError) {
+        console.error("[audit] Failed to log attachment creation:", auditError)
+      }
 
       return ok({
         id: adjunto.idAdjunto,
@@ -214,6 +242,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         secureUrl: input.secureUrl,
         tipo: input.tipo,
         descripcion: input.descripcion ?? null,
+        accessMode: "AUTHENTICATED", // Consultation attachments are always authenticated
         uploadedByUserId: userId,
       },
       include: {
@@ -235,6 +264,32 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         },
       },
     })
+
+    // Audit logging - AFTER successful creation
+    try {
+      await auditAttachmentCreate({
+        actorId: userId,
+        entityId: adjunto.idAdjunto,
+        metadata: {
+          pacienteId: consulta.cita.pacienteId,
+          consultaId: citaId,
+          procedimientoId: null,
+          tipo: adjunto.tipo,
+          format: adjunto.format ?? null,
+          bytes: adjunto.bytes,
+          originalFilename: adjunto.originalFilename ?? null,
+          publicId: adjunto.publicId,
+          accessMode: adjunto.accessMode,
+          descripcion: adjunto.descripcion ?? null,
+          source: "consultation",
+          path: req.url,
+        },
+        headers: req.headers,
+        path: req.url,
+      })
+    } catch (auditError) {
+      console.error("[audit] Failed to log attachment creation:", auditError)
+    }
 
     return ok({
       id: adjunto.idAdjunto,

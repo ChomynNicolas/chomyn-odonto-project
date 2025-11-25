@@ -4,6 +4,12 @@
 import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { AdjuntoUI } from "@/lib/schema/paciente.schema"
+import {
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_MB,
+  ALLOWED_MIME_TYPES,
+  validateFile,
+} from "@/lib/validation/file-validation"
 
 export type UiTipoAdjunto = "FOTO" | "RADIOGRAFIA" | "DOCUMENTO" | "OTRO"
 
@@ -24,10 +30,6 @@ interface AdjuntosDropzoneProps {
   disabled?: boolean
 }
 
-const MAX_MB = 25
-const MAX_BYTES = MAX_MB * 1024 * 1024
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"] as const
-
 // Mapeo UI → AdjuntoTipo
 function decideAdjuntoTipo(file: File, ui: UiTipoAdjunto): AdjuntoTipo {
   if (file.type === "application/pdf") return "PDF"
@@ -37,21 +39,13 @@ function decideAdjuntoTipo(file: File, ui: UiTipoAdjunto): AdjuntoTipo {
   return "OTHER"
 }
 
-// Valida archivo antes de agregarlo
-function validateFile(file: File): { valid: boolean; error?: string } {
-  if (!ACCEPTED_TYPES.includes(file.type as (typeof ACCEPTED_TYPES)[number])) {
-    return {
-      valid: false,
-      error: `Tipo no permitido (${file.type}). Permitidos: ${ACCEPTED_TYPES.join(", ")}`,
-    }
+// Valida archivo antes de agregarlo (wrapper for shared validation)
+function validateFileLocal(file: File): { valid: boolean; error?: string } {
+  const validation = validateFile(file)
+  return {
+    valid: validation.valid,
+    error: validation.error,
   }
-  if (file.size > MAX_BYTES) {
-    return {
-      valid: false,
-      error: `El archivo supera los ${MAX_MB}MB`,
-    }
-  }
-  return { valid: true }
 }
 
 // Crea un AdjuntoUI desde un File
@@ -84,7 +78,7 @@ export default function AdjuntosDropzone({
     const nuevosFiles = new Map<string, File>()
 
     for (const file of files) {
-      const validation = validateFile(file)
+      const validation = validateFileLocal(file)
       if (!validation.valid) {
         errores.push(`${file.name}: ${validation.error ?? "Error desconocido"}`)
         continue
@@ -217,7 +211,7 @@ export default function AdjuntosDropzone({
           ref={inputRef}
           type="file"
           className="hidden"
-          accept={ACCEPTED_TYPES.join(",")}
+          accept={ALLOWED_MIME_TYPES.join(",")}
           multiple
           onChange={onInputChange}
           disabled={disabled}
@@ -236,7 +230,7 @@ export default function AdjuntosDropzone({
       >
         Arrastrá archivos aquí o usá los botones de arriba.
         <div className="mt-2 text-xs">
-          Permitidos: JPG, PNG, WEBP, GIF, PDF. Máx {MAX_MB}MB
+          Permitidos: JPG, PNG, WEBP, GIF, DICOM, PDF. Máx {MAX_FILE_SIZE_MB}MB
         </div>
       </div>
 

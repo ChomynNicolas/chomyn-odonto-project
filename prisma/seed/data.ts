@@ -21,12 +21,12 @@ export const MOTIVOS = [
 ];
 
 export const PROCEDIMIENTOS_CATALOGO = [
-  { code: "CONS-INI", nombre: "Consulta inicial", descripcion: "Evaluación y diagnóstico", defaultDurationMin: 30, defaultPriceCents: 120000, aplicaDiente: false, aplicaSuperficie: false },
-  { code: "LIMP",     nombre: "Limpieza",         descripcion: "Profilaxis",             defaultDurationMin: 40, defaultPriceCents: 150000, aplicaDiente: false, aplicaSuperficie: false },
-  { code: "OBT",      nombre: "Obturación",       descripcion: "Resina compuesta",       defaultDurationMin: 45, defaultPriceCents: 220000, aplicaDiente: true,  aplicaSuperficie: true  },
-  { code: "ENDO",     nombre: "Endodoncia",       descripcion: "Tratamiento conducto",   defaultDurationMin: 90, defaultPriceCents: 650000, aplicaDiente: true,  aplicaSuperficie: false },
-  { code: "EXT",      nombre: "Extracción",       descripcion: "Simple",                 defaultDurationMin: 30, defaultPriceCents: 180000, aplicaDiente: true,  aplicaSuperficie: false },
-  { code: "CTRL",     nombre: "Control",          descripcion: "Seguimiento",            defaultDurationMin: 20, defaultPriceCents:  80000, aplicaDiente: false, aplicaSuperficie: false },
+  { code: "CONS-INI", nombre: "Consulta inicial", descripcion: "Evaluación y diagnóstico", defaultDurationMin: 30, defaultPriceCents: 120000, aplicaDiente: false, aplicaSuperficie: false, esCirugia: false },
+  { code: "LIMP",     nombre: "Limpieza",         descripcion: "Profilaxis",             defaultDurationMin: 40, defaultPriceCents: 150000, aplicaDiente: false, aplicaSuperficie: false, esCirugia: false },
+  { code: "OBT",      nombre: "Obturación",       descripcion: "Resina compuesta",       defaultDurationMin: 45, defaultPriceCents: 220000, aplicaDiente: true,  aplicaSuperficie: true,  esCirugia: false },
+  { code: "ENDO",     nombre: "Endodoncia",       descripcion: "Tratamiento conducto",   defaultDurationMin: 90, defaultPriceCents: 650000, aplicaDiente: true,  aplicaSuperficie: false, esCirugia: false },
+  { code: "EXT",      nombre: "Extracción",       descripcion: "Simple",                 defaultDurationMin: 30, defaultPriceCents: 180000, aplicaDiente: true,  aplicaSuperficie: false, esCirugia: true },
+  { code: "CTRL",     nombre: "Control",          descripcion: "Seguimiento",            defaultDurationMin: 20, defaultPriceCents:  80000, aplicaDiente: false, aplicaSuperficie: false, esCirugia: false },
 ];
 
 export const DIAGNOSIS_CATALOG = [

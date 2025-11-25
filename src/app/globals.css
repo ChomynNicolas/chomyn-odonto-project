@@ -1099,3 +1099,22 @@ span.flatpickr-weekday,
     text-wrap: balance;
   }
 }
+
+
+@layer utilities {
+  .section-general {
+    @apply bg-[var(--section-general)];
+  }
+  .section-medical {
+    @apply bg-[var(--section-medical)];
+  }
+  .section-medications {
+    @apply bg-[var(--section-medications)];
+  }
+  .section-allergies {
+    @apply bg-[var(--section-allergies)];
+  }
+  .section-women {
+    @apply bg-[var(--section-women)];
+  }
+}

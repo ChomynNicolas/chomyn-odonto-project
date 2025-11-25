@@ -1,6 +1,7 @@
 import { CrearProcedimientoDTO, ListQuery, ProcedimientoListItem } from "./_dto";
 import { repoCreateConsultaProcedimiento, repoEnsureConsulta, repoFindCitaBasic, repoFindCitaForProcedure, repoGetCatalogo, repoGetTreatmentStep, repoListProcedimientosByCita } from "./_repo";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../../_lib/errors";
+// Surgery consent validation removed - now handled during check-in
 
 export async function serviceCreateProcedureForCita(opts: {
   citaId: number;
@@ -45,7 +46,9 @@ export async function serviceCreateProcedureForCita(opts: {
     }
   }
 
-  // 5) Crear procedimiento
+  // Surgery consent validation removed - now handled during check-in
+
+  // 6) Crear procedimiento
   const created = await repoCreateConsultaProcedimiento({
     consultaId,
     procedureId: opts.dto.procedureId ?? null,

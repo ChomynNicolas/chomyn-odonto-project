@@ -87,6 +87,7 @@ export interface CitaDetalleDTO {
   // Paciente
   paciente: {
     id: number
+    personaId: number // Add persona ID for consent responsible party
     nombre: string
     fechaNacimiento: string,
     documento: string | null
@@ -157,8 +158,9 @@ export interface CitaDetalleDTO {
     cancelledAt: string | null  
   }
 
-  // Estado de consentimiento (si el paciente es menor)
+  // Estado de consentimiento (menor y cirugía)
   consentimientoStatus?: {
+    // Consentimiento de menor
     esMenorAlInicio: boolean
     requiereConsentimiento: boolean
     consentimientoVigente: boolean
@@ -168,6 +170,19 @@ export interface CitaDetalleDTO {
       responsableNombre: string
       responsableTipoVinculo: string
     }
+    
+    // Consentimiento de cirugía
+    requiereCirugia: boolean
+    cirugiaConsentimientoVigente: boolean
+    cirugiaConsentimientoResumen?: {
+      firmadoEn: string // ISO
+      vigenteHasta: string // ISO
+      responsableNombre: string
+      responsableTipoVinculo: string
+    }
+    responsableParaId?: number
+    
+    // Estado general
     bloqueaInicio: boolean
     mensajeBloqueo?: string
   }

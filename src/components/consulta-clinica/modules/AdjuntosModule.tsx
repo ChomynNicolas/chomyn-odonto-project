@@ -16,6 +16,12 @@ import type { ConsultaClinicaDTO } from "@/app/api/agenda/citas/[id]/consulta/_d
 import { formatDate } from "@/lib/utils/patient-helpers"
 import type { AdjuntoTipo } from "@prisma/client"
 import Image from "next/image"
+import {
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_MB,
+  ALLOWED_MIME_TYPES,
+  validateFile,
+} from "@/lib/validation/file-validation"
 
 interface AdjuntosModuleProps {
   citaId: number
@@ -24,16 +30,6 @@ interface AdjuntosModuleProps {
   hasConsulta?: boolean // Indica si la consulta ya fue iniciada (createdAt !== null)
   onUpdate: () => void
 }
-
-const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
-const ACCEPTED_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-  "image/dicom",
-] as const
 
 /**
  * Módulo de Adjuntos (RX, Fotos)
@@ -96,18 +92,11 @@ export function AdjuntosModule({ citaId, consulta, canEdit, onUpdate }: Adjuntos
       return
     }
 
-    // Validar tamaño
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      toast.error("Archivo demasiado grande", {
-        description: `El archivo no puede exceder ${MAX_FILE_SIZE / 1024 / 1024}MB`,
-      })
-      return
-    }
-
-    // Validar tipo
-    if (!ACCEPTED_TYPES.includes(selectedFile.type as (typeof ACCEPTED_TYPES)[number])) {
-      toast.error("Tipo de archivo no soportado", {
-        description: "Solo se permiten imágenes (JPEG, PNG, WebP, GIF) y PDFs",
+    // Validate file using shared validation utility
+    const validation = validateFile(selectedFile)
+    if (!validation.valid) {
+      toast.error("Archivo inválido", {
+        description: validation.error || "El archivo no cumple con los requisitos",
       })
       return
     }
@@ -139,16 +128,19 @@ export function AdjuntosModule({ citaId, consulta, canEdit, onUpdate }: Adjuntos
     }
 
     try {
-      // Paso 1: Obtener signature de Cloudinary
-      const signResponse = await fetch("/api/uploads/sign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pacienteId,
-          tipo,
-          accessMode: "AUTHENTICATED",
-        }),
-      })
+        // Paso 1: Obtener signature de Cloudinary (with file metadata for pre-validation)
+        const signResponse = await fetch("/api/uploads/sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pacienteId,
+            tipo,
+            accessMode: "AUTHENTICATED",
+            fileSize: file.size,
+            fileType: file.type,
+            fileName: file.name,
+          }),
+        })
 
       if (!signResponse.ok) {
         const errorData = await signResponse.json().catch(() => ({}))
@@ -315,7 +307,7 @@ export function AdjuntosModule({ citaId, consulta, canEdit, onUpdate }: Adjuntos
                     ref={fileInputRef}
                     id="file"
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept={ALLOWED_MIME_TYPES.join(",")}
                     onChange={handleFileSelect}
                     disabled={isUploading}
                   />
@@ -337,7 +329,7 @@ export function AdjuntosModule({ citaId, consulta, canEdit, onUpdate }: Adjuntos
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Formatos permitidos: JPEG, PNG, WebP, GIF, PDF. Máximo {MAX_FILE_SIZE / 1024 / 1024}MB
+                    Formatos permitidos: JPEG, PNG, WebP, GIF, DICOM, PDF. Máximo {MAX_FILE_SIZE_MB}MB
                   </p>
                 </div>
                 <div className="space-y-2">

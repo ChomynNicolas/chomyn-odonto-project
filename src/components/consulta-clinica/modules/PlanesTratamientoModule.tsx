@@ -1,16 +1,43 @@
 // src/components/consulta-clinica/modules/PlanesTratamientoModule.tsx
 "use client"
 
-import { useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ClipboardList, ExternalLink, CheckCircle2, Clock, XCircle, AlertCircle, Pause, Info } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  ClipboardList,
+  ExternalLink,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  AlertCircle,
+  Pause,
+  Info,
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+} from "lucide-react"
 import type { ConsultaClinicaDTO, TreatmentStepDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
-import { TreatmentStepStatus } from "@prisma/client"
+import { TreatmentStepStatus, DienteSuperficie } from "@prisma/client"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 interface PlanesTratamientoModuleProps {
   citaId: number
@@ -21,16 +48,61 @@ interface PlanesTratamientoModuleProps {
   isFinalized?: boolean
 }
 
+interface ProcedimientoCatalogoDTO {
+  id: number
+  code: string
+  nombre: string
+  descripcion: string | null
+  defaultPriceCents: number | null
+  aplicaDiente: boolean
+  aplicaSuperficie: boolean
+}
+
+interface StepFormData {
+  id?: number
+  order: number
+  procedureId: number | null
+  serviceType: string
+  toothNumber: number | null
+  toothSurface: DienteSuperficie | null
+  estimatedDurationMin: number | null
+  estimatedCostCents: number | null
+  priority: number | null
+  notes: string
+}
+
 /**
  * Módulo de Plan de Tratamiento
  * 
- * Muestra el plan de tratamiento activo del paciente con todos sus pasos.
- * ⚠️ READ-ONLY: Los planes de tratamiento no se pueden editar desde la consulta.
- * Use la página de gestión de planes para crear o modificar planes.
+ * Permite crear y editar planes de tratamiento activos del paciente.
  */
-export function PlanesTratamientoModule({ consulta, canEdit, isFinalized }: PlanesTratamientoModuleProps) {
+export function PlanesTratamientoModule({
+  consulta,
+  canEdit,
+  isFinalized,
+  onUpdate,
+}: PlanesTratamientoModuleProps) {
   const router = useRouter()
   const plan = consulta.planTratamiento
+
+  // Dialog state
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+
+  // Plan form state
+  const [planTitulo, setPlanTitulo] = useState("")
+  const [planDescripcion, setPlanDescripcion] = useState("")
+
+  // Steps form state
+  const [steps, setSteps] = useState<StepFormData[]>([])
+  const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null)
+
+  // Catalog state
+  const [catalogOptions, setCatalogOptions] = useState<ProcedimientoCatalogoDTO[]>([])
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
+
+  // Loading state
+  const [isSaving, setIsSaving] = useState(false)
 
   // Función para obtener el badge de estado del step
   const getStatusBadge = (status: TreatmentStepStatus) => {
@@ -129,6 +201,208 @@ export function PlanesTratamientoModule({ consulta, canEdit, isFinalized }: Plan
     return `Prioridad ${priority}`
   }
 
+  // Load catalog when dialog opens
+  useEffect(() => {
+    if (isDialogOpen && catalogOptions.length === 0 && !isLoadingCatalog) {
+      loadCatalog()
+    }
+  }, [isDialogOpen])
+
+  // Initialize form when editing
+  useEffect(() => {
+    if (isDialogOpen && plan && isEditing) {
+      setPlanTitulo(plan.titulo)
+      setPlanDescripcion(plan.descripcion || "")
+      setSteps(
+        plan.steps.map((step) => ({
+          id: step.id,
+          order: step.order,
+          procedureId: step.procedureId,
+          serviceType: step.serviceType || "",
+          toothNumber: step.toothNumber,
+          toothSurface: step.toothSurface,
+          estimatedDurationMin: step.estimatedDurationMin,
+          estimatedCostCents: step.estimatedCostCents,
+          priority: step.priority,
+          notes: step.notes || "",
+        }))
+      )
+    } else if (isDialogOpen && !isEditing) {
+      // Reset form for new plan
+      setPlanTitulo("")
+      setPlanDescripcion("")
+      setSteps([])
+    }
+  }, [isDialogOpen, plan, isEditing])
+
+  const loadCatalog = async () => {
+    try {
+      setIsLoadingCatalog(true)
+      const res = await fetch("/api/procedimientos/catalogo?activo=true")
+      if (!res.ok) throw new Error("Error al cargar catálogo")
+      const data = await res.json()
+      if (data.ok) {
+        setCatalogOptions(data.data)
+      }
+    } catch (error) {
+      console.error("Error loading catalog:", error)
+      toast.error("Error al cargar catálogo de procedimientos")
+    } finally {
+      setIsLoadingCatalog(false)
+    }
+  }
+
+  const handleOpenCreateDialog = () => {
+    setIsEditing(false)
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenEditDialog = () => {
+    setIsEditing(true)
+    setIsDialogOpen(true)
+  }
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false)
+    setIsEditing(false)
+    setEditingStepIndex(null)
+  }
+
+  const handleAddStep = () => {
+    const newOrder = steps.length > 0 ? Math.max(...steps.map((s) => s.order)) + 1 : 1
+    setSteps([
+      ...steps,
+      {
+        order: newOrder,
+        procedureId: null,
+        serviceType: "",
+        toothNumber: null,
+        toothSurface: null,
+        estimatedDurationMin: null,
+        estimatedCostCents: null,
+        priority: null,
+        notes: "",
+      },
+    ])
+    setEditingStepIndex(steps.length)
+  }
+
+  const handleEditStep = (index: number) => {
+    setEditingStepIndex(index)
+  }
+
+  const handleDeleteStep = (index: number) => {
+    const newSteps = steps.filter((_, i) => i !== index)
+    // Reorder steps
+    newSteps.forEach((step, i) => {
+      step.order = i + 1
+    })
+    setSteps(newSteps)
+    setEditingStepIndex(null)
+  }
+
+  const handleUpdateStep = (index: number, updates: Partial<StepFormData>) => {
+    const newSteps = [...steps]
+    newSteps[index] = { ...newSteps[index], ...updates }
+    setSteps(newSteps)
+  }
+
+  const handleCatalogSelect = (index: number, catalogId: string) => {
+    if (!catalogId || catalogId === "__none__") {
+      handleUpdateStep(index, {
+        procedureId: null,
+        serviceType: "",
+        toothNumber: null,
+        toothSurface: null,
+      })
+      return
+    }
+
+    const id = Number.parseInt(catalogId, 10)
+    const catalogItem = catalogOptions.find((item) => item.id === id)
+    if (!catalogItem) return
+
+    handleUpdateStep(index, {
+      procedureId: id,
+      serviceType: catalogItem.nombre,
+      // Clear tooth fields if catalog item doesn't support them
+      toothNumber: catalogItem.aplicaDiente ? steps[index].toothNumber : null,
+      toothSurface: catalogItem.aplicaSuperficie ? steps[index].toothSurface : null,
+    })
+  }
+
+  const handleSavePlan = async () => {
+    // Validation
+    if (!planTitulo.trim()) {
+      toast.error("El título del plan es obligatorio")
+      return
+    }
+
+    if (steps.length === 0) {
+      toast.error("Debe agregar al menos un paso al plan")
+      return
+    }
+
+    // Validate steps
+    for (const step of steps) {
+      if (!step.procedureId && !step.serviceType.trim()) {
+        toast.error(`El paso #${step.order} debe tener un procedimiento del catálogo o un nombre manual`)
+        return
+      }
+    }
+
+    try {
+      setIsSaving(true)
+      const pacienteId = consulta.pacienteId
+      if (!pacienteId) {
+        toast.error("No se pudo identificar al paciente")
+        return
+      }
+
+      const body = {
+        titulo: planTitulo.trim(),
+        descripcion: planDescripcion.trim() || null,
+        steps: steps.map((step) => ({
+          id: step.id,
+          order: step.order,
+          procedureId: step.procedureId,
+          serviceType: step.serviceType.trim() || null,
+          toothNumber: step.toothNumber,
+          toothSurface: step.toothSurface,
+          estimatedDurationMin: step.estimatedDurationMin,
+          estimatedCostCents: step.estimatedCostCents,
+          priority: step.priority,
+          notes: step.notes.trim() || null,
+        })),
+      }
+
+      const url = isEditing
+        ? `/api/pacientes/${pacienteId}/plan-tratamiento`
+        : `/api/pacientes/${pacienteId}/plan-tratamiento`
+      const method = isEditing ? "PUT" : "POST"
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Error al guardar plan")
+      }
+
+      toast.success(isEditing ? "Plan actualizado correctamente" : "Plan creado correctamente")
+      handleCloseDialog()
+      onUpdate()
+    } catch (error) {
+      console.error("Error saving plan:", error)
+      toast.error(error instanceof Error ? error.message : "Error al guardar plan")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // Pasos ordenados por estado (completados al final)
   const sortedSteps = useMemo(() => {
     if (!plan?.steps) return []
@@ -146,10 +420,31 @@ export function PlanesTratamientoModule({ consulta, canEdit, isFinalized }: Plan
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5" />
-            Plan de Tratamiento
-          </CardTitle>
+          <div className="flex items-start justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5" />
+              Plan de Tratamiento
+            </CardTitle>
+            {canEdit && !isFinalized && consulta.pacienteId && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleOpenCreateDialog} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Plan
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Crear Plan de Tratamiento</DialogTitle>
+                    <DialogDescription>
+                      Cree un nuevo plan de tratamiento para el paciente. Solo puede haber un plan activo a la vez.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {renderPlanForm()}
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
@@ -190,26 +485,48 @@ export function PlanesTratamientoModule({ consulta, canEdit, isFinalized }: Plan
               <span>Creado por: {plan.createdBy.nombre}</span>
             </div>
           </div>
-          {canEdit && consulta.pacienteId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(`/pacientes/${consulta.pacienteId}/planes`)}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Gestionar Planes
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {canEdit && !isFinalized && consulta.pacienteId && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleOpenEditDialog} variant="outline" size="sm">
+                    <Edit className="h-4 w-4 mr-2" />
+                    Editar Plan
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Editar Plan de Tratamiento</DialogTitle>
+                    <DialogDescription>
+                      Modifique el plan de tratamiento activo del paciente.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {renderPlanForm()}
+                </DialogContent>
+              </Dialog>
+            )}
+            {canEdit && consulta.pacienteId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/pacientes/${consulta.pacienteId}/planes`)}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Gestionar Planes
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
-        <Alert className="mb-4">
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Vista de solo lectura:</strong> Los planes de tratamiento se gestionan desde la página de planes del paciente.
-            {isFinalized && " Esta consulta está finalizada."}
-          </AlertDescription>
-        </Alert>
+        {isFinalized && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Esta consulta está finalizada. No se pueden realizar modificaciones.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="space-y-4">
           {sortedSteps.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
@@ -259,5 +576,342 @@ export function PlanesTratamientoModule({ consulta, canEdit, isFinalized }: Plan
       </CardContent>
     </Card>
   )
+
+  function renderPlanForm() {
+    return (
+      <div className="space-y-6 py-4">
+        {/* Plan Title and Description */}
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="planTitulo">
+              Título del Plan <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="planTitulo"
+              value={planTitulo}
+              onChange={(e) => setPlanTitulo(e.target.value)}
+              placeholder="Ej: Plan de tratamiento inicial"
+              maxLength={200}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="planDescripcion">Descripción (opcional)</Label>
+            <Textarea
+              id="planDescripcion"
+              value={planDescripcion}
+              onChange={(e) => setPlanDescripcion(e.target.value)}
+              placeholder="Descripción adicional del plan..."
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+        </div>
+
+        {/* Steps List */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label>Pasos del Plan</Label>
+            <Button type="button" onClick={handleAddStep} size="sm" variant="outline">
+              <Plus className="h-4 w-4 mr-2" />
+              Agregar Paso
+            </Button>
+          </div>
+
+          {steps.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No hay pasos agregados. Haga clic en "Agregar Paso" para comenzar.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {steps.map((step, index) => (
+                <Card key={index}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm">Paso #{step.order}</CardTitle>
+                      <div className="flex gap-2">
+                        {editingStepIndex === index ? (
+                          <Button
+                            type="button"
+                            onClick={() => setEditingStepIndex(null)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            Guardar
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            onClick={() => handleEditStep(index)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          onClick={() => handleDeleteStep(index)}
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  {editingStepIndex === index ? (
+                    <CardContent className="space-y-4">
+                      {/* Catalog Selector */}
+                      <div className="space-y-2">
+                        <Label>
+                          Procedimiento del Catálogo <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Select
+                          value={step.procedureId?.toString() || "__none__"}
+                          onValueChange={(value) => handleCatalogSelect(index, value)}
+                          disabled={isLoadingCatalog}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={isLoadingCatalog ? "Cargando..." : "Seleccionar procedimiento..."} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Entrada manual</SelectItem>
+                            {catalogOptions.map((item) => (
+                              <SelectItem key={item.id} value={item.id.toString()}>
+                                {item.code} - {item.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Service Type */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`serviceType-${index}`}>
+                          Tipo de Procedimiento{" "}
+                          {!step.procedureId && <span className="text-destructive">*</span>}
+                        </Label>
+                        <Input
+                          id={`serviceType-${index}`}
+                          value={step.serviceType}
+                          onChange={(e) => handleUpdateStep(index, { serviceType: e.target.value })}
+                          placeholder="Ej: Obturación, Limpieza, Endodoncia..."
+                          maxLength={200}
+                          disabled={!!step.procedureId}
+                          className={step.procedureId ? "bg-muted" : ""}
+                        />
+                      </div>
+
+                      {/* Tooth Number */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`toothNumber-${index}`}>
+                          Número de Diente <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Input
+                          id={`toothNumber-${index}`}
+                          type="number"
+                          min="1"
+                          max="85"
+                          value={step.toothNumber || ""}
+                          onChange={(e) =>
+                            handleUpdateStep(index, {
+                              toothNumber: e.target.value ? Number.parseInt(e.target.value, 10) : null,
+                            })
+                          }
+                          placeholder="1-32 o 51-85"
+                          disabled={
+                            step.procedureId
+                              ? !catalogOptions.find((item) => item.id === step.procedureId)?.aplicaDiente
+                              : false
+                          }
+                        />
+                      </div>
+
+                      {/* Tooth Surface */}
+                      {step.procedureId
+                        ? catalogOptions.find((item) => item.id === step.procedureId)?.aplicaSuperficie && (
+                            <div className="space-y-2">
+                              <Label htmlFor={`toothSurface-${index}`}>
+                                Superficie del Diente <span className="text-muted-foreground text-xs">(opcional)</span>
+                              </Label>
+                              <Select
+                                value={step.toothSurface || "__none__"}
+                                onValueChange={(value) =>
+                                  handleUpdateStep(index, {
+                                    toothSurface: value === "__none__" ? null : (value as DienteSuperficie),
+                                  })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar superficie..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Sin superficie</SelectItem>
+                                  {Object.values(DienteSuperficie).map((surface) => (
+                                    <SelectItem key={surface} value={surface}>
+                                      {surface}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        : step.toothNumber && (
+                            <div className="space-y-2">
+                              <Label htmlFor={`toothSurface-${index}`}>
+                                Superficie del Diente <span className="text-muted-foreground text-xs">(opcional)</span>
+                              </Label>
+                              <Select
+                                value={step.toothSurface || "__none__"}
+                                onValueChange={(value) =>
+                                  handleUpdateStep(index, {
+                                    toothSurface: value === "__none__" ? null : (value as DienteSuperficie),
+                                  })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar superficie..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Sin superficie</SelectItem>
+                                  {Object.values(DienteSuperficie).map((surface) => (
+                                    <SelectItem key={surface} value={surface}>
+                                      {surface}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+
+                      {/* Priority */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`priority-${index}`}>
+                          Prioridad <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Select
+                          value={step.priority?.toString() || "__none__"}
+                          onValueChange={(value) =>
+                            handleUpdateStep(index, {
+                              priority: value === "__none__" ? null : Number.parseInt(value, 10),
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar prioridad..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Sin prioridad</SelectItem>
+                            <SelectItem value="1">1 - Muy Alta</SelectItem>
+                            <SelectItem value="2">2 - Alta</SelectItem>
+                            <SelectItem value="3">3 - Media</SelectItem>
+                            <SelectItem value="4">4 - Baja</SelectItem>
+                            <SelectItem value="5">5 - Muy Baja</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Estimated Duration */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`duration-${index}`}>
+                          Duración Estimada (minutos) <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Input
+                          id={`duration-${index}`}
+                          type="number"
+                          min="1"
+                          value={step.estimatedDurationMin || ""}
+                          onChange={(e) =>
+                            handleUpdateStep(index, {
+                              estimatedDurationMin: e.target.value ? Number.parseInt(e.target.value, 10) : null,
+                            })
+                          }
+                          placeholder="Ej: 30"
+                        />
+                      </div>
+
+                      {/* Estimated Cost */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`cost-${index}`}>
+                          Costo Estimado (centavos) <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Input
+                          id={`cost-${index}`}
+                          type="number"
+                          min="0"
+                          value={step.estimatedCostCents || ""}
+                          onChange={(e) =>
+                            handleUpdateStep(index, {
+                              estimatedCostCents: e.target.value ? Number.parseInt(e.target.value, 10) : null,
+                            })
+                          }
+                          placeholder="Ej: 50000"
+                        />
+                      </div>
+
+                      {/* Notes */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`notes-${index}`}>
+                          Notas <span className="text-muted-foreground text-xs">(opcional)</span>
+                        </Label>
+                        <Textarea
+                          id={`notes-${index}`}
+                          value={step.notes}
+                          onChange={(e) => handleUpdateStep(index, { notes: e.target.value })}
+                          placeholder="Notas adicionales sobre este paso..."
+                          rows={3}
+                          maxLength={1000}
+                        />
+                      </div>
+                    </CardContent>
+                  ) : (
+                    <CardContent>
+                      <div className="space-y-2">
+                        <p className="font-medium">
+                          {step.procedureId
+                            ? catalogOptions.find((item) => item.id === step.procedureId)?.nombre || step.serviceType
+                            : step.serviceType || "Procedimiento sin especificar"}
+                        </p>
+                        {step.toothNumber && (
+                          <p className="text-sm text-muted-foreground">
+                            Diente {step.toothNumber}
+                            {step.toothSurface && ` - Superficie: ${step.toothSurface}`}
+                          </p>
+                        )}
+                        {step.priority && (
+                          <p className="text-sm text-muted-foreground">
+                            Prioridad: {getPriorityText(step.priority)}
+                          </p>
+                        )}
+                        {step.notes && <p className="text-sm text-muted-foreground">{step.notes}</p>}
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={handleCloseDialog} disabled={isSaving}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSavePlan} disabled={isSaving}>
+            {isSaving ? (
+              "Guardando..."
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                {isEditing ? "Actualizar Plan" : "Crear Plan"}
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </div>
+    )
+  }
 }
 

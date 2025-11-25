@@ -196,6 +196,7 @@ export async function ensureProcedimientoCatalogo(
     code: string; nombre: string; descripcion?: string;
     defaultDurationMin?: number | null; defaultPriceCents?: number | null;
     aplicaDiente?: boolean; aplicaSuperficie?: boolean;
+    esCirugia?: boolean;
   }>
 ) {
   for (const it of items) {
@@ -208,6 +209,7 @@ export async function ensureProcedimientoCatalogo(
         defaultPriceCents: it.defaultPriceCents ?? null,
         aplicaDiente: !!it.aplicaDiente,
         aplicaSuperficie: !!it.aplicaSuperficie,
+        esCirugia: !!it.esCirugia,
         activo: true,
       },
       create: {
@@ -218,6 +220,7 @@ export async function ensureProcedimientoCatalogo(
         defaultPriceCents: it.defaultPriceCents ?? null,
         aplicaDiente: !!it.aplicaDiente,
         aplicaSuperficie: !!it.aplicaSuperficie,
+        esCirugia: !!it.esCirugia,
         activo: true,
       },
     });

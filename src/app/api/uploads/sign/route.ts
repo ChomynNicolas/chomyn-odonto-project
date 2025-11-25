@@ -2,6 +2,13 @@ import { NextResponse, type NextRequest } from "next/server"
 import { z } from "zod"
 import { cloudinary } from "@/lib/cloudinary"
 import { requireRole } from "@/app/api/pacientes/_rbac"
+import {
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_MB,
+  validateFileSize,
+  validateMimeType,
+  validateFileExtension,
+} from "@/lib/validation/file-validation"
 
 function jsonError(status: number, code: string, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
@@ -29,6 +36,10 @@ const Body = z.object({
   tipo: AdjuntoTipoEnum, // carpeta según tipo
   accessMode: z.enum(["PUBLIC", "AUTHENTICATED"]).optional(),
   publicId: z.string().min(3).max(180).regex(/^[a-zA-Z0-9/_-]+$/).optional(),
+  // File metadata for pre-validation
+  fileSize: z.number().int().nonnegative().optional(),
+  fileType: z.string().optional(),
+  fileName: z.string().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -40,8 +51,37 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(raw)
   if (!parsed.success) return jsonError(400, "VALIDATION_ERROR", "Body inválido", parsed.error.issues)
 
-  const { pacienteId, procedimientoId, tipo, publicId } = parsed.data
+  const { pacienteId, procedimientoId, tipo, publicId, fileSize, fileType, fileName } = parsed.data
   const accessMode = parsed.data.accessMode ?? ((process.env.CLOUDINARY_DEFAULT_ACCESS_MODE?.toUpperCase() as "PUBLIC"|"AUTHENTICATED") || "AUTHENTICATED")
+
+  // Pre-validate file metadata if provided
+  if (fileSize !== undefined) {
+    const sizeValidation = validateFileSize(fileSize)
+    if (!sizeValidation.valid) {
+      return jsonError(400, "FILE_TOO_LARGE", sizeValidation.error || `El archivo excede el tamaño máximo de ${MAX_FILE_SIZE_MB}MB`, {
+        fileSize,
+        maxSize: MAX_FILE_SIZE_BYTES,
+      })
+    }
+  }
+
+  if (fileType) {
+    const mimeValidation = validateMimeType(fileType)
+    if (!mimeValidation.valid) {
+      return jsonError(400, "INVALID_FILE_TYPE", mimeValidation.error || "Tipo de archivo no permitido", {
+        fileType,
+      })
+    }
+  }
+
+  if (fileName) {
+    const extValidation = validateFileExtension(fileName)
+    if (!extValidation.valid) {
+      return jsonError(400, "INVALID_EXTENSION", extValidation.error || "Extensión de archivo no permitida", {
+        fileName,
+      })
+    }
+  }
 
   const ts = Math.floor(Date.now() / 1000)
   const folderBase = process.env.CLOUDINARY_BASE_FOLDER || "chomyn/dev"

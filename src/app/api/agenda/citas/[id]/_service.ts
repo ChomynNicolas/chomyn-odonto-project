@@ -49,6 +49,7 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
           idPaciente: true,
           persona: {
             select: {
+              idPersona: true, // Add persona ID for consent responsible party
               nombres: true,
               apellidos: true,
               documento: { select: { tipo: true, numero: true } },
@@ -137,6 +138,7 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
 
     paciente: {
       id: cita.paciente.idPaciente,
+      personaId: cita.paciente.persona.idPersona, // Add persona ID for consent responsible party
       nombre: `${cita.paciente.persona.nombres} ${cita.paciente.persona.apellidos}`.trim(),
       fechaNacimiento: cita.paciente.persona.fechaNacimiento
         ? cita.paciente.persona.fechaNacimiento.toISOString()

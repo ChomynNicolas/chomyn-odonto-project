@@ -45,7 +45,12 @@ export function calcularVigenteHasta(firmadoEn: Date, meses: number): Date {
   return vigenteHasta
 }
 
-export function esVigente(vigenteHasta: Date): boolean {
+export function esVigente(vigenteHasta: Date, citaId?: number | null): boolean {
+  // For appointment-specific consents (surgery), validity is based on appointment association
+  if (citaId) {
+    return true // Valid as long as it's associated with the appointment
+  }
+  // For time-based consents, use traditional time validation
   return new Date() <= vigenteHasta
 }
 
