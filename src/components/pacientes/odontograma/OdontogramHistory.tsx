@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatDate } from "@/lib/utils/patient-helpers"
-import { RotateCcw, X } from "lucide-react"
+import { RotateCcw, X, User } from "lucide-react"
 import type { OdontogramSnapshot } from "@/lib/types/patient"
 
 interface OdontogramHistoryProps {
@@ -55,10 +55,23 @@ export function OdontogramHistory({ snapshots, onClose, onRestore }: OdontogramH
               <div key={snapshot.id} className="rounded-lg border p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 mb-2">
                       <p className="font-semibold">{formatDate(snapshot.recordedAt)}</p>
                       {index === 0 && <Badge variant="default">Actual</Badge>}
                     </div>
+                    {snapshot.createdBy && (
+                      <div className="flex items-center gap-1 mb-2 text-sm text-muted-foreground">
+                        <User className="h-3 w-3" />
+                        <span>Por: {snapshot.createdBy.name}</span>
+                      </div>
+                    )}
+                    {snapshot.consultaId && (
+                      <div className="mb-2">
+                        <Badge variant="secondary" className="text-xs">
+                          Consulta #{snapshot.consultaId}
+                        </Badge>
+                      </div>
+                    )}
                     {Object.keys(conditionCounts).length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {Object.entries(conditionCounts).map(([condition, count]) => (

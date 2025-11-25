@@ -13,6 +13,103 @@ import { entriesToToothRecords, toothRecordsToEntries } from "@/lib/utils/odonto
 import type { ToothRecord, ToothCondition, OdontogramSnapshot } from "@/lib/types/patient"
 import { Skeleton } from "@/components/ui/skeleton"
 
+interface OdontogramData {
+  id: number
+  takenAt: string
+  notes: string | null
+  createdBy: {
+    id: number
+    nombre: string
+  }
+  entries: Array<{
+    id: number
+    toothNumber: number
+    surface: string | null
+    condition: string
+    notes: string | null
+  }>
+}
+
+/**
+ * Componente de solo lectura que muestra el último odontograma del paciente
+ */
+function ReadOnlyOdontogramView({ citaId }: { citaId: number }) {
+  const [odontogramData, setOdontogramData] = useState<OdontogramData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const loadOdontogram = async () => {
+      try {
+        const response = await fetch(`/api/agenda/citas/${citaId}/consulta/odontograma`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.ok && result.data) {
+            setOdontogramData(result.data)
+          }
+        }
+      } catch (error) {
+        console.error("Error loading odontogram for read-only view:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadOdontogram()
+  }, [citaId])
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Odontograma del Paciente</CardTitle>
+        {odontogramData && (
+          <p className="text-sm text-muted-foreground">
+            Última actualización: {new Date(odontogramData.takenAt).toLocaleString()} • Por:{" "}
+            {odontogramData.createdBy.nombre}
+          </p>
+        )}
+      </CardHeader>
+      <CardContent>
+        {odontogramData ? (
+          <>
+            {odontogramData.notes && (
+              <div className="mb-4 rounded-lg bg-muted p-3">
+                <p className="text-sm font-medium mb-1">Notas:</p>
+                <p className="text-sm">{odontogramData.notes}</p>
+              </div>
+            )}
+            {/* Mostrar vista del odontograma */}
+            <OdontogramEditor
+              teeth={entriesToToothRecords(odontogramData.entries.map(e => ({
+                ...e,
+                surface: e.surface as import("@prisma/client").DienteSuperficie | null,
+                condition: e.condition as import("@prisma/client").ToothCondition,
+              })))}
+              notes={odontogramData.notes || ""}
+              onToothUpdate={() => {}} // No-op en modo lectura
+              onNotesChange={() => {}} // No-op en modo lectura
+            />
+          </>
+        ) : (
+          <div className="text-center text-muted-foreground py-8">
+            <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p>No hay odontograma registrado para este paciente</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 interface OdontogramaModuleProps {
   citaId: number
   consulta: ConsultaClinicaDTO
@@ -44,27 +141,41 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
   const [historySnapshots, setHistorySnapshots] = useState<OdontogramSnapshot[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
-  // Cargar odontograma existente o inicializar
+  // Cargar odontograma del paciente (no específico de la consulta)
   useEffect(() => {
-    if (consulta.odontograma) {
+    const loadPatientOdontogram = async () => {
+      if (!hasConsulta) return
+
       try {
-        const records = entriesToToothRecords(consulta.odontograma.entries)
-        setTeeth(records)
-        setNotes(consulta.odontograma.notes || "")
-        setHasChanges(false)
-      } catch (error) {
-        console.error("Error loading odontogram:", error)
-        toast.error("Error al cargar odontograma")
+        // CAMBIO CLAVE: Cargar el último odontograma del paciente desde la API de consulta
+        const response = await fetch(`/api/agenda/citas/${citaId}/consulta/odontograma`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.ok && result.data) {
+            const records = entriesToToothRecords(result.data.entries)
+            setTeeth(records)
+            setNotes(result.data.notes || "")
+            setHasChanges(false)
+            return
+          }
+        }
+        
+        // Si no hay odontograma previo, inicializar con todos los dientes como INTACT
         setTeeth(initializeTeeth())
         setNotes("")
+        setHasChanges(false)
+      } catch (error) {
+        console.error("Error loading patient odontogram:", error)
+        toast.error("Error al cargar odontograma del paciente")
+        // Fallback: inicializar con dientes INTACT
+        setTeeth(initializeTeeth())
+        setNotes("")
+        setHasChanges(false)
       }
-    } else {
-      // Inicializar con todos los dientes como INTACT
-      setTeeth(initializeTeeth())
-      setNotes("")
-      setHasChanges(false)
     }
-  }, [consulta.odontograma])
+
+    loadPatientOdontogram()
+  }, [citaId, hasConsulta]) // Cambio: depende de citaId y hasConsulta, no de consulta.odontograma
 
   // Cargar historial completo del paciente
   useEffect(() => {
@@ -72,24 +183,12 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
       const fetchHistory = async () => {
         setIsLoadingHistory(true)
         try {
-          // Fetch all odontogram snapshots for this patient
+          // CAMBIO: Usar la nueva API de historial de paciente
           const res = await fetch(`/api/pacientes/${consulta.pacienteId}/odontograma/historial`)
           if (res.ok) {
             const data = await res.json()
             if (data.ok && data.data) {
-              type ApiSnapshot = {
-                id: number
-                takenAt: string
-                notes: string | null
-                entries: Array<{
-                  id: number
-                  toothNumber: number
-                  surface: string | null
-                  condition: string
-                  notes: string | null
-                }>
-              }
-              const snapshots: OdontogramSnapshot[] = (data.data as ApiSnapshot[]).map((snapshot) => {
+              const snapshots: OdontogramSnapshot[] = data.data.snapshots.map((snapshot: OdontogramData) => {
                 // Convert entries to match OdontogramEntryDTO format
                 const entries = snapshot.entries.map((e) => ({
                   id: e.id,
@@ -107,50 +206,15 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
               })
               setHistorySnapshots(snapshots)
             } else {
-              // Fallback: use current snapshot if available
-              if (consulta.odontograma) {
-                setHistorySnapshots([
-                  {
-                    id: String(consulta.odontograma.id),
-                    recordedAt: consulta.odontograma.takenAt,
-                    teeth: entriesToToothRecords(consulta.odontograma.entries),
-                    notes: consulta.odontograma.notes || "",
-                  },
-                ])
-              } else {
-                setHistorySnapshots([])
-              }
-            }
-          } else {
-            // Fallback: use current snapshot if available
-            if (consulta.odontograma) {
-              setHistorySnapshots([
-                {
-                  id: String(consulta.odontograma.id),
-                  recordedAt: consulta.odontograma.takenAt,
-                  teeth: entriesToToothRecords(consulta.odontograma.entries),
-                  notes: consulta.odontograma.notes || "",
-                },
-              ])
-            } else {
               setHistorySnapshots([])
             }
+          } else {
+            console.warn("Failed to fetch odontogram history:", res.status)
+            setHistorySnapshots([])
           }
         } catch (error) {
           console.error("Error fetching odontogram history:", error)
-          // Fallback: use current snapshot if available
-          if (consulta.odontograma) {
-            setHistorySnapshots([
-              {
-                id: String(consulta.odontograma.id),
-                recordedAt: consulta.odontograma.takenAt,
-                teeth: entriesToToothRecords(consulta.odontograma.entries),
-                notes: consulta.odontograma.notes || "",
-              },
-            ])
-          } else {
-            setHistorySnapshots([])
-          }
+          setHistorySnapshots([])
         } finally {
           setIsLoadingHistory(false)
         }
@@ -159,7 +223,7 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
     } else if (!showHistory) {
       setHistorySnapshots([])
     }
-  }, [showHistory, consulta.pacienteId, consulta.odontograma])
+  }, [showHistory, consulta.pacienteId]) // Simplificado: solo depende de pacienteId
 
   const handleToothUpdate = (
     toothNumber: string,
@@ -241,23 +305,34 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
     }
   }
 
-  const handleReset = () => {
-    if (consulta.odontograma) {
-      try {
-        const records = entriesToToothRecords(consulta.odontograma.entries)
-        setTeeth(records)
-        setNotes(consulta.odontograma.notes || "")
-      } catch (error) {
-        console.error("Error resetting odontogram:", error)
-        setTeeth(initializeTeeth())
-        setNotes("")
+  const handleReset = async () => {
+    try {
+      // CAMBIO: Recargar el último odontograma del paciente desde la API
+      const response = await fetch(`/api/agenda/citas/${citaId}/consulta/odontograma`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok && result.data) {
+          const records = entriesToToothRecords(result.data.entries)
+          setTeeth(records)
+          setNotes(result.data.notes || "")
+          setHasChanges(false)
+          toast.info("Cambios descartados, odontograma restaurado")
+          return
+        }
       }
-    } else {
+      
+      // Fallback: inicializar con dientes INTACT
       setTeeth(initializeTeeth())
       setNotes("")
+      setHasChanges(false)
+      toast.info("Cambios descartados")
+    } catch (error) {
+      console.error("Error resetting odontogram:", error)
+      setTeeth(initializeTeeth())
+      setNotes("")
+      setHasChanges(false)
+      toast.info("Cambios descartados")
     }
-    setHasChanges(false)
-    toast.info("Cambios descartados")
   }
 
   // Show warning if consulta not started
@@ -339,42 +414,8 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
           }}
         />
       ) : (
-        // Vista de solo lectura
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Odontograma</CardTitle>
-            {consulta.odontograma && (
-              <p className="text-sm text-muted-foreground">
-                Registrado: {new Date(consulta.odontograma.takenAt).toLocaleString()} • Por:{" "}
-                {consulta.odontograma.createdBy.nombre}
-              </p>
-            )}
-          </CardHeader>
-          <CardContent>
-            {consulta.odontograma ? (
-              <>
-                {consulta.odontograma.notes && (
-                  <div className="mb-4 rounded-lg bg-muted p-3">
-                    <p className="text-sm font-medium mb-1">Notas:</p>
-                    <p className="text-sm">{consulta.odontograma.notes}</p>
-                  </div>
-                )}
-                {/* Mostrar vista del odontograma */}
-                <OdontogramEditor
-                  teeth={entriesToToothRecords(consulta.odontograma.entries)}
-                  notes={consulta.odontograma.notes || ""}
-                  onToothUpdate={() => {}} // No-op en modo lectura
-                  onNotesChange={() => {}} // No-op en modo lectura
-                />
-              </>
-            ) : (
-              <div className="text-center text-muted-foreground py-8">
-                <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No hay odontograma registrado para esta consulta</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        // Vista de solo lectura - muestra el último odontograma del paciente
+        <ReadOnlyOdontogramView citaId={citaId} />
       )}
     </div>
   )

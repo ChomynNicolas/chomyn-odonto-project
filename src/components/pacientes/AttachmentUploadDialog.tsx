@@ -13,6 +13,12 @@ import type { AttachmentType } from "@/lib/types/patient"
 import { useCreateAttachment } from "@/hooks/useAttachments"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import {
+  MAX_FILE_SIZE_MB,
+  ALLOWED_MIME_TYPES,
+  validateFile,
+  formatFileSize,
+} from "@/lib/validation/file-validation"
 
 interface AttachmentUploadDialogProps {
   open: boolean
@@ -20,16 +26,6 @@ interface AttachmentUploadDialogProps {
   pacienteId: string
   onSuccess?: () => void
 }
-
-const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
-const ACCEPTED_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-  "image/dicom", // For X-rays
-] as const
 
 export function AttachmentUploadDialog({
   open,
@@ -51,18 +47,11 @@ export function AttachmentUploadDialog({
       return
     }
 
-    // Validate file size
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      toast.error("Archivo demasiado grande", {
-        description: `El archivo no puede exceder ${MAX_FILE_SIZE / 1024 / 1024}MB`,
-      })
-      return
-    }
-
-    // Validate file type
-    if (!ACCEPTED_TYPES.includes(selectedFile.type as (typeof ACCEPTED_TYPES)[number])) {
-      toast.error("Tipo de archivo no soportado", {
-        description: "Solo se permiten imágenes y PDFs",
+    // Validate file using shared validation utility
+    const validation = validateFile(selectedFile)
+    if (!validation.valid) {
+      toast.error("Archivo inválido", {
+        description: validation.error || "El archivo no cumple con los requisitos",
       })
       return
     }
@@ -90,7 +79,7 @@ export function AttachmentUploadDialog({
     setUploadProgress(0)
 
     try {
-      // Step 1: Get upload signature
+      // Step 1: Get upload signature (with file metadata for pre-validation)
       const signResponse = await fetch("/api/uploads/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,6 +87,9 @@ export function AttachmentUploadDialog({
           pacienteId: Number.parseInt(pacienteId),
           tipo,
           accessMode: "AUTHENTICATED",
+          fileSize: file.size,
+          fileType: file.type,
+          fileName: file.name,
         }),
       })
 
@@ -218,7 +210,7 @@ export function AttachmentUploadDialog({
               ref={fileInputRef}
               id="file"
               type="file"
-              accept={ACCEPTED_TYPES.join(",")}
+              accept={ALLOWED_MIME_TYPES.join(",")}
               onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
               disabled={isUploading}
               className="hidden"
@@ -242,7 +234,7 @@ export function AttachmentUploadDialog({
                   <div className="text-center">
                     <p className="font-medium">{file.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {formatFileSize(file.size)}
                     </p>
                   </div>
                   {!isUploading && (
@@ -272,7 +264,7 @@ export function AttachmentUploadDialog({
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Formatos soportados: JPG, PNG, GIF, PDF (máx. 25MB)
+                    Formatos soportados: JPG, PNG, GIF, WebP, DICOM, PDF (máx. {MAX_FILE_SIZE_MB}MB)
                   </p>
                 </div>
               )}

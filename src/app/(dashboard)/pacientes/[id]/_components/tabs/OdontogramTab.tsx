@@ -3,13 +3,14 @@
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { usePatientOdontogram } from '@/lib/hooks/use-patient-odontogram';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, History, AlertCircle } from 'lucide-react';
+import { Activity, History, AlertCircle, Maximize2 } from 'lucide-react';
 import { formatShortDate } from '@/lib/utils/date-formatters';
 import {
   Empty,
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/empty';
 import { OdontogramEditor } from '@/components/pacientes/odontograma/OdontogramEditor';
 import { OdontogramHistory } from '@/components/pacientes/odontograma/OdontogramHistory';
+import { OdontogramModal } from '@/components/pacientes/odontograma/OdontogramModal';
 import { entriesToToothRecords } from '@/lib/utils/odontogram-helpers';
 import type { OdontogramSnapshot } from '@/lib/types/patient';
 
@@ -28,6 +30,7 @@ interface OdontogramTabProps {
 }
 
 export function OdontogramTab({ patientId }: OdontogramTabProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const { data: snapshots, isLoading, error } = usePatientOdontogram(patientId, { limit: 10 });
 
   // Convert API snapshots to OdontogramSnapshot format expected by OdontogramHistory
@@ -102,8 +105,9 @@ export function OdontogramTab({ patientId }: OdontogramTabProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="current" className="w-full">
+    <>
+      <div className="space-y-6">
+        <Tabs defaultValue="current" className="w-full">
         <TabsList>
           <TabsTrigger value="current">
             <Activity className="h-4 w-4 mr-2" />
@@ -118,35 +122,50 @@ export function OdontogramTab({ patientId }: OdontogramTabProps) {
         <TabsContent value="current" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Odontograma</CardTitle>
-                <div className="text-sm text-muted-foreground">
-                  Registrado: {formatShortDate(new Date(currentSnapshot.takenAt))}
-                  {currentSnapshot.consultaDate && (
-                    <span className="ml-2">
-                      • Consulta: {formatShortDate(new Date(currentSnapshot.consultaDate))}
-                    </span>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <CardTitle>Odontograma</CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsModalOpen(true)}
+                      className="gap-2"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                      Ver completo
+                    </Button>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Registrado: {formatShortDate(new Date(currentSnapshot.takenAt))}
+                    {currentSnapshot.consultaDate && (
+                      <span className="ml-2">
+                        • Consulta: {formatShortDate(new Date(currentSnapshot.consultaDate))}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Por: {currentSnapshot.createdBy}
+                  </p>
+                  {currentSnapshot.notes && (
+                    <div className="mt-3 rounded-lg bg-muted p-3">
+                      <p className="text-sm font-medium mb-1">Notas:</p>
+                      <p className="text-sm">{currentSnapshot.notes}</p>
+                    </div>
                   )}
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Por: {currentSnapshot.createdBy}
-              </p>
-              {currentSnapshot.notes && (
-                <div className="mt-3 rounded-lg bg-muted p-3">
-                  <p className="text-sm font-medium mb-1">Notas:</p>
-                  <p className="text-sm">{currentSnapshot.notes}</p>
-                </div>
-              )}
             </CardHeader>
             <CardContent>
-              {/* Use OdontogramEditor in read-only mode */}
-              <OdontogramEditor
-                teeth={currentTeeth}
-                notes={currentSnapshot.notes || ""}
-                onToothUpdate={() => {}} // No-op in read-only mode
-                onNotesChange={() => {}} // No-op in read-only mode
-              />
+              {/* Use OdontogramEditor in read-only mode - compact preview */}
+              <div className="opacity-90 hover:opacity-100 transition-opacity">
+                <OdontogramEditor
+                  teeth={currentTeeth}
+                  notes={currentSnapshot.notes || ""}
+                  onToothUpdate={() => {}} // No-op in read-only mode
+                  onNotesChange={() => {}} // No-op in read-only mode
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -160,6 +179,15 @@ export function OdontogramTab({ patientId }: OdontogramTabProps) {
         </TabsContent>
       </Tabs>
     </div>
+
+      {/* Odontogram Modal */}
+      <OdontogramModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        patientId={patientId}
+        showHistory={true}
+      />
+    </>
   );
 }
 

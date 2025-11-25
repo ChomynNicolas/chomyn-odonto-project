@@ -8,11 +8,13 @@ import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
 import { auditOdontogramCreate, auditOdontogramUpdate } from "@/lib/audit/log"
 import { calculateOdontogramDiff, formatOdontogramDiffSummary } from "@/lib/utils/odontogram-audit-helpers"
+import { patientOdontogramService } from "@/lib/services/patient-odontogram.service"
 import type { OdontogramEntryDTO } from "../_dto"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/odontograma
- * Obtiene el odontograma más reciente de la consulta
+ * Obtiene el odontograma más reciente del paciente (no específico de la consulta)
+ * CAMBIO IMPORTANTE: Ahora carga el último odontograma del paciente para mantener continuidad
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -28,61 +30,27 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return errors.forbidden("Solo ODONT y ADMIN pueden ver odontograma")
     }
 
+    // Get consultation and patient info
     const consulta = await prisma.consulta.findUnique({
       where: { citaId },
-      select: { citaId: true },
+      include: {
+        cita: {
+          select: {
+            pacienteId: true,
+          },
+        },
+      },
     })
     if (!consulta) return errors.notFound("Consulta no encontrada")
 
-    const odontograma = await prisma.odontogramSnapshot.findFirst({
-      where: { consultaId: citaId },
-      include: {
-        createdBy: {
-          select: {
-            idUsuario: true,
-            nombreApellido: true,
-            profesional: {
-              select: {
-                persona: {
-                  select: {
-                    nombres: true,
-                    apellidos: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        entries: {
-          orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
-        },
-      },
-      orderBy: { takenAt: "desc" },
-    })
+    // CAMBIO CLAVE: Obtener el último odontograma del paciente (no de la consulta específica)
+    const odontograma = await patientOdontogramService.getLatestOdontogram(consulta.cita.pacienteId)
 
     if (!odontograma) {
       return ok(null)
     }
 
-    return ok({
-      id: odontograma.idOdontogramSnapshot,
-      takenAt: odontograma.takenAt.toISOString(),
-      notes: odontograma.notes,
-      createdBy: {
-        id: odontograma.createdBy.idUsuario,
-        nombre:
-          odontograma.createdBy.profesional?.persona?.nombres && odontograma.createdBy.profesional?.persona?.apellidos
-            ? `${odontograma.createdBy.profesional.persona.nombres} ${odontograma.createdBy.profesional.persona.apellidos}`.trim()
-            : odontograma.createdBy.nombreApellido ?? "Usuario",
-      },
-      entries: odontograma.entries.map((e) => ({
-        id: e.idOdontogramEntry,
-        toothNumber: e.toothNumber,
-        surface: e.surface,
-        condition: e.condition,
-        notes: e.notes,
-      })),
-    })
+    return ok(odontograma)
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/agenda/citas/[id]/consulta/odontograma]", e)
@@ -92,7 +60,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
 /**
  * POST /api/agenda/citas/[id]/consulta/odontograma
- * Crea un nuevo snapshot de odontograma
+ * Crea/actualiza el odontograma del paciente (mantiene continuidad entre consultas)
+ * CAMBIO IMPORTANTE: Ahora actualiza el odontograma del paciente en lugar de crear uno por consulta
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -120,8 +89,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
     const input = validationResult.data
 
-    // Asegurar que la consulta existe
-    const consulta = await prisma.consulta.findUnique({
+    // Asegurar que la consulta existe y obtener pacienteId
+    let consulta = await prisma.consulta.findUnique({
       where: { citaId },
       include: {
         cita: {
@@ -131,14 +100,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         },
       },
     })
+    
     if (!consulta) {
       const cita = await prisma.cita.findUnique({
         where: { idCita: citaId },
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
+      
       await ensureConsulta(citaId, cita.profesionalId, userId)
-      const nuevaConsulta = await prisma.consulta.findUnique({
+      consulta = await prisma.consulta.findUnique({
         where: { citaId },
         include: {
           cita: {
@@ -148,175 +119,32 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         },
       })
-      if (!nuevaConsulta) return errors.internal("Error al crear consulta")
-
-      const odontograma = await prisma.odontogramSnapshot.create({
-        data: {
-          pacienteId: nuevaConsulta.cita.pacienteId,
-          consultaId: citaId,
-          notes: input.notes ?? null,
-          createdByUserId: userId,
-          entries: {
-            create: input.entries.map((e) => ({
-              toothNumber: e.toothNumber,
-              surface: e.surface ?? null,
-              condition: e.condition,
-              notes: e.notes ?? null,
-            })),
-          },
-        },
-        include: {
-          createdBy: {
-            select: {
-              idUsuario: true,
-              nombreApellido: true,
-              profesional: {
-                select: {
-                  persona: {
-                    select: {
-                      nombres: true,
-                      apellidos: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          entries: {
-            orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
-          },
-        },
-      })
-
-      // Registrar auditoría como creación (no hay snapshot anterior en este caso)
-      const newEntries: OdontogramEntryDTO[] = odontograma.entries.map((e) => ({
-        id: e.idOdontogramEntry,
-        toothNumber: e.toothNumber,
-        surface: e.surface,
-        condition: e.condition,
-        notes: e.notes,
-      }))
-
-      // Registrar auditoría de forma segura
-      try {
-        await auditOdontogramCreate({
-          actorId: userId,
-          snapshotId: odontograma.idOdontogramSnapshot,
-          pacienteId: nuevaConsulta.cita.pacienteId,
-          consultaId: citaId,
-          entriesCount: newEntries.length,
-          headers: req.headers,
-          path: `/api/agenda/citas/${citaId}/consulta/odontograma`,
-          metadata: {
-            consultaCreated: true, // Indica que la consulta se creó automáticamente
-            entriesCount: newEntries.length,
-            hasNotes: !!input.notes,
-          },
-        })
-      } catch (auditError) {
-        // Log el error de auditoría pero no fallar la operación principal
-        console.error("[POST /api/agenda/citas/[id]/consulta/odontograma] Error en auditoría:", auditError)
-        // Continuar con la respuesta exitosa ya que el odontograma se guardó correctamente
-      }
-
-      return ok({
-        id: odontograma.idOdontogramSnapshot,
-        takenAt: odontograma.takenAt.toISOString(),
-        notes: odontograma.notes,
-        createdBy: {
-          id: odontograma.createdBy.idUsuario,
-          nombre:
-            odontograma.createdBy.profesional?.persona?.nombres && odontograma.createdBy.profesional?.persona?.apellidos
-              ? `${odontograma.createdBy.profesional.persona.nombres} ${odontograma.createdBy.profesional.persona.apellidos}`.trim()
-              : odontograma.createdBy.nombreApellido ?? "Usuario",
-        },
-        entries: odontograma.entries.map((e) => ({
-          id: e.idOdontogramEntry,
-          toothNumber: e.toothNumber,
-          surface: e.surface,
-          condition: e.condition,
-          notes: e.notes,
-        })),
-      })
+      if (!consulta) return errors.internal("Error al crear consulta")
     }
 
-    // Obtener snapshot anterior para calcular diff (si existe)
-    const previousSnapshot = await prisma.odontogramSnapshot.findFirst({
-      where: { consultaId: citaId },
-      include: {
-        entries: {
-          orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
-        },
+    const pacienteId = consulta.cita.pacienteId
+
+    // CAMBIO CLAVE: Obtener el último odontograma del paciente para calcular diff
+    const previousOdontogram = await patientOdontogramService.getLatestOdontogram(pacienteId)
+    const previousEntries: OdontogramEntryDTO[] | null = previousOdontogram?.entries || null
+
+    // CAMBIO CLAVE: Usar el servicio de paciente para crear/actualizar el odontograma
+    const odontograma = await patientOdontogramService.createOrUpdateOdontogram(
+      pacienteId,
+      {
+        entries: input.entries,
+        notes: input.notes,
+        consultaId: citaId, // Mantener referencia a la consulta actual
       },
-      orderBy: { takenAt: "desc" },
-    })
-
-    // Preparar entradas anteriores para diff (antes de crear el nuevo snapshot)
-    const previousEntries: OdontogramEntryDTO[] | null = previousSnapshot
-      ? previousSnapshot.entries.map((e) => ({
-          id: e.idOdontogramEntry,
-          toothNumber: e.toothNumber,
-          surface: e.surface,
-          condition: e.condition,
-          notes: e.notes,
-        }))
-      : null
-
-    // Crear nuevo snapshot en una transacción para asegurar atomicidad
-    const odontograma = await prisma.$transaction(async (tx) => {
-      const snapshot = await tx.odontogramSnapshot.create({
-        data: {
-          pacienteId: consulta.cita.pacienteId,
-          consultaId: citaId,
-          notes: input.notes ?? null,
-          createdByUserId: userId,
-          entries: {
-            create: input.entries.map((e) => ({
-              toothNumber: e.toothNumber,
-              surface: e.surface ?? null,
-              condition: e.condition,
-              notes: e.notes ?? null,
-            })),
-          },
-        },
-        include: {
-          createdBy: {
-            select: {
-              idUsuario: true,
-              nombreApellido: true,
-              profesional: {
-                select: {
-                  persona: {
-                    select: {
-                      nombres: true,
-                      apellidos: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          entries: {
-            orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
-          },
-        },
-      })
-
-      return snapshot
-    })
+      userId
+    )
 
     // Preparar entradas nuevas para diff
-    const newEntries: OdontogramEntryDTO[] = odontograma.entries.map((e) => ({
-      id: e.idOdontogramEntry,
-      toothNumber: e.toothNumber,
-      surface: e.surface,
-      condition: e.condition,
-      notes: e.notes,
-    }))
+    const newEntries: OdontogramEntryDTO[] = odontograma.entries
 
     // Calcular diff y registrar auditoría
     const diff = calculateOdontogramDiff(previousEntries, newEntries)
-    const isUpdate = previousSnapshot !== null
+    const isUpdate = previousOdontogram !== null
 
     // Registrar auditoría de forma segura (no debe fallar el guardado si la auditoría falla)
     try {
@@ -324,8 +152,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         // Registrar como actualización
         await auditOdontogramUpdate({
           actorId: userId,
-          snapshotId: odontograma.idOdontogramSnapshot,
-          pacienteId: consulta.cita.pacienteId,
+          snapshotId: odontograma.id,
+          pacienteId,
           consultaId: citaId,
           diff: {
             added: diff.added.length,
@@ -336,18 +164,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           headers: req.headers,
           path: `/api/agenda/citas/${citaId}/consulta/odontograma`,
           metadata: {
-            previousSnapshotId: previousSnapshot.idOdontogramSnapshot,
+            previousSnapshotId: previousOdontogram.id,
             entriesAdded: diff.added.length,
             entriesRemoved: diff.removed.length,
             entriesModified: diff.modified.length,
+            patientLevelUpdate: true, // Indica que es una actualización a nivel de paciente
           },
         })
       } else {
         // Registrar como creación
         await auditOdontogramCreate({
           actorId: userId,
-          snapshotId: odontograma.idOdontogramSnapshot,
-          pacienteId: consulta.cita.pacienteId,
+          snapshotId: odontograma.id,
+          pacienteId,
           consultaId: citaId,
           entriesCount: newEntries.length,
           headers: req.headers,
@@ -355,6 +184,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           metadata: {
             entriesCount: newEntries.length,
             hasNotes: !!input.notes,
+            patientLevelCreation: true, // Indica que es una creación a nivel de paciente
           },
         })
       }
@@ -364,25 +194,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       // Continuar con la respuesta exitosa ya que el odontograma se guardó correctamente
     }
 
-    return ok({
-      id: odontograma.idOdontogramSnapshot,
-      takenAt: odontograma.takenAt.toISOString(),
-      notes: odontograma.notes,
-      createdBy: {
-        id: odontograma.createdBy.idUsuario,
-        nombre:
-          odontograma.createdBy.profesional?.persona?.nombres && odontograma.createdBy.profesional?.persona?.apellidos
-            ? `${odontograma.createdBy.profesional.persona.nombres} ${odontograma.createdBy.profesional.persona.apellidos}`.trim()
-            : odontograma.createdBy.nombreApellido ?? "Usuario",
-      },
-      entries: odontograma.entries.map((e) => ({
-        id: e.idOdontogramEntry,
-        toothNumber: e.toothNumber,
-        surface: e.surface,
-        condition: e.condition,
-        notes: e.notes,
-      })),
-    })
+    return ok(odontograma)
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "ZodError") {
       const zodError = e as { issues?: Array<{ message?: string }> }

@@ -21,6 +21,7 @@ import { useDisponibilidadValidator, roundToMinutes } from "@/hooks/useDisponibi
 import { SlotRecommendations } from "./SlotRecommendations";
 import { handleApiError, showErrorToast, showSuccessToast } from "@/lib/messages/agenda-toast-helpers";
 import { getErrorMessage } from "@/lib/messages/agenda-messages";
+// Surgery consent validation removed - now handled during check-in
 
 
 // Schema base - pacienteId es opcional porque en modo reschedule no se requiere
@@ -151,6 +152,10 @@ export function NuevaCitaSheet({
     excludeCitaId: excludeCitaIdValue, // Excluir cita actual en reschedule (memoizado para estabilidad)
   })
 
+  // Surgery consent validation removed - now handled during check-in
+  // const tipoValue = watch("tipo")
+  // const pacienteIdValue = watch("pacienteId")
+
   // Estado para conflictos detectados por el backend (modo reschedule)
   const [conflictos, setConflictos] = React.useState<Array<{
     citaId: number
@@ -254,6 +259,8 @@ export function NuevaCitaSheet({
       showErrorToast("OUTSIDE_WORKING_HOURS", undefined, disponibilidadValidation.error || errorMsg.userMessage)
       return // Bloquear submit en ambos modos si no está disponible
     }
+
+    // Surgery consent validation removed - now handled during check-in
 
     // Limpiar conflictos previos
     setConflictos(null)
@@ -637,6 +644,8 @@ export function NuevaCitaSheet({
               )}
             </>
           )}
+
+          {/* Surgery consent validation removed - now handled during check-in */}
 
           {/* Conflictos detectados por el backend (ambos modos) */}
           {conflictos && conflictos.length > 0 && (

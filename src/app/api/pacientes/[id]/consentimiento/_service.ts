@@ -3,6 +3,7 @@ import { consentimientoRepo } from "./_repo"
 import { calcularVigenteHasta, esVigente, nombreCompleto, type ConsentimientoDTO } from "./_dto"
 import type { ConsentimientoCreateBody, ConsentimientoListQuery } from "./_schemas"
 import type { Prisma } from "@prisma/client"
+import { AuditAction, AuditEntity } from "@/lib/audit/actions"
 
 export class ConsentimientoError extends Error {
   code: string
@@ -69,29 +70,79 @@ export async function crearConsentimiento(params: {
     }
   }
 
-  // Verificar responsable está vinculado
-  const vinculo = await consentimientoRepo.verificarResponsableVinculado(pacienteId, body.responsablePersonaId)
+  // Si es consentimiento de cirugía, validar responsable según edad del paciente
+  if (body.tipo === "CIRUGIA") {
+    // Los consentimientos de cirugía deben estar asociados a una cita específica
+    if (!body.citaId) {
+      throw new ConsentimientoError(
+        "SURGERY_CONSENT_REQUIRES_APPOINTMENT",
+        "Los consentimientos de cirugía deben estar asociados a una cita específica",
+        400,
+      )
+    }
 
-  if (!vinculo) {
-    throw new ConsentimientoError(
-      "NO_RESPONSIBLE_LINKED",
-      "El responsable no está vinculado al paciente o el vínculo no está vigente",
-      400,
-    )
+    if (!paciente.persona.fechaNacimiento) {
+      throw new ConsentimientoError(
+        "MISSING_DOB_FOR_SURGERY_CHECK",
+        "No se puede crear consentimiento de cirugía: falta fecha de nacimiento del paciente",
+        400,
+      )
+    }
+
+    const esMenor = esMenorDeEdad(paciente.persona.fechaNacimiento)
+    
+    // Para pacientes adultos, el responsable debe ser el mismo paciente
+    if (!esMenor && body.responsablePersonaId !== paciente.persona.idPersona) {
+      console.error("Adult surgery consent validation failed:", {
+        isMinor: esMenor,
+        responsablePersonaId: body.responsablePersonaId,
+        expectedPersonaId: paciente.persona.idPersona,
+        patientName: `${paciente.persona.nombres} ${paciente.persona.apellidos}`,
+        consentType: body.tipo
+      })
+      
+      throw new ConsentimientoError(
+        "ADULT_SURGERY_CONSENT_SELF_ONLY",
+        "Para pacientes adultos, el consentimiento de cirugía debe ser firmado por el propio paciente",
+        400,
+      )
+    }
+    
+    // Para menores, el responsable debe tener autoridad legal (se valida más abajo)
+    // No hay validación adicional aquí porque ya se valida en la sección de autoridad legal
   }
 
-  // Verificar autoridad legal
-  if (!vinculo.autoridadLegal) {
-    throw new ConsentimientoError(
-      "NO_LEGAL_AUTHORITY",
-      "El responsable no tiene autoridad legal para firmar consentimientos",
-      403,
-    )
+  // Para consentimiento de cirugía de paciente adulto, el paciente es su propio responsable
+  const esMenor = paciente.persona.fechaNacimiento ? esMenorDeEdad(paciente.persona.fechaNacimiento) : false
+  const esCirugiaAdulto = body.tipo === "CIRUGIA" && !esMenor && body.responsablePersonaId === paciente.persona.idPersona
+
+  if (!esCirugiaAdulto) {
+    // Verificar responsable está vinculado (solo para menores o responsables externos)
+    const vinculo = await consentimientoRepo.verificarResponsableVinculado(pacienteId, body.responsablePersonaId)
+
+    if (!vinculo) {
+      throw new ConsentimientoError(
+        "NO_RESPONSIBLE_LINKED",
+        "El responsable no está vinculado al paciente o el vínculo no está vigente",
+        400,
+      )
+    }
+
+    // Verificar autoridad legal
+    if (!vinculo.autoridadLegal) {
+      throw new ConsentimientoError(
+        "NO_LEGAL_AUTHORITY",
+        "El responsable no tiene autoridad legal para firmar consentimientos",
+        403,
+      )
+    }
   }
 
-  // Calcular vigencia
+  // Calcular vigencia - para cirugías usar validez por cita, para otros usar tiempo
   const firmadoEn = new Date(body.firmadoEn)
-  const vigenteHasta = calcularVigenteHasta(firmadoEn, body.vigenciaEnMeses || 12)
+  const vigenteHasta = body.tipo === "CIRUGIA" && body.citaId 
+    ? new Date(2099, 11, 31) // Fecha muy lejana para cirugías (validez por cita)
+    : calcularVigenteHasta(firmadoEn, body.vigenciaEnMeses || 12)
 
   // Crear consentimiento en transacción
   // IMPORTANTE: Este endpoint NO debe modificar el estado de la cita asociada
@@ -139,14 +190,14 @@ export async function crearConsentimiento(params: {
     await tx.auditLog.create({
       data: {
         actorId: userId,
-        action: "CONSENTIMIENTO_CREATE",
-        entity: "Consentimiento",
+        action: AuditAction.CONSENTIMIENTO_CREATE,
+        entity: AuditEntity.Consentimiento,
         entityId: consentimiento.idConsentimiento,
         metadata: {
           pacienteId,
           tipo: body.tipo,
           responsablePersonaId: body.responsablePersonaId,
-          vigenciaEnMeses: body.vigenciaEnMeses,
+          vigenciaEnMeses: body.vigenciaEnMeses ?? null,
           citaId: body.citaId ?? null,
         },
       },
@@ -206,16 +257,19 @@ export async function revocarConsentimiento(params: {
   await prisma.$transaction(async (tx) => {
     await consentimientoRepo.revocar(tx, idConsentimiento, reason)
 
-    // Audit log
+    // Audit log - include pacienteId and tipo for easier querying
     await tx.auditLog.create({
       data: {
         actorId: userId,
-        action: "CONSENTIMIENTO_REVOKE",
-        entity: "Consentimiento",
+        action: AuditAction.CONSENTIMIENTO_REVOKE,
+        entity: AuditEntity.Consentimiento,
         entityId: idConsentimiento,
         metadata: {
+          pacienteId: consentimiento.Paciente_idPaciente,
+          tipo: consentimiento.tipo,
           reason,
           revokedAt: new Date().toISOString(),
+          citaId: consentimiento.Cita_idCita ?? null,
         },
       },
     })

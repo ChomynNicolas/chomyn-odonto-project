@@ -1,18 +1,21 @@
 import { isMinorAt } from "@/lib/utils/consent-helpers"
 import { prisma } from "@/lib/prisma"
+import { validateSurgeryConsent } from "@/lib/services/surgery-consent-validator"
 
 /**
- * Resumen del consentimiento informado vigente para un paciente menor.
+ * Resumen del consentimiento informado vigente para un paciente menor o cirugía.
  * 
  * @remarks
  * Este objeto se incluye en CitaConsentimientoStatus cuando hay un consentimiento vigente.
- * Contiene información sobre quién firmó el consentimiento y hasta cuándo es válido.
+ * Contiene información sobre quién firmó el consentimiento y a qué cita está asociado.
  */
 export interface ConsentimientoResumen {
   firmadoEn: string // ISO string (serializado)
-  vigenteHasta: string // ISO string (serializado)
+  vigenteHasta: string // ISO string (serializado) - Solo para consentimientos de menor con validez temporal
   responsableNombre: string
   responsableTipoVinculo: string
+  citaId?: number | null // ID de la cita asociada (si aplica)
+  esEspecificoPorCita?: boolean // true si el consentimiento es válido solo para esta cita específica
 }
 
 /**
@@ -20,36 +23,40 @@ export interface ConsentimientoResumen {
  * 
  * @remarks
  * Este objeto se calcula en el backend cada vez que se solicita el detalle de una cita.
- * Determina si un paciente menor de edad tiene el consentimiento necesario para iniciar la consulta.
+ * Determina si un paciente necesita consentimiento para iniciar la consulta, considerando:
+ * - Consentimiento de menor (si es menor de edad)
+ * - Consentimiento de cirugía (si hay procedimientos quirúrgicos)
  * 
  * Flujo de estados:
- * 1. Si el paciente es mayor de edad:
- *    - esMenorAlInicio = false
- *    - requiereConsentimiento = false
- *    - consentimientoVigente = true (no requiere)
+ * 1. Paciente mayor sin cirugía:
+ *    - esMenorAlInicio = false, requiereCirugia = false
+ *    - requiereConsentimiento = false, consentimientoVigente = true
  *    - bloqueaInicio = false
  * 
- * 2. Si el paciente es menor sin consentimiento:
- *    - esMenorAlInicio = true
- *    - requiereConsentimiento = true
- *    - consentimientoVigente = false
- *    - bloqueaInicio = true
- *    - mensajeBloqueo = mensaje explicativo
+ * 2. Paciente menor sin consentimiento:
+ *    - esMenorAlInicio = true, requiereConsentimiento = true
+ *    - consentimientoVigente = false, bloqueaInicio = true
  * 
- * 3. Si el paciente es menor con consentimiento vigente:
- *    - esMenorAlInicio = true
- *    - requiereConsentimiento = true
- *    - consentimientoVigente = true
- *    - bloqueaInicio = false
- *    - consentimientoResumen = detalles del consentimiento
+ * 3. Paciente con cirugía sin consentimiento quirúrgico:
+ *    - requiereCirugia = true, cirugiaConsentimientoVigente = false
+ *    - bloqueaInicio = true, mensajeBloqueo = mensaje explicativo
  * 
  * @see getCitaConsentimientoStatus para la lógica de cálculo
  */
 export interface CitaConsentimientoStatus {
+  // Consentimiento de menor
   esMenorAlInicio: boolean
   requiereConsentimiento: boolean
   consentimientoVigente: boolean
   consentimientoResumen?: ConsentimientoResumen
+  
+  // Consentimiento de cirugía
+  requiereCirugia: boolean
+  cirugiaConsentimientoVigente: boolean
+  cirugiaConsentimientoResumen?: ConsentimientoResumen
+  responsableParaId?: number
+  
+  // Estado general
   bloqueaInicio: boolean
   mensajeBloqueo?: string
 }
@@ -87,7 +94,6 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
           persona: true,
           consentimientos: {
             where: {
-              tipo: "CONSENTIMIENTO_MENOR_ATENCION",
               activo: true,
             },
             include: {
@@ -115,6 +121,8 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
       esMenorAlInicio: false,
       requiereConsentimiento: false,
       consentimientoVigente: false,
+      requiereCirugia: false,
+      cirugiaConsentimientoVigente: false,
       bloqueaInicio: true,
       mensajeBloqueo:
         "Falta fecha de nacimiento del paciente. Complete esta información antes de iniciar la consulta.",
@@ -123,47 +131,80 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
 
   const esMenor = isMinorAt(fechaNacimiento, cita.inicio)
 
-  // Si es mayor de edad, no requiere consentimiento
-  if (esMenor === false) {
-    return {
-      esMenorAlInicio: false,
-      requiereConsentimiento: false,
-      consentimientoVigente: true,
-      bloqueaInicio: false,
-    }
+  // 1. Verificar consentimiento de menor (si aplica)
+  let minorConsentStatus = {
+    esMenorAlInicio: esMenor === true,
+    requiereConsentimiento: esMenor === true,
+    consentimientoVigente: esMenor !== true, // Si no es menor, no requiere consentimiento
+    consentimientoResumen: undefined as ConsentimientoResumen | undefined
   }
 
-  // Es menor de edad: verificar consentimiento vigente a la fecha/hora de la cita
-  const consentimientoVigente = cita.paciente.consentimientos.find(
-    (c) => c.vigente_hasta >= cita.inicio, // <- NO "vigenteHasta"
-  )
+  if (esMenor === true) {
+    // Es menor de edad: verificar consentimiento vigente a la fecha/hora de la cita
+    const consentimientoMenor = cita.paciente.consentimientos.find(
+      (c) => c.tipo === "CONSENTIMIENTO_MENOR_ATENCION" && c.vigente_hasta >= cita.inicio
+    )
 
-  if (consentimientoVigente) {
-    const resp = consentimientoVigente.responsable
-    const responsableNombre = resp ? `${resp.nombres ?? ""} ${resp.apellidos ?? ""}`.trim() : "Responsable"
+    if (consentimientoMenor) {
+      const resp = consentimientoMenor.responsable
+      const responsableNombre = resp ? `${resp.nombres ?? ""} ${resp.apellidos ?? ""}`.trim() : "Responsable"
 
-    return {
-      esMenorAlInicio: true,
-      requiereConsentimiento: true,
-      consentimientoVigente: true,
-      consentimientoResumen: {
-        firmadoEn: consentimientoVigente.firmado_en.toISOString(),   // Convertir a ISO string
-        vigenteHasta: consentimientoVigente.vigente_hasta.toISOString(), // Convertir a ISO string
+      minorConsentStatus.consentimientoVigente = true
+      minorConsentStatus.consentimientoResumen = {
+        firmadoEn: consentimientoMenor.firmado_en.toISOString(),
+        vigenteHasta: consentimientoMenor.vigente_hasta.toISOString(),
         responsableNombre,
-        // Si querés el vínculo real, podés consultar PacienteResponsable por (pacienteId, personaId)
         responsableTipoVinculo: "RESPONSABLE",
-      },
-      bloqueaInicio: false,
+        citaId: consentimientoMenor.Cita_idCita ?? null,
+        esEspecificoPorCita: consentimientoMenor.Cita_idCita !== null,
+      }
+    } else {
+      minorConsentStatus.consentimientoVigente = false
     }
   }
 
-  // No hay consentimiento vigente
+  // 2. Verificar consentimiento de cirugía
+  const surgeryValidation = await validateSurgeryConsent(citaId, cita.pacienteId, cita.inicio)
+  
+  let surgeryConsentStatus = {
+    requiereCirugia: surgeryValidation.requiresConsent,
+    cirugiaConsentimientoVigente: surgeryValidation.isValid,
+    cirugiaConsentimientoResumen: undefined as ConsentimientoResumen | undefined,
+    responsableParaId: surgeryValidation.responsiblePartyId
+  }
+
+  if (surgeryValidation.requiresConsent && surgeryValidation.isValid && surgeryValidation.consentSummary) {
+    surgeryConsentStatus.cirugiaConsentimientoResumen = {
+      firmadoEn: surgeryValidation.consentSummary.firmadoEn.toISOString(),
+      vigenteHasta: surgeryValidation.consentSummary.vigenteHasta.toISOString(),
+      responsableNombre: surgeryValidation.consentSummary.responsableNombre,
+      responsableTipoVinculo: surgeryValidation.patientIsMinor ? "RESPONSABLE" : "PACIENTE",
+      citaId: surgeryValidation.consentSummary.citaId ?? null,
+      esEspecificoPorCita: surgeryValidation.consentSummary.esEspecificoPorCita ?? true, // Surgery consents are always appointment-specific
+    }
+  }
+
+  // 3. Determinar estado general
+  const bloqueaInicio = 
+    (minorConsentStatus.requiereConsentimiento && !minorConsentStatus.consentimientoVigente) ||
+    (surgeryConsentStatus.requiereCirugia && !surgeryConsentStatus.cirugiaConsentimientoVigente)
+
+  let mensajeBloqueo: string | undefined
+  if (bloqueaInicio) {
+    const mensajes: string[] = []
+    if (minorConsentStatus.requiereConsentimiento && !minorConsentStatus.consentimientoVigente) {
+      mensajes.push("Se requiere consentimiento informado vigente para el menor")
+    }
+    if (surgeryConsentStatus.requiereCirugia && !surgeryConsentStatus.cirugiaConsentimientoVigente) {
+      mensajes.push(surgeryValidation.errorMessage || "Se requiere consentimiento de cirugía")
+    }
+    mensajeBloqueo = mensajes.join(". ")
+  }
+
   return {
-    esMenorAlInicio: true,
-    requiereConsentimiento: true,
-    consentimientoVigente: false,
-    bloqueaInicio: true,
-    mensajeBloqueo:
-      "El paciente es menor de edad y no tiene un consentimiento informado vigente. Debe subir un consentimiento firmado por su responsable antes de iniciar la consulta.",
+    ...minorConsentStatus,
+    ...surgeryConsentStatus,
+    bloqueaInicio,
+    mensajeBloqueo,
   }
 }

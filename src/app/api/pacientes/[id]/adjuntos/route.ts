@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/prisma"
+import { auth } from "@/auth"
 import type { AdjuntoTipo, AccessMode, Prisma } from "@prisma/client"
+import {
+  MAX_FILE_SIZE_BYTES,
+  validateFileSize,
+  validateFileExtension,
+  ALLOWED_MIME_TYPES,
+} from "@/lib/validation/file-validation"
+import { auditAttachmentCreate, auditAttachmentDelete } from "@/lib/audit/attachments"
 
 const CreateAdjuntoSchema = z.object({
   publicId: z.string(),
@@ -424,6 +432,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: false, error: "ID de paciente inválido" }, { status: 400 })
     }
 
+    // Get user ID from session
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+    }
+    const userId = Number.parseInt(session.user.id, 10)
+
     // Verify patient exists
     const paciente = await prisma.paciente.findUnique({
       where: { idPaciente: pacienteId },
@@ -445,6 +460,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const data = parsed.data
 
+    // Validate file metadata before creating database record
+    // 1. Validate file size
+    if (data.bytes > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json(
+        { ok: false, error: `El archivo excede el tamaño máximo permitido de ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB` },
+        { status: 400 },
+      )
+    }
+
+    // 2. Validate format (if provided)
+    if (data.format) {
+      const allowedFormats = ["jpg", "jpeg", "png", "gif", "webp", "dcm", "pdf"]
+      if (!allowedFormats.includes(data.format.toLowerCase())) {
+        return NextResponse.json(
+          { ok: false, error: `Formato de archivo no permitido: ${data.format}` },
+          { status: 400 },
+        )
+      }
+    }
+
+    // 3. Validate filename extension (if provided)
+    if (data.originalFilename) {
+      const extValidation = validateFileExtension(data.originalFilename)
+      if (!extValidation.valid) {
+        return NextResponse.json(
+          { ok: false, error: extValidation.error },
+          { status: 400 },
+        )
+      }
+    }
+
     // Create adjunto record
     const adjunto = await prisma.adjunto.create({
       data: {
@@ -462,7 +508,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         secureUrl: data.secureUrl,
         originalFilename: data.originalFilename,
         accessMode: (data.accessMode || "AUTHENTICATED") as AccessMode,
-        uploadedByUserId: 1, // TODO: Get from session
+        uploadedByUserId: userId,
       },
       include: {
         uploadedBy: {
@@ -473,6 +519,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
       },
     })
+
+    // Audit logging - AFTER successful creation
+    try {
+      await auditAttachmentCreate({
+        actorId: userId,
+        entityId: adjunto.idAdjunto,
+        metadata: {
+          pacienteId,
+          consultaId: null,
+          procedimientoId: null,
+          tipo: adjunto.tipo,
+          format: adjunto.format ?? null,
+          bytes: adjunto.bytes,
+          originalFilename: adjunto.originalFilename ?? null,
+          publicId: adjunto.publicId,
+          accessMode: adjunto.accessMode,
+          descripcion: adjunto.descripcion ?? null,
+          source: "patient",
+          path: req.url,
+        },
+        headers: req.headers,
+        path: req.url,
+      })
+    } catch (auditError) {
+      console.error("[audit] Failed to log attachment creation:", auditError)
+    }
 
     // Generate URLs based on access mode
     const isAuthenticated = adjunto.accessMode === "AUTHENTICATED"
@@ -539,6 +611,13 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "ID de paciente inválido" }, { status: 400 })
     }
 
+    // Get user ID from session
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+    }
+    const userId = Number.parseInt(session.user.id, 10)
+
     // Get attachment ID from URL
     const url = new URL(req.url)
     const attachmentId = url.searchParams.get("attachmentId")
@@ -564,15 +643,43 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "Adjunto no encontrado" }, { status: 404 })
     }
 
+    // Store metadata BEFORE deletion for audit
+    const auditMetadata = {
+      pacienteId: adjunto.pacienteId,
+      consultaId: adjunto.consultaId ?? null,
+      procedimientoId: adjunto.procedimientoId ?? null,
+      tipo: adjunto.tipo,
+      format: adjunto.format ?? null,
+      bytes: adjunto.bytes,
+      originalFilename: adjunto.originalFilename ?? null,
+      publicId: adjunto.publicId,
+      deletedAt: new Date().toISOString(),
+      source: adjunto.consultaId ? ("consultation" as const) : adjunto.procedimientoId ? ("procedure" as const) : ("patient" as const),
+      path: req.url,
+    }
+
     // Soft delete
     await prisma.adjunto.update({
       where: { idAdjunto: adjuntoId },
       data: {
         isActive: false,
         deletedAt: new Date(),
-        deletedByUserId: 1, // TODO: Get from session
+        deletedByUserId: userId,
       },
     })
+
+    // Audit logging - AFTER successful deletion
+    try {
+      await auditAttachmentDelete({
+        actorId: userId,
+        entityId: adjuntoId,
+        metadata: auditMetadata,
+        headers: req.headers,
+        path: req.url,
+      })
+    } catch (auditError) {
+      console.error("[audit] Failed to log attachment deletion:", auditError)
+    }
 
     return NextResponse.json({
       ok: true,

@@ -5,6 +5,14 @@ import { prisma } from "@/lib/prisma"
 import { cloudinary } from "@/lib/cloudinary"
 import { requireRole } from "@/app/api/pacientes/_rbac"
 import type { AdjuntoTipo, AccessMode } from "@prisma/client"
+import {
+  MAX_FILE_SIZE_BYTES,
+  validateFileSize,
+  validateMimeType,
+  validateFileExtension,
+} from "@/lib/validation/file-validation"
+import { validateFileSignature } from "@/lib/validation/file-validation-server"
+import { auditAttachmentCreate } from "@/lib/audit/attachments"
 
 function jsonError(status: number, code: string, error: string, details?: unknown) {
   return NextResponse.json({ ok: false, code, error, ...(details ? { details } : {}) }, { status })
@@ -74,6 +82,45 @@ export async function POST(
     const tipo = tipoParsed.data
     const descripcion = descripcionRaw && descripcionRaw.trim() ? descripcionRaw.trim() : null
 
+    // Validate file before upload
+    // 1. Validate file size
+    const sizeValidation = validateFileSize(file.size)
+    if (!sizeValidation.valid) {
+      return jsonError(400, "FILE_TOO_LARGE", sizeValidation.error || "El archivo excede el tamaño máximo permitido", {
+        fileSize: file.size,
+        maxSize: MAX_FILE_SIZE_BYTES,
+      })
+    }
+
+    // 2. Validate MIME type
+    const mimeValidation = validateMimeType(file.type)
+    if (!mimeValidation.valid) {
+      return jsonError(400, "INVALID_FILE_TYPE", mimeValidation.error || "Tipo de archivo no permitido", {
+        fileType: file.type,
+      })
+    }
+
+    // 3. Validate file extension
+    const extValidation = validateFileExtension(file.name)
+    if (!extValidation.valid) {
+      return jsonError(400, "INVALID_EXTENSION", extValidation.error || "Extensión de archivo no permitida", {
+        fileName: file.name,
+      })
+    }
+
+    // 4. Read file buffer for signature validation
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    // 5. Validate file signature (magic numbers)
+    const signatureValidation = validateFileSignature(buffer, file.type)
+    if (!signatureValidation.valid) {
+      return jsonError(400, "INVALID_SIGNATURE", signatureValidation.error || "El contenido del archivo no coincide con su tipo", {
+        fileType: file.type,
+        detectedMimeType: signatureValidation.detectedMimeType,
+        fileName: file.name,
+      })
+    }
+
     // Prepare folder structure
     const folderBase = process.env.CLOUDINARY_BASE_FOLDER || "chomyn/dev"
     const folder = `${folderBase}/pacientes/${pacienteId}/${tipo.toLowerCase()}`
@@ -81,8 +128,7 @@ export async function POST(
       (process.env.CLOUDINARY_DEFAULT_ACCESS_MODE?.toUpperCase() as "PUBLIC" | "AUTHENTICATED") ||
       "AUTHENTICATED"
 
-    // Upload to Cloudinary
-    const buffer = Buffer.from(await file.arrayBuffer())
+    // Upload to Cloudinary (validation passed)
     const uploadResult = await new Promise<{
       public_id: string
       secure_url: string
@@ -144,6 +190,32 @@ export async function POST(
         },
       },
     })
+
+    // Audit logging - AFTER successful creation
+    try {
+      await auditAttachmentCreate({
+        actorId: gate.userId || 1,
+        entityId: adjunto.idAdjunto,
+        metadata: {
+          pacienteId,
+          consultaId: null,
+          procedimientoId: null,
+          tipo: adjunto.tipo,
+          format: adjunto.format ?? null,
+          bytes: adjunto.bytes,
+          originalFilename: adjunto.originalFilename ?? null,
+          publicId: adjunto.publicId,
+          accessMode: adjunto.accessMode,
+          descripcion: adjunto.descripcion ?? null,
+          source: "patient",
+          path: req.url,
+        },
+        headers: req.headers,
+        path: req.url,
+      })
+    } catch (auditError) {
+      console.error("[audit] Failed to log attachment creation:", auditError)
+    }
 
     return jsonOk({
       id: adjunto.idAdjunto,

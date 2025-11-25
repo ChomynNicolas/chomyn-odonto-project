@@ -16,9 +16,10 @@ interface ResponsableSelectorProps {
   pacienteId: number
   value?: number
   onChange: (id: number) => void
+  allowSelfForSurgery?: boolean // Permitir que el paciente se seleccione a sí mismo (para cirugías de adultos)
 }
 
-export function ResponsableSelector({ pacienteId, value, onChange }: ResponsableSelectorProps) {
+export function ResponsableSelector({ pacienteId, value, onChange, allowSelfForSurgery = false }: ResponsableSelectorProps) {
   const [responsables, setResponsables] = useState<Responsable[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -28,17 +29,48 @@ export function ResponsableSelector({ pacienteId, value, onChange }: Responsable
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`/api/pacientes/${pacienteId}/responsables`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
+      
+      const promises = [
+        fetch(`/api/pacientes/${pacienteId}/responsables`)
+      ]
+      
+      // Si se permite auto-selección para cirugía, también cargar datos del paciente
+      if (allowSelfForSurgery) {
+        promises.push(fetch(`/api/pacientes/${pacienteId}`))
+      }
+      
+      const responses = await Promise.all(promises)
+      
+      // Procesar responsables
+      const responsablesResponse = responses[0]
+      if (!responsablesResponse.ok) {
+        const errorData = await responsablesResponse.json().catch(() => ({}))
         throw new Error(errorData.error || "Error al cargar responsables")
       }
-      const data = await response.json()
-      if (data.ok && Array.isArray(data.data)) {
-        setResponsables(data.data)
-      } else {
-        setResponsables([])
+      const responsablesData = await responsablesResponse.json()
+      let responsablesList: Responsable[] = []
+      if (responsablesData.ok && Array.isArray(responsablesData.data)) {
+        responsablesList = responsablesData.data
       }
+      
+      // Si se permite auto-selección para cirugía, agregar al paciente como opción
+      if (allowSelfForSurgery && responses[1]) {
+        const pacienteResponse = responses[1]
+        if (pacienteResponse.ok) {
+          const pacienteData = await pacienteResponse.json()
+          if (pacienteData.ok && pacienteData.data?.persona) {
+            const persona = pacienteData.data.persona
+            // Agregar al paciente como primera opción con indicador claro
+            responsablesList.unshift({
+              id: persona.idPersona,
+              nombre: `${persona.nombres} ${persona.apellidos} (Paciente)`.trim(),
+              tipoVinculo: "PACIENTE_ADULTO"
+            })
+          }
+        }
+      }
+      
+      setResponsables(responsablesList)
     } catch (error: unknown) {
       console.error("[v0] Error loading responsables:", error)
       const errorMessage = error instanceof Error ? error.message : "Error al cargar responsables"
@@ -47,7 +79,7 @@ export function ResponsableSelector({ pacienteId, value, onChange }: Responsable
     } finally {
       setLoading(false)
     }
-  }, [pacienteId])
+  }, [pacienteId, allowSelfForSurgery])
 
   useEffect(() => {
     loadResponsables()
@@ -59,6 +91,8 @@ export function ResponsableSelector({ pacienteId, value, onChange }: Responsable
       MADRE: "Madre",
       TUTOR: "Tutor",
       AUTORIZADO: "Autorizado",
+      PACIENTE_ADULTO: "Paciente adulto",
+      PACIENTE: "Paciente",
     }
     return labels[tipo] || tipo
   }
@@ -94,11 +128,18 @@ export function ResponsableSelector({ pacienteId, value, onChange }: Responsable
           </SelectTrigger>
           <SelectContent>
             {responsables.length === 0 ? (
-              <div className="px-2 py-6 text-center text-sm text-muted-foreground">No hay responsables registrados</div>
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {allowSelfForSurgery ? "No se pudo cargar la información del paciente" : "No hay responsables registrados"}
+              </div>
             ) : (
               responsables.map((resp) => (
                 <SelectItem key={resp.id} value={resp.id.toString()}>
-                  {resp.nombre} ({getVinculoLabel(resp.tipoVinculo)})
+                  <div className="flex items-center justify-between w-full">
+                    <span>{resp.nombre}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({getVinculoLabel(resp.tipoVinculo)})
+                    </span>
+                  </div>
                 </SelectItem>
               ))
             )}

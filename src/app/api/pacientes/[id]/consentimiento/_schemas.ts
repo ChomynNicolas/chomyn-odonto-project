@@ -12,7 +12,8 @@ export const ConsentimientoCreateSchema = z.object({
     "OTRO",
   ]),
   firmadoEn: z.string().datetime({ message: "Fecha de firma requerida" }),
-  vigenciaEnMeses: z.number().int().min(1).max(60).default(12),
+  // Remove vigenciaEnMeses for appointment-specific consents
+  vigenciaEnMeses: z.number().int().min(1).max(60).optional(),
   citaId: z.number().int().positive().optional().nullable(),
   observaciones: z.string().max(1000).optional().nullable(),
 
@@ -26,6 +27,16 @@ export const ConsentimientoCreateSchema = z.object({
     height: z.number().int().positive().optional(),
     hash: z.string().optional(),
   }),
+})
+.refine((data) => {
+  // Surgery consents must be tied to a specific appointment
+  if (data.tipo === "CIRUGIA") {
+    return data.citaId !== null && data.citaId !== undefined;
+  }
+  return true;
+}, {
+  message: "Los consentimientos de cirugía deben estar asociados a una cita específica",
+  path: ["citaId"]
 })
 
 export type ConsentimientoCreateBody = z.infer<typeof ConsentimientoCreateSchema>

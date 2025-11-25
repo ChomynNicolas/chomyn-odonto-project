@@ -4,6 +4,7 @@ import type { CitaAction } from "./_schemas"
 import { EstadoCita, MotivoCancelacion, ConsultaEstado } from "@prisma/client"
 import type { Prisma } from "@prisma/client"
 import { differenceInYears } from "date-fns"
+import { validateSurgeryConsent } from "@/lib/services/surgery-consent-validator"
 
 interface TransitionContext {
   citaId: number
@@ -33,6 +34,9 @@ export async function executeCitaTransition(ctx: TransitionContext) {
   if (ctx.action === "START") {
     await validateConsentForStart(cita.idCita, cita.pacienteId, cita.inicio, ctx)
   }
+
+  // Surgery consent is validated during START, not CHECKIN
+  // Check-in is allowed even without surgery consent
 
   const newEstado = getNewEstado(cita.estado, ctx.action)
 
@@ -137,70 +141,124 @@ async function validateConsentForStart(citaId: number, pacienteId: number, inici
   }
 
   const edadAlInicio = differenceInYears(inicio, paciente.persona.fechaNacimiento)
-  if (edadAlInicio >= 18) return // mayor de edad
+  const esMenor = edadAlInicio < 18
 
-  // Verifica que haya al menos un responsable vigente
-  const responsable = await prisma.pacienteResponsable.findFirst({
-    where: {
-      pacienteId,
-      OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: inicio } }],
-    },
-  })
-  if (!responsable) {
-    throw {
-      status: 422,
-      code: "NO_RESPONSIBLE_LINKED",
-      message: "No hay responsable vigente vinculado al menor.",
-      details: { pacienteId },
+  // 1. Validar consentimiento de menor (solo si es menor de edad)
+  if (esMenor) {
+    // Verifica que haya al menos un responsable vigente
+    const responsable = await prisma.pacienteResponsable.findFirst({
+      where: {
+        pacienteId,
+        OR: [{ vigenteHasta: null }, { vigenteHasta: { gte: inicio } }],
+      },
+    })
+    if (!responsable) {
+      throw {
+        status: 422,
+        code: "NO_RESPONSIBLE_LINKED",
+        message: "No hay responsable vigente vinculado al menor.",
+        details: { pacienteId },
+      }
     }
+
+    // Consentimiento de menor vigente a la fecha/hora de la cita
+    const consentimientoMenor = await prisma.consentimiento.findFirst({
+      where: {
+        Paciente_idPaciente: pacienteId,
+        tipo: "CONSENTIMIENTO_MENOR_ATENCION",
+        activo: true,
+        vigente_hasta: { gte: inicio }, // <- nombre correcto en DB
+      },
+      include: { responsable: true },     // <- relación correcta
+      orderBy: { vigente_hasta: "desc" },
+    })
+
+    if (!consentimientoMenor) {
+      await logAudit({
+        actorUserId: ctx.usuarioId,
+        entity: "Cita",
+        entityId: citaId,
+        action: "TRANSITION_START_BLOCKED",
+        payload: { reason: "CONSENT_REQUIRED_FOR_MINOR", pacienteId, edadAlInicio },
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+      })
+      throw {
+        status: 422,
+        code: "CONSENT_REQUIRED_FOR_MINOR",
+        message: "Se requiere consentimiento vigente para iniciar la consulta.",
+        details: { pacienteId, edadAlInicio },
+      }
+    }
+
+    await logAudit({
+      actorUserId: ctx.usuarioId,
+      entity: "Cita",
+      entityId: citaId,
+      action: "MINOR_CONSENT_VERIFIED",
+      payload: {
+        consentimientoId: consentimientoMenor.idConsentimiento,
+        responsableNombre: consentimientoMenor.responsable
+          ? `${consentimientoMenor.responsable.nombres} ${consentimientoMenor.responsable.apellidos}`.trim()
+          : undefined,
+        edadAlInicio,
+      },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    })
   }
 
-  // Consentimiento de menor vigente a la fecha/hora de la cita
-  const consentimientoVigente = await prisma.consentimiento.findFirst({
-    where: {
-      Paciente_idPaciente: pacienteId,
-      tipo: "CONSENTIMIENTO_MENOR_ATENCION",
-      activo: true,
-      vigente_hasta: { gte: inicio }, // <- nombre correcto en DB
-    },
-    include: { responsable: true },     // <- relación correcta
-    orderBy: { vigente_hasta: "desc" },
-  })
-
-  if (!consentimientoVigente) {
+  // 2. Validar consentimiento de cirugía (si hay procedimientos quirúrgicos)
+  const surgeryValidation = await validateSurgeryConsent(citaId, pacienteId, inicio)
+  
+  if (surgeryValidation.requiresConsent && !surgeryValidation.isValid) {
     await logAudit({
       actorUserId: ctx.usuarioId,
       entity: "Cita",
       entityId: citaId,
       action: "TRANSITION_START_BLOCKED",
-      payload: { reason: "CONSENT_REQUIRED_FOR_MINOR", pacienteId, edadAlInicio },
+      payload: { 
+        reason: "SURGERY_CONSENT_REQUIRED", 
+        pacienteId, 
+        edadAlInicio,
+        errorCode: surgeryValidation.errorCode,
+        patientIsMinor: surgeryValidation.patientIsMinor
+      },
       ip: ctx.ip,
       userAgent: ctx.userAgent,
     })
     throw {
       status: 422,
-      code: "CONSENT_REQUIRED_FOR_MINOR",
-      message: "Se requiere consentimiento vigente para iniciar la consulta.",
-      details: { pacienteId, edadAlInicio },
+      code: surgeryValidation.errorCode || "SURGERY_CONSENT_REQUIRED",
+      message: surgeryValidation.errorMessage || "Se requiere consentimiento de cirugía para iniciar la consulta.",
+      details: { 
+        pacienteId, 
+        edadAlInicio,
+        patientIsMinor: surgeryValidation.patientIsMinor,
+        responsiblePartyId: surgeryValidation.responsiblePartyId
+      },
     }
   }
 
-  await logAudit({
-    actorUserId: ctx.usuarioId,
-    entity: "Cita",
-    entityId: citaId,
-    action: "CONSENT_VERIFIED",
-    payload: {
-      consentimientoId: consentimientoVigente.idConsentimiento,
-      responsableNombre: consentimientoVigente.responsable
-        ? `${consentimientoVigente.responsable.nombres} ${consentimientoVigente.responsable.apellidos}`.trim()
-        : undefined,
-      edadAlInicio,
-    },
-    ip: ctx.ip,
-    userAgent: ctx.userAgent,
-  })
+  // Log surgery consent verification if applicable
+  if (surgeryValidation.requiresConsent && surgeryValidation.isValid && surgeryValidation.consentSummary) {
+    await logAudit({
+      actorUserId: ctx.usuarioId,
+      entity: "Cita",
+      entityId: citaId,
+      action: "SURGERY_CONSENT_VERIFIED",
+      payload: {
+        consentimientoId: surgeryValidation.consentSummary.id,
+        responsableNombre: surgeryValidation.consentSummary.responsableNombre,
+        edadAlInicio,
+        patientIsMinor: surgeryValidation.patientIsMinor,
+      },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    })
+  }
 }
+
 
 function getNewEstado(current: EstadoCita, action: CitaAction): EstadoCita {
   const t: Record<EstadoCita, Partial<Record<CitaAction, EstadoCita>>> = {

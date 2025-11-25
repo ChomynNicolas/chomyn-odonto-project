@@ -495,6 +495,7 @@ model ProcedimientoCatalogo {
   defaultPriceCents  Int?     @map("default_price_cents")
   aplicaDiente       Boolean  @default(false) @map("aplica_diente")
   aplicaSuperficie   Boolean  @default(false) @map("aplica_superficie")
+  esCirugia          Boolean  @default(false) @map("es_cirugia")
   activo             Boolean  @default(true) @map("activo")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
