@@ -10,7 +10,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { User, Phone, MapPin, FileText, Calendar, MoreVertical, AlertTriangle, Activity, Baby } from "lucide-react"
 import type { PatientIdentityDTO, ContactInfoDTO, RiskFlagsDTO, RolNombre } from "@/types/patient"
 import type { RBACPermissions } from "@/lib/utils/rbac"
-import { PatientRiskBanner } from "./shared/PatientRiskBanner"
 import { PatientRiskBadges } from "./shared/PatientRiskBadges"
 import { EditPatientSheet } from "@/components/pacientes/EditPatientSheet"
 import { usePatientData } from "@/lib/hooks/use-patient-data"
@@ -43,7 +42,6 @@ export function PatientHeader({ patient, contacts, riskFlags, currentRole, permi
 
   return (
     <div className="sticky top-0 z-10 bg-background pb-4">
-      {canViewRiskFlags && riskFlags.highSeverityAllergies > 0 && <PatientRiskBanner riskFlags={riskFlags} />}
 
       <Card className="p-6 shadow-sm">
         <div className="flex items-start justify-between">
@@ -109,12 +107,6 @@ export function PatientHeader({ patient, contacts, riskFlags, currentRole, permi
                 <DropdownMenuItem>
                   <Calendar className="h-4 w-4 mr-2" />
                   Agendar Cita
-                </DropdownMenuItem>
-              )}
-              {permissions?.canEditClinicalData && (
-                <DropdownMenuItem>
-                  <Activity className="h-4 w-4 mr-2" />
-                  Iniciar Consulta
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

@@ -156,7 +156,7 @@ export function PatientRiskBadges({ riskFlags, className }: PatientRiskBadgesPro
         })}
 
         {/* Secondary badges - shown when expanded or if no primary badges */}
-        {isOpen && secondaryBadges.length > 0 && (
+        {isOpen && primaryBadges.length < 0 && (
           <div className="flex flex-wrap items-center gap-2">
             {secondaryBadges.map((badge) => {
               const Icon = badge.icon;

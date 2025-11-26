@@ -54,6 +54,7 @@ import { CitaStatusBadge } from "./CitaStatusBadge"
 import { useConsulta } from "./hooks/useConsulta"
 import { useConsultaPermissions } from "./hooks/useConsultaPermissions"
 import type { ConsultaClinicaDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
+import { AnamnesisPendingReviewPanel } from "@/app/(dashboard)/pacientes/[id]/_components/anamnesis/components/AnamnesisPendingReviewPanel"
 
 interface ConsultaClinicaWorkspaceProps {
   citaId: number
@@ -745,6 +746,19 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
     <div className="space-y-6">
       {/* Alertas de seguridad - siempre visible */}
       <PatientSafetyAlerts alergias={consulta.alergias || []} medicaciones={consulta.medicaciones || []} />
+
+      {/* Pending Anamnesis Reviews - Show if there are pending reviews */}
+      {consulta.pacienteId && (userRole === "ADMIN" || userRole === "ODONT") && (
+        <AnamnesisPendingReviewPanel
+          patientId={consulta.pacienteId}
+          canReview={userRole === "ADMIN" || userRole === "ODONT"}
+          onReviewComplete={() => {
+            // Refresh consulta data after review
+            fetchConsulta()
+            refetchAnamnesis()
+          }}
+        />
+      )}
 
       {/* Resumen rápido del paciente */}
       <QuickPatientSummary

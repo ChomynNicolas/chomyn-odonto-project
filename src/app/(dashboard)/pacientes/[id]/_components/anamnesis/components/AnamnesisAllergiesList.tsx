@@ -1,10 +1,10 @@
-// src/app/(dashboard)/pacientes/[id]/_components/anamnesis/components/AnamnesisAllergiesList.tsx
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle } from "lucide-react"
 import type { PatientAnamnesisDTO } from "@/types/patient"
+import { getAllergySevertiyLabel } from "@/lib/translations/allergy"
 import { memo } from "react"
 
 interface AnamnesisAllergiesListProps {
@@ -45,7 +45,7 @@ export const AnamnesisAllergiesList = memo(function AnamnesisAllergiesList({
                 </div>
                 {allergy.allergy.severity && (
                   <Badge variant="destructive" className="text-xs">
-                    {allergy.allergy.severity}
+                    {getAllergySevertiyLabel(allergy.allergy.severity)}
                   </Badge>
                 )}
               </div>
@@ -61,4 +61,3 @@ export const AnamnesisAllergiesList = memo(function AnamnesisAllergiesList({
     </Card>
   )
 })
-

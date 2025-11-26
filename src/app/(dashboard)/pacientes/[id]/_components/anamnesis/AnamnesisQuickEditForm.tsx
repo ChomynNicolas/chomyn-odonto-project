@@ -13,6 +13,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, ExternalLink, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -26,6 +28,10 @@ const quickEditSchema = z.object({
   tieneEnfermedadesCronicas: z.boolean(),
   tieneAlergias: z.boolean(),
   tieneMedicacionActual: z.boolean(),
+  // Outside consultation context
+  editReason: z.string().max(1000).optional(),
+  informationSource: z.enum(["IN_PERSON", "PHONE", "EMAIL", "DOCUMENT", "PATIENT_PORTAL", "OTHER"]).optional(),
+  verifiedWithPatient: z.boolean().optional(),
 })
 
 type QuickEditFormData = z.infer<typeof quickEditSchema>
@@ -56,17 +62,23 @@ export function AnamnesisQuickEditForm({
       tieneEnfermedadesCronicas: initialData?.tieneEnfermedadesCronicas || false,
       tieneAlergias: initialData?.tieneAlergias || false,
       tieneMedicacionActual: initialData?.tieneMedicacionActual || false,
+      editReason: "",
+      informationSource: "IN_PERSON",
+      verifiedWithPatient: false,
     },
   })
 
   const onSubmit = async (data: QuickEditFormData) => {
     setIsSubmitting(true)
     try {
+      // Extract edit context
+      const { editReason, informationSource, verifiedWithPatient, ...anamnesisData } = data
+
       const response = await fetch(`/api/pacientes/${patientId}/anamnesis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
+          ...anamnesisData,
           // Include other required fields from initialData to maintain consistency
           bruxismo: initialData?.bruxismo ?? null,
           higieneCepilladosDia: initialData?.higieneCepilladosDia ?? null,
@@ -76,6 +88,13 @@ export function AnamnesisQuickEditForm({
           tieneHabitosSuccion: initialData?.tieneHabitosSuccion ?? null,
           lactanciaRegistrada: initialData?.lactanciaRegistrada ?? null,
           embarazada: initialData?.embarazada ?? null,
+          // Outside consultation context
+          editContext: {
+            isOutsideConsultation: true,
+            informationSource: informationSource || "IN_PERSON",
+            verifiedWithPatient: verifiedWithPatient || false,
+            reason: editReason || undefined,
+          },
         }),
       })
 
@@ -300,6 +319,81 @@ export function AnamnesisQuickEditForm({
                     </div>
                   </RadioGroup>
                 </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Outside Consultation Context */}
+        <div className="space-y-4 pt-4 border-t">
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Complete la información sobre el origen de estos cambios para el registro de auditoría.
+            </AlertDescription>
+          </Alert>
+
+          <FormField
+            control={form.control}
+            name="editReason"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Razón del cambio</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Describa la razón del cambio (ej: paciente reportó nueva alergia por teléfono)..."
+                    className="resize-none"
+                    rows={3}
+                    {...field}
+                    value={field.value || ""}
+                  />
+                </FormControl>
+                <FormDescription>Opcional pero recomendado para cambios críticos</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="informationSource"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Fuente de información</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || "IN_PERSON"}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccione la fuente" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="IN_PERSON">En persona (no consulta)</SelectItem>
+                    <SelectItem value="PHONE">Llamada telefónica</SelectItem>
+                    <SelectItem value="EMAIL">Correo electrónico</SelectItem>
+                    <SelectItem value="DOCUMENT">Documento médico</SelectItem>
+                    <SelectItem value="PATIENT_PORTAL">Portal del paciente</SelectItem>
+                    <SelectItem value="OTHER">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="verifiedWithPatient"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                <FormControl>
+                  <Checkbox checked={field.value || false} onCheckedChange={field.onChange} />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>He verificado esta información directamente con el paciente</FormLabel>
+                  <FormDescription>
+                    Marque esta casilla si ha confirmado la información directamente con el paciente
+                  </FormDescription>
+                </div>
               </FormItem>
             )}
           />

@@ -1,6 +1,7 @@
 // src/components/audit/AuditLogDetail.tsx
 "use client"
 
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -8,11 +9,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Copy, ExternalLink } from "lucide-react"
+import { Copy, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner"
 import type { AuditLogEntry } from "@/lib/types/audit"
 import { ACTION_LABELS, ENTITY_LABELS, ACTION_COLORS } from "@/lib/types/audit"
@@ -26,6 +28,8 @@ interface AuditLogDetailProps {
 }
 
 export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProps) {
+  const [isMetadataOpen, setIsMetadataOpen] = useState(false)
+
   if (!entry) return null
 
   const formatDate = (dateString: string) => {
@@ -143,44 +147,19 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
               </div>
             </div>
 
-            <Separator />
-
             {/* Cambios Realizados */}
             {entry.metadata && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold">Cambios Realizados</h3>
-                <AuditDiffViewer metadata={entry.metadata} />
-              </div>
-            )}
-
-            <Separator />
-
-            {/* Metadata Completa */}
-            {entry.metadata && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Metadata Completa</h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      copyToClipboard(JSON.stringify(entry.metadata, null, 2), "Metadata")
-                    }
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copiar JSON
-                  </Button>
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold">Cambios Realizados</h3>
+                  <AuditDiffViewer metadata={entry.metadata} />
                 </div>
-                <div className="rounded-md border bg-muted/30 p-4">
-                  <pre className="text-xs overflow-x-auto">
-                    {JSON.stringify(entry.metadata, null, 2)}
-                  </pre>
-                </div>
-              </div>
+              </>
             )}
 
             {/* Información de contexto */}
-            {entry.metadata && (
+            {entry.metadata && (entry.metadata.path || entry.metadata.userAgent || entry.metadata.timestamp) && (
               <>
                 <Separator />
                 <div className="space-y-4">
@@ -206,6 +185,52 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
                     )}
                   </div>
                 </div>
+              </>
+            )}
+
+            {/* Metadata Completa (Colapsable) */}
+            {entry.metadata && (
+              <>
+                <Separator />
+                <Collapsible open={isMetadataOpen} onOpenChange={setIsMetadataOpen}>
+                  <div className="flex items-center justify-between">
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-between px-0 hover:bg-transparent"
+                      >
+                        <h3 className="text-sm font-semibold">Metadata Completa</h3>
+                        {isMetadataOpen ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                  <CollapsibleContent className="pt-4">
+                    <div className="space-y-4">
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            copyToClipboard(JSON.stringify(entry.metadata, null, 2), "Metadata")
+                          }
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copiar JSON
+                        </Button>
+                      </div>
+                      <div className="rounded-md border bg-muted/30 p-4">
+                        <pre className="text-xs overflow-x-auto">
+                          {JSON.stringify(entry.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </>
             )}
           </div>

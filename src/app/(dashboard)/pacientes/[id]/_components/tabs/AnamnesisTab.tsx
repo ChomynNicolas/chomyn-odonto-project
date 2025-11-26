@@ -14,6 +14,12 @@ import type { RolNombre } from "@/types/patient"
 import { AnamnesisDisplayView } from "../anamnesis/anamnesis-display-view"
 import { AnamnesisEditModal } from "../anamnesis/anamnesis-edit-modal"
 import { AnamnesisHistoryView } from "../anamnesis/anamnesis-history-view"
+import { AnamnesisStatusBadge } from "../anamnesis/components/AnamnesisStatusBadge"
+import { AnamnesisPendingReviewPanel } from "../anamnesis/components/AnamnesisPendingReviewPanel"
+import { useQuery } from "@tanstack/react-query"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import type { AnamnesisStatus } from "@/types/anamnesis-outside-consultation"
 
 interface AnamnesisTabProps {
   patientId: number
@@ -40,6 +46,43 @@ export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
     }
     return "NO_ESPECIFICADO" as const
   }, [patientOverview?.patient.gender, anamnesis?.payload])
+
+  // Calculate anamnesis status
+  const anamnesisStatus = useMemo((): AnamnesisStatus => {
+    if (!anamnesis) return "NO_ANAMNESIS"
+    
+    // Check if expired (> 12 months)
+    const updatedAt = new Date(anamnesis.updatedAt)
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+    const isExpired = updatedAt < oneYearAgo
+
+    // Check for pending reviews (we'll fetch this separately)
+    // For now, we'll use a simple calculation
+    // In a real implementation, you'd check the pendingReviews count
+    return isExpired ? "EXPIRED" : "VALID"
+  }, [anamnesis])
+
+  // Fetch pending reviews if anamnesis exists
+  const { data: pendingReviews } = useQuery({
+    queryKey: ["anamnesis", "pending-reviews", patientId],
+    queryFn: async () => {
+      if (!anamnesis) return []
+      const res = await fetch(`/api/pacientes/${patientId}/anamnesis/pending-reviews`)
+      if (!res.ok) return []
+      const data = await res.json()
+      return data.data || []
+    },
+    enabled: !!anamnesis && (currentRole === "ADMIN" || currentRole === "ODONT"),
+  })
+
+  // Update status if there are pending reviews
+  const finalStatus = useMemo((): AnamnesisStatus => {
+    if (pendingReviews && pendingReviews.length > 0) {
+      return "PENDING_REVIEW"
+    }
+    return anamnesisStatus
+  }, [anamnesisStatus, pendingReviews])
 
   // Don't show for receptionists
   if (currentRole === "RECEP") {
@@ -104,6 +147,41 @@ export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Status Header */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AnamnesisStatusBadge status={finalStatus} />
+              {anamnesis && (
+                <div className="text-sm text-muted-foreground">
+                  <span>Última actualización: {format(new Date(anamnesis.updatedAt), "d 'de' MMMM, yyyy 'a las' HH:mm", { locale: es })}</span>
+                  {anamnesis.actualizadoPor && (
+                    <span className="ml-1">por {anamnesis.actualizadoPor.nombreApellido}</span>
+                  )}
+                </div>
+              )}
+            </div>
+            {pendingReviews && pendingReviews.length > 0 && (
+              <Badge variant="destructive" className="animate-pulse">
+                {pendingReviews.length} revisión{pendingReviews.length > 1 ? "es" : ""} pendiente{pendingReviews.length > 1 ? "s" : ""}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pending Reviews Panel */}
+      {canEdit && (
+        <AnamnesisPendingReviewPanel
+          patientId={patientId}
+          canReview={canEdit}
+          onReviewComplete={() => {
+            refetch()
+          }}
+        />
+      )}
+
       {/* Header Card with View Switcher */}
       <Card>
         <CardHeader>

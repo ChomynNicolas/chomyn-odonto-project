@@ -11,6 +11,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -18,8 +24,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Edit, Trash2, Pill, X } from "lucide-react"
+import { Edit, Trash2, Pill } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ConfirmDeleteDialog } from "./ConfirmDeleteDialog"
 
 export interface MedicationEntry {
   id?: number
@@ -52,6 +59,7 @@ export function MedicationEntryCard({
   disabled = false,
 }: MedicationEntryCardProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editedNotes, setEditedNotes] = useState(entry.notes || "")
   const [editedIsActive, setEditedIsActive] = useState(entry.isActive)
 
@@ -94,9 +102,18 @@ export function MedicationEntryCard({
                 <Pill className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">{displayName}</span>
                 {!entry.isActive && (
-                  <Badge variant="secondary" className="text-xs">
-                    Inactiva
-                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="text-xs cursor-help">
+                          Inactiva
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Esta medicación está marcada como inactiva (descontinuada o suspendida)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
               {(displayDose || displayFreq || displayRoute) && (
@@ -111,32 +128,58 @@ export function MedicationEntryCard({
               )}
             </div>
             {!disabled && (
-              <div className="flex items-center gap-2 ml-4">
-                <Switch
-                  checked={entry.isActive}
-                  onCheckedChange={handleToggleActive}
-                  aria-label="Activar/desactivar medicación"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsEditDialogOpen(true)}
-                  aria-label="Editar medicación"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onRemove}
-                  className="text-destructive hover:text-destructive"
-                  aria-label="Eliminar medicación"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              <TooltipProvider>
+                <div className="flex items-center gap-2 ml-4">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <Switch
+                          checked={entry.isActive}
+                          onCheckedChange={handleToggleActive}
+                          aria-label="Activar/desactivar medicación"
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{entry.isActive ? "Marcar como descontinuada" : "Marcar como activa"}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEditDialogOpen(true)}
+                        aria-label="Editar medicación"
+                        className="hover:bg-muted focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Editar medicación</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 focus:ring-2 focus:ring-destructive focus:ring-offset-2"
+                        aria-label="Eliminar medicación"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Eliminar medicación</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
             )}
           </div>
         </CardContent>
@@ -191,6 +234,16 @@ export function MedicationEntryCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={onRemove}
+        itemName={displayName}
+        itemType="medicación"
+        severity="warning"
+        warningMessage="Considere marcar la medicación como inactiva en lugar de eliminarla si el paciente la tomó anteriormente. Esto preserva el historial clínico."
+      />
     </>
   )
 }

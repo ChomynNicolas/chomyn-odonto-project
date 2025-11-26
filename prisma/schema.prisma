@@ -78,6 +78,10 @@ model Usuario {
   DiagnosisStatusHistoryChangedBy     DiagnosisStatusHistory[]   @relation("DiagnosisStatusHistoryChangedBy")
   AnamnesisAuditLogActor              AnamnesisAuditLog[]        @relation("AnamnesisAuditLogActor")
   AnamnesisDeletedBy                  PatientAnamnesis[]         @relation("AnamnesisDeletedBy")
+  AnamnesisLastVerifiedBy             PatientAnamnesis[]         @relation("AnamnesisLastVerifiedBy")
+  AnamnesisReviewedBy                 AnamnesisAuditLog[]         @relation("AnamnesisReviewedBy")
+  AnamnesisPendingReviewCreatedBy     AnamnesisPendingReview[]   @relation("AnamnesisPendingReviewCreatedBy")
+  AnamnesisPendingReviewReviewedBy    AnamnesisPendingReview[]   @relation("AnamnesisPendingReviewReviewedBy")
 
   @@index([rolId])
   @@map("Usuario")
@@ -281,6 +285,7 @@ model Paciente {
   anamnesisActual        PatientAnamnesis?
   anamnesisHistorial     PatientAnamnesisVersion[]
   anamnesisAuditLogs     AnamnesisAuditLog[]
+  anamnesisPendingReviews AnamnesisPendingReview[]
 
   @@map("Paciente")
 }
@@ -1085,6 +1090,22 @@ enum AnamnesisUrgencia {
   URGENCIA
 }
 
+enum InformationSource {
+  IN_PERSON
+  PHONE
+  EMAIL
+  DOCUMENT
+  PATIENT_PORTAL
+  OTHER
+}
+
+enum AnamnesisStatus {
+  VALID
+  EXPIRED
+  PENDING_REVIEW
+  NO_ANAMNESIS
+}
+
 enum AntecedentCategory {
   CARDIOVASCULAR
   ENDOCRINE
@@ -1371,6 +1392,20 @@ model PatientAnamnesis {
   // Auditoría
   auditLogs AnamnesisAuditLog[]
 
+  // Status management
+  status AnamnesisStatus @default(VALID) @map("status")
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  lastVerifiedByUserId Int? @map("Usuario_idUsuario_lastVerifiedBy")
+  lastVerifiedBy Usuario? @relation("AnamnesisLastVerifiedBy", fields: [lastVerifiedByUserId], references: [idUsuario])
+
+  // Pending review flags
+  hasPendingReviews Boolean @default(false) @map("has_pending_reviews")
+  pendingReviewReason String? @map("pending_review_reason")
+  pendingReviewSince DateTime? @map("pending_review_since")
+
+  // Pending reviews
+  pendingReviews AnamnesisPendingReview[]
+
   @@index([tipo])
   @@index([tieneEnfermedadesCronicas, tieneAlergias])
   @@index([urgenciaPercibida])
@@ -1378,6 +1413,8 @@ model PatientAnamnesis {
   @@index([tieneDolorActual, urgenciaPercibida]) // Para filtros de urgencia
   @@index([versionNumber])
   @@index([isDeleted, deletedAt])
+  @@index([status])
+  @@index([hasPendingReviews])
   @@map("PatientAnamnesis")
 }
 
@@ -1469,6 +1506,15 @@ model AnamnesisAuditLog {
   severity   AnamnesisChangeSeverity? @map("severity")
   consultaId Int?                     @map("Consulta_Cita_idCita") // Si el cambio ocurrió en una consulta
 
+  // Context for outside-consultation edits
+  isOutsideConsultation Boolean @default(false) @map("is_outside_consultation")
+  informationSource InformationSource? @map("information_source")
+  verifiedWithPatient Boolean? @map("verified_with_patient")
+  requiresReview Boolean @default(false) @map("requires_review")
+  reviewedAt DateTime? @map("reviewed_at")
+  reviewedByUserId Int? @map("Usuario_idUsuario_reviewedBy")
+  reviewedBy Usuario? @relation("AnamnesisReviewedBy", fields: [reviewedByUserId], references: [idUsuario])
+
   // Versionado
   previousVersionNumber Int? @map("previous_version_number")
   newVersionNumber      Int? @map("new_version_number")
@@ -1478,6 +1524,9 @@ model AnamnesisAuditLog {
 
   // Timestamp
   performedAt DateTime @default(now()) @map("performed_at")
+
+  // Pending reviews
+  pendingReviews AnamnesisPendingReview[]
 
   // Relaciones
   anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
@@ -1515,10 +1564,47 @@ model AnamnesisFieldDiff {
   isCritical Boolean         @default(false) @map("is_critical")
   changeType FieldChangeType @map("change_type")
 
+  requiresReview Boolean @default(false) @map("requires_review")
+  reviewReason String? @map("review_reason")
+
   auditLog AnamnesisAuditLog @relation(fields: [auditLogId], references: [idAnamnesisAuditLog], onDelete: Cascade)
 
   @@index([auditLogId])
   @@index([fieldPath])
   @@index([isCritical])
+  @@index([requiresReview])
   @@map("AnamnesisFieldDiff")
+}
+
+// Pending review tracking for anamnesis changes outside consultation
+model AnamnesisPendingReview {
+  idAnamnesisPendingReview Int @id @default(autoincrement()) @map("idAnamnesisPendingReview")
+  anamnesisId Int @map("PatientAnamnesis_id")
+  pacienteId Int @map("Paciente_idPaciente")
+  auditLogId Int @map("AnamnesisAuditLog_id")
+  fieldPath String @map("field_path")
+  fieldLabel String @map("field_label")
+  oldValue Json? @map("old_value")
+  newValue Json? @map("new_value")
+  reason String @map("reason")
+  severity AnamnesisChangeSeverity @map("severity")
+  createdByUserId Int @map("Usuario_idUsuario_createdBy")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  reviewedAt DateTime? @map("reviewed_at")
+  reviewedByUserId Int? @map("Usuario_idUsuario_reviewedBy")
+  reviewNotes String? @map("review_notes")
+  isApproved Boolean? @map("is_approved")
+
+  anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  auditLog AnamnesisAuditLog @relation(fields: [auditLogId], references: [idAnamnesisAuditLog], onDelete: Cascade)
+  createdBy Usuario @relation("AnamnesisPendingReviewCreatedBy", fields: [createdByUserId], references: [idUsuario])
+  reviewedBy Usuario? @relation("AnamnesisPendingReviewReviewedBy", fields: [reviewedByUserId], references: [idUsuario])
+
+  @@index([anamnesisId, reviewedAt])
+  @@index([pacienteId, reviewedAt])
+  @@index([createdAt])
+  @@index([isApproved])
+  @@map("AnamnesisPendingReview")
 }

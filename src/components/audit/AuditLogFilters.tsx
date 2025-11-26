@@ -1,7 +1,7 @@
 // src/components/audit/AuditLogFilters.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,10 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp, Filter, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Filter, X, Calendar } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { AuditLogFilters } from "@/lib/types/audit"
 import { ACTION_LABELS, ENTITY_LABELS } from "@/lib/types/audit"
+
+/** Presets de rango de fechas para filtrado rápido */
+const DATE_PRESETS = [
+  { label: "Hoy", days: 0 },
+  { label: "24h", days: 1 },
+  { label: "7 días", days: 7 },
+  { label: "30 días", days: 30 },
+] as const
 
 interface AuditLogFiltersProps {
   filters: AuditLogFilters
@@ -28,6 +36,32 @@ interface AuditLogFiltersProps {
 export function AuditLogFilters({ filters, onFiltersChange, onReset }: AuditLogFiltersProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [localFilters, setLocalFilters] = useState<AuditLogFilters>(filters)
+
+  // Sincronizar localFilters cuando cambien los props.filters (navegación, URL, etc.)
+  useEffect(() => {
+    setLocalFilters(filters)
+  }, [filters])
+
+  /** Aplica un preset de rango de fechas */
+  const applyDatePreset = (days: number) => {
+    const now = new Date()
+    const dateTo = now.toISOString()
+    
+    let dateFrom: string
+    if (days === 0) {
+      // "Hoy": desde inicio del día actual
+      const startOfDay = new Date(now)
+      startOfDay.setHours(0, 0, 0, 0)
+      dateFrom = startOfDay.toISOString()
+    } else {
+      // Últimos N días
+      const fromDate = new Date(now)
+      fromDate.setDate(fromDate.getDate() - days)
+      dateFrom = fromDate.toISOString()
+    }
+    
+    setLocalFilters((prev) => ({ ...prev, dateFrom, dateTo }))
+  }
 
   const hasActiveFilters =
     !!localFilters.dateFrom ||
@@ -78,7 +112,26 @@ export function AuditLogFilters({ filters, onFiltersChange, onReset }: AuditLogF
         <CollapsibleContent>
           <CardContent className="pt-0">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Rango de fechas */}
+              {/* Presets de rango de fechas */}
+              <div className="lg:col-span-3 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-4 w-4" />
+                  Rango rápido:
+                </span>
+                {DATE_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyDatePreset(preset.days)}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Rango de fechas manual */}
               <div className="space-y-2">
                 <Label htmlFor="dateFrom">Desde</Label>
                 <Input
@@ -178,7 +231,7 @@ export function AuditLogFilters({ filters, onFiltersChange, onReset }: AuditLogF
                 <Input
                   id="search"
                   type="text"
-                  placeholder="Buscar en acciones, entidades o descripciones..."
+                  placeholder="Buscar en acción, entidad o resumen..."
                   value={localFilters.search || ""}
                   onChange={(e) => updateFilter("search", e.target.value || undefined)}
                 />

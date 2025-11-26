@@ -11,6 +11,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,6 +33,7 @@ import {
 } from "@/components/ui/dialog"
 import { Edit, Trash2, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ConfirmDeleteDialog, type DeleteSeverity } from "./ConfirmDeleteDialog"
 
 export interface AllergyEntry {
   id?: number
@@ -61,6 +68,7 @@ export function AllergyEntryCard({
   disabled = false,
 }: AllergyEntryCardProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editedNotes, setEditedNotes] = useState(entry.notes || "")
   const [editedSeverity, setEditedSeverity] = useState<"MILD" | "MODERATE" | "SEVERE">(
     entry.severity || "MODERATE"
@@ -70,6 +78,13 @@ export function AllergyEntryCard({
 
   const displayName = entry.label || entry.customLabel || "Alergia sin especificar"
   const severity = entry.severity || "MODERATE"
+
+  // Map allergy severity to delete dialog severity
+  const getDeleteSeverity = (): DeleteSeverity => {
+    if (severity === "SEVERE") return "critical"
+    if (severity === "MODERATE") return "warning"
+    return "normal"
+  }
 
   const handleSave = () => {
     onUpdate({
@@ -117,9 +132,18 @@ export function AllergyEntryCard({
                   {severity === "SEVERE" && "Severa"}
                 </Badge>
                 {!entry.isActive && (
-                  <Badge variant="secondary" className="text-xs">
-                    Inactiva
-                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="text-xs cursor-help">
+                          Inactiva
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Esta alergia está marcada como inactiva y no generará alertas clínicas</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
               {entry.reaction && (
@@ -130,32 +154,58 @@ export function AllergyEntryCard({
               )}
             </div>
             {!disabled && (
-              <div className="flex items-center gap-2 ml-4">
-                <Switch
-                  checked={entry.isActive}
-                  onCheckedChange={handleToggleActive}
-                  aria-label="Activar/desactivar alergia"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsEditDialogOpen(true)}
-                  aria-label="Editar alergia"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onRemove}
-                  className="text-destructive hover:text-destructive"
-                  aria-label="Eliminar alergia"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              <TooltipProvider>
+                <div className="flex items-center gap-2 ml-4">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <Switch
+                          checked={entry.isActive}
+                          onCheckedChange={handleToggleActive}
+                          aria-label="Activar/desactivar alergia"
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{entry.isActive ? "Marcar como inactiva" : "Marcar como activa"}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEditDialogOpen(true)}
+                        aria-label="Editar alergia"
+                        className="hover:bg-muted focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Editar alergia</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 focus:ring-2 focus:ring-destructive focus:ring-offset-2"
+                        aria-label="Eliminar alergia"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Eliminar alergia</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
             )}
           </div>
         </CardContent>
@@ -239,6 +289,16 @@ export function AllergyEntryCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={onRemove}
+        itemName={displayName}
+        itemType="alergia"
+        severity={getDeleteSeverity()}
+        warningMessage="Eliminar registros de alergias puede afectar las alertas de seguridad clínica. Considere marcarla como inactiva si el paciente ya no presenta esta alergia."
+      />
     </>
   )
 }

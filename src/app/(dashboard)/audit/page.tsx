@@ -4,8 +4,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { RefreshCw, Download, FileDown } from "lucide-react"
+import { RefreshCw, Download } from "lucide-react"
 import { toast } from "sonner"
 import { AuditLogFilters } from "@/components/audit/AuditLogFilters"
 import { AuditLogTable } from "@/components/audit/AuditLogTable"
@@ -27,7 +26,7 @@ export default function AuditLogPage() {
     const params: AuditFilters = {
       page: Number.parseInt(searchParams.get("page") || "1"),
       limit: Number.parseInt(searchParams.get("limit") || "20"),
-      sortBy: (searchParams.get("sortBy") as any) || "createdAt",
+      sortBy: (searchParams.get("sortBy") as AuditFilters["sortBy"]) || "createdAt",
       sortOrder: (searchParams.get("sortOrder") as "asc" | "desc") || "desc",
     }
     
@@ -119,7 +118,7 @@ export default function AuditLogPage() {
   const handleSort = (field: string) => {
     setFilters((prev) => ({
       ...prev,
-      sortBy: field as any,
+      sortBy: field as AuditFilters["sortBy"],
       sortOrder: prev.sortBy === field && prev.sortOrder === "desc" ? "asc" : "desc",
       page: 1,
     }))
@@ -251,6 +250,7 @@ export default function AuditLogPage() {
             sortBy={filters.sortBy}
             sortOrder={filters.sortOrder}
             onSort={handleSort}
+            onClearFilters={handleResetFilters}
           />
 
           {/* Paginación */}

@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Eye, ChevronUp, ChevronDown } from "lucide-react"
+import { Eye, ChevronUp, ChevronDown, FilterX } from "lucide-react"
 import type { AuditLogEntry, AuditLogResponse } from "@/lib/types/audit"
 import { ACTION_LABELS, ENTITY_LABELS, ACTION_COLORS } from "@/lib/types/audit"
 import { format } from "date-fns"
@@ -24,6 +24,8 @@ interface AuditLogTableProps {
   sortBy?: string
   sortOrder?: "asc" | "desc"
   onSort?: (field: string) => void
+  /** Callback para limpiar filtros desde el empty state */
+  onClearFilters?: () => void
 }
 
 export function AuditLogTable({
@@ -33,6 +35,7 @@ export function AuditLogTable({
   sortBy,
   sortOrder,
   onSort,
+  onClearFilters,
 }: AuditLogTableProps) {
   const getActionLabel = (action: string) => {
     return ACTION_LABELS[action] || action
@@ -55,13 +58,6 @@ export function AuditLogTable({
     }
   }
 
-  const getSummary = (metadata: Record<string, unknown> | null) => {
-    if (!metadata) return "—"
-    if (metadata.summary) return String(metadata.summary)
-    if (metadata.entriesCount) return `${metadata.entriesCount} entrada(s)`
-    return "Ver detalles"
-  }
-
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -74,10 +70,16 @@ export function AuditLogTable({
 
   if (!data || data.data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-8 text-center">
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-8 text-center gap-4">
         <p className="text-sm text-muted-foreground">
           No se encontraron registros de auditoría con los filtros aplicados.
         </p>
+        {onClearFilters && (
+          <Button variant="outline" size="sm" onClick={onClearFilters}>
+            <FilterX className="h-4 w-4 mr-2" />
+            Limpiar filtros
+          </Button>
+        )}
       </div>
     )
   }
@@ -138,7 +140,7 @@ export function AuditLogTable({
                 )}
               </Button>
             </TableHead>
-            <TableHead>
+            <TableHead className="min-w-[200px]">
               <Button
                 variant="ghost"
                 size="sm"
@@ -155,9 +157,7 @@ export function AuditLogTable({
                 )}
               </Button>
             </TableHead>
-            <TableHead>ID Recurso</TableHead>
-            <TableHead>Descripción</TableHead>
-            <TableHead className="w-[100px]">Acciones</TableHead>
+            <TableHead className="w-[80px]">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -184,11 +184,19 @@ export function AuditLogTable({
                 </Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{getEntityLabel(entry.entity)}</Badge>
-              </TableCell>
-              <TableCell className="font-mono text-xs">{entry.entityId}</TableCell>
-              <TableCell className="max-w-[300px] truncate text-sm text-muted-foreground">
-                {getSummary(entry.metadata)}
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="secondary">{getEntityLabel(entry.entity)}</Badge>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      #{entry.entityId}
+                    </span>
+                  </div>
+                  {entry.metadata?.summary && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[250px]">
+                      {String(entry.metadata.summary)}
+                    </span>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 <Button

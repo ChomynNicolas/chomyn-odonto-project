@@ -144,6 +144,14 @@ export const AnamnesisCreateUpdateBodySchema = z.object({
   
   // Consultation link
   consultaId: z.number().int().positive().optional(),
+  
+  // Outside consultation context (optional, for edits outside active consultation)
+  editContext: z.object({
+    isOutsideConsultation: z.boolean().default(false),
+    informationSource: z.enum(["IN_PERSON", "PHONE", "EMAIL", "DOCUMENT", "PATIENT_PORTAL", "OTHER"]).optional(),
+    verifiedWithPatient: z.boolean().optional(),
+    reason: z.string().max(1000).optional(),
+  }).optional(),
 })
 
 export type AnamnesisCreateUpdateBody = z.infer<typeof AnamnesisCreateUpdateBodySchema>

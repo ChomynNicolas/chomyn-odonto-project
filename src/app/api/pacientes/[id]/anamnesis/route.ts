@@ -847,6 +847,38 @@ export async function POST(
 
     console.log("✅ Saved anamnesis ID:", anamnesis.idPatientAnamnesis)
 
+    // Handle outside consultation edits
+    const isOutsideConsultation = !data.consultaId && data.editContext?.isOutsideConsultation
+    if (isOutsideConsultation && !isCreate && data.editContext) {
+      try {
+        const { processOutsideConsultationEdit } = await import(
+          "@/lib/services/anamnesis-outside-consultation.service"
+        )
+        const newState = convertToAnamnesisState(anamnesis)
+        
+        await processOutsideConsultationEdit({
+          anamnesisId: anamnesis.idPatientAnamnesis,
+          pacienteId,
+          previousState,
+          newState,
+          actorId: userId,
+          actorRole,
+          context: {
+            isOutsideConsultation: true,
+            informationSource: data.editContext.informationSource,
+            verifiedWithPatient: data.editContext.verifiedWithPatient,
+            reason: data.editContext.reason,
+            requiresReview: true, // Will be determined by field analysis
+          },
+          headers: req.headers,
+          requestPath: req.nextUrl.pathname,
+        })
+      } catch (outsideEditError) {
+        console.error("[Outside Consultation Edit] Error:", outsideEditError)
+        // Don't fail the request, but log the error
+      }
+    }
+
     // Register in general AuditLog for consistency
     try {
       await writeAudit({
@@ -858,6 +890,7 @@ export async function POST(
           pacienteId,
           versionNumber: anamnesis.versionNumber,
           consultaId: data.consultaId || null,
+          isOutsideConsultation: isOutsideConsultation || false,
         },
         headers: req.headers,
         path: req.nextUrl.pathname,
