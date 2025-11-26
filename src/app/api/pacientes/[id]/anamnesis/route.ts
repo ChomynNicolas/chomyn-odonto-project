@@ -145,7 +145,9 @@ export async function GET(
           label: med.medication.label,
           medicationCatalog: med.medication.medicationCatalog
             ? {
+                idMedicationCatalog: med.medication.medicationCatalog.idMedicationCatalog,
                 name: med.medication.medicationCatalog.name,
+                description: med.medication.medicationCatalog.description,
               }
             : null,
           dose: med.medication.dose,
@@ -153,6 +155,7 @@ export async function GET(
           route: med.medication.route,
           isActive: med.medication.isActive,
         },
+        notes: (med as any).notes || null, // Include notes for customDescription mapping
       })),
       allergies: anamnesis.allergies.map((all) => ({
         idAnamnesisAllergy: all.idAnamnesisAllergy,
@@ -162,6 +165,7 @@ export async function GET(
           label: all.allergy.label,
           allergyCatalog: all.allergy.allergyCatalog
             ? {
+                idAllergyCatalog: all.allergy.allergyCatalog.idAllergyCatalog,
                 name: all.allergy.allergyCatalog.name,
               }
             : null,
@@ -521,6 +525,10 @@ export async function POST(
               },
             })
             medicationId = newMed.idPatientMedication
+            // Store customDescription in notes for custom medications
+            if (medInput.customDescription) {
+              medInput.notes = medInput.customDescription
+            }
           } else {
             throw new Error("Medicación debe tener medicationId, catalogId, o customLabel")
           }
@@ -949,7 +957,9 @@ export async function POST(
           label: med.medication.label,
           medicationCatalog: med.medication.medicationCatalog
             ? {
+                idMedicationCatalog: med.medication.medicationCatalog.idMedicationCatalog,
                 name: med.medication.medicationCatalog.name,
+                description: med.medication.medicationCatalog.description,
               }
             : null,
           dose: med.medication.dose,
@@ -957,6 +967,7 @@ export async function POST(
           route: med.medication.route,
           isActive: med.medication.isActive,
         },
+        notes: (med as any).notes || null, // Include notes for customDescription mapping
       })),
       allergies: anamnesis.allergies.map((all) => ({
         idAnamnesisAllergy: all.idAnamnesisAllergy,
@@ -966,6 +977,7 @@ export async function POST(
           label: all.allergy.label,
           allergyCatalog: all.allergy.allergyCatalog
             ? {
+                idAllergyCatalog: all.allergy.allergyCatalog.idAllergyCatalog,
                 name: all.allergy.allergyCatalog.name,
               }
             : null,

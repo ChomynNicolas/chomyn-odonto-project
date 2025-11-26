@@ -117,7 +117,7 @@ export function AllergyEntryCard({
             : "border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-950/20 opacity-60"
         )}
       >
-        <CardContent className="p-4">
+        <CardContent className="px-4">
           <div className="flex items-start justify-between">
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2">

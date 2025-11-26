@@ -125,19 +125,30 @@ function mapAnamnesisToFormValues(
       isActive: ant.isActive,
       resolvedAt: ant.resolvedAt ?? undefined,
     })),
-    medications: (anamnesis.medications || []).map((m) => ({
-      id: m.idAnamnesisMedication,
-      medicationId: m.medicationId,
-      isActive: m.medication.isActive,
-      notes: undefined,
-      label: m.medication.label || m.medication.medicationCatalog?.name || null,
-      dose: m.medication.dose,
-      freq: m.medication.freq,
-      route: m.medication.route,
-    })),
+    medications: (anamnesis.medications || []).map((m) => {
+      const isFromCatalog = !!m.medication.medicationCatalog
+      const isCustom = !m.medication.medicationCatalog && !!m.medication.label
+      
+      return {
+        id: m.idAnamnesisMedication,
+        medicationId: m.medicationId,
+        catalogId: isFromCatalog ? m.medication.medicationCatalog?.idMedicationCatalog : undefined,
+        customLabel: isCustom ? m.medication.label : undefined,
+        customDescription: isCustom && m.notes ? m.notes : undefined,
+        isActive: m.medication.isActive,
+        notes: isFromCatalog ? m.notes : undefined, // Notes only for catalog medications (not customDescription)
+        label: m.medication.label || m.medication.medicationCatalog?.name || null,
+        description: m.medication.medicationCatalog?.description || null,
+        dose: m.medication.dose,
+        freq: m.medication.freq,
+        route: m.medication.route,
+      }
+    }),
     allergies: (anamnesis.allergies || []).map((a) => ({
       id: a.idAnamnesisAllergy,
       allergyId: a.allergyId,
+      // Include catalogId if the allergy comes from catalog
+      catalogId: a.allergy.allergyCatalog?.idAllergyCatalog ?? undefined,
       severity: a.allergy.severity,
       reaction: a.allergy.reaction ?? undefined,
       isActive: a.allergy.isActive,

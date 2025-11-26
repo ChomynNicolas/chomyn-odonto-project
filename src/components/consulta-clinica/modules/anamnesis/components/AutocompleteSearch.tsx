@@ -4,7 +4,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Input } from "@/components/ui/input"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
@@ -51,10 +50,14 @@ export function AutocompleteSearch({
   const [searchQuery, setSearchQuery] = useState("")
   const [filteredItems, setFilteredItems] = useState<SearchResult[]>(items)
   const [isSearching, setIsSearching] = useState(false)
-  const searchTimeoutRef = useRef<NodeJS.Timeout>()
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const initialLoadRef = useRef(false) // Track if initial load has been done
 
-  // Filter local items when search query changes
+  // Filter local items when search query changes (only if not using external searchFn)
   useEffect(() => {
+    // Skip local filtering if using external search function
+    if (searchFn) return
+
     if (!searchQuery.trim()) {
       setFilteredItems(items)
       return
@@ -67,7 +70,7 @@ export function AutocompleteSearch({
         item.description?.toLowerCase().includes(query)
     )
     setFilteredItems(filtered)
-  }, [items, searchQuery])
+  }, [items, searchQuery, searchFn])
 
   // Handle external search function with debouncing
   const handleSearch = useCallback(
@@ -79,11 +82,6 @@ export function AutocompleteSearch({
       }
 
       searchTimeoutRef.current = setTimeout(async () => {
-        if (!query.trim()) {
-          setIsSearching(false)
-          return
-        }
-
         setIsSearching(true)
         try {
           const results = await searchFn(query)
@@ -98,17 +96,54 @@ export function AutocompleteSearch({
     [searchFn]
   )
 
+  // Reset initial load flag when popover closes
   useEffect(() => {
-    if (searchFn && searchQuery) {
-      handleSearch(searchQuery)
+    if (!open) {
+      initialLoadRef.current = false
+      setSearchQuery("")
     }
+  }, [open])
+
+  // Load initial results when popover opens (only once when it opens)
+  useEffect(() => {
+    if (open && searchFn && !initialLoadRef.current) {
+      initialLoadRef.current = true
+      // Load initial results when popover opens (empty query)
+      // Use a small delay to ensure popover is fully rendered
+      const timer = setTimeout(() => {
+        if (searchFn) {
+          searchFn("").then((results) => {
+            setFilteredItems(results)
+          }).catch((error) => {
+            console.error("Search error:", error)
+          })
+        }
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [open, searchFn]) // Only depend on open and searchFn to prevent loops
+
+  // Handle search when query changes (but not on initial open)
+  useEffect(() => {
+    if (!searchFn || !open) return
+
+    // Skip if this is the initial load (handled by the other useEffect)
+    if (!initialLoadRef.current) return
+
+    // Clear any pending search
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    // Search with current query (empty string is valid for initial load)
+    handleSearch(searchQuery)
 
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current)
       }
     }
-  }, [searchQuery, searchFn, handleSearch])
+  }, [searchQuery, searchFn, handleSearch, open])
 
   const handleSelect = (item: SearchResult) => {
     onSelect(item)
@@ -124,7 +159,9 @@ export function AutocompleteSearch({
     }
   }
 
-  const displayItems = searchFn && searchQuery ? filteredItems : filteredItems
+  // When using searchFn, always use filteredItems (from external search)
+  // When not using searchFn, use filteredItems (from local filtering)
+  const displayItems = filteredItems
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -143,7 +180,7 @@ export function AutocompleteSearch({
         </Button>
       </PopoverTrigger>
       <PopoverContent className={cn("w-[400px] p-0", className)} align="start">
-        <Command shouldFilter={!searchFn}>
+        <Command shouldFilter={searchFn ? false : undefined}>
           <CommandInput
             placeholder={placeholder}
             value={searchQuery}
@@ -186,7 +223,7 @@ export function AutocompleteSearch({
                   className="cursor-pointer text-primary"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  {customOptionLabel}: "{searchQuery}"
+                  {customOptionLabel}: &quot;{searchQuery}&quot;
                 </CommandItem>
               </CommandGroup>
             )}

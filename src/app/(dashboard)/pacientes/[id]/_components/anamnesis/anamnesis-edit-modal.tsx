@@ -55,6 +55,22 @@ export function AnamnesisEditModal({
   // Get patient info for full form
   const { data: patientOverview } = usePatientOverview(patientId)
 
+  // Fetch full patient data to get birthdate (needed for age-based conditional sections)
+  const { data: patientData } = useQuery({
+    queryKey: ["patient", "full", patientId],
+    queryFn: async () => {
+      const res = await fetch(`/api/pacientes/${patientId}`)
+      if (!res.ok) {
+        if (res.status === 404) return null
+        throw new Error("Error al cargar datos del paciente")
+      }
+      const response = await res.json()
+      return response.data
+    },
+    enabled: isOpen && editMode === "full",
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+
   // Fetch full anamnesis data for full edit mode
   const { data: fullAnamnesisData, isLoading: isLoadingFull } = useQuery({
     queryKey: ["patient", "anamnesis", "full", patientId],
@@ -78,9 +94,12 @@ export function AnamnesisEditModal({
     | "NO_ESPECIFICADO"
     | undefined
 
-  // Note: PatientIdentityDTO doesn't include birthDate, only age
-  // The form will use age-based rules instead of exact birth date
-  const patientBirthDate = null
+  // Extract birthdate from patient data (persona.fechaNacimiento)
+  const patientBirthDate = patientData?.persona?.fechaNacimiento 
+    ? (typeof patientData.persona.fechaNacimiento === "string" 
+        ? patientData.persona.fechaNacimiento 
+        : patientData.persona.fechaNacimiento)
+    : null
 
   // Handle close with unsaved changes check
   const handleClose = useCallback(() => {
@@ -134,8 +153,8 @@ export function AnamnesisEditModal({
                 {editMode === "quick"
                   ? "Edición rápida de campos frecuentes."
                   : "Edición completa con todos los campos."}
-              </DialogDescription>
-            </DialogHeader>
+          </DialogDescription>
+        </DialogHeader>
 
             {/* Mode Selector - Compact */}
             <div className="px-6 pb-3">
@@ -160,11 +179,11 @@ export function AnamnesisEditModal({
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
+          <div className="p-6">
               {editMode === "quick" ? (
-                <AnamnesisQuickEditForm
-                  patientId={patientId}
-                  initialData={initialData}
+            <AnamnesisQuickEditForm
+              patientId={patientId}
+              initialData={initialData}
                   onSave={handleSave}
                   onCancel={handleClose}
                 />
@@ -182,12 +201,12 @@ export function AnamnesisEditModal({
                   onSave={handleSave}
                   onCancel={handleClose}
                   isInModal
-                />
+            />
               )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+      </DialogContent>
+    </Dialog>
 
       {/* Close Confirmation Dialog */}
       <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>

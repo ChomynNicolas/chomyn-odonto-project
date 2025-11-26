@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Eye,
   CircleDot,
+  Baby,
 } from "lucide-react"
 import {
   AlertDialog,
@@ -40,6 +41,8 @@ import { AllergiesSection } from "@/components/consulta-clinica/modules/anamnesi
 import { GeneralInformationSection } from "@/components/consulta-clinica/modules/anamnesis/sections/GeneralInformationSection"
 import { MedicalHistorySection } from "@/components/consulta-clinica/modules/anamnesis/sections/MedicalHistorySection"
 import { MedicationsSection } from "@/components/consulta-clinica/modules/anamnesis/sections/MedicationsSection"
+import { WomenSpecificSection } from "@/components/consulta-clinica/modules/anamnesis/sections/WomenSpecificSection"
+import { PediatricSection } from "@/components/consulta-clinica/modules/anamnesis/sections/PediatricSection"
 import { useChangeTracking } from "@/components/consulta-clinica/modules/anamnesis/hooks/useChangeTracking"
 import { useUnsavedChanges } from "@/components/consulta-clinica/modules/anamnesis/hooks/useUnsavedChanges"
 import { OutsideConsultationBanner } from "./components/OutsideConsultationBanner"
@@ -112,25 +115,33 @@ function mapAnamnesisToFormValues(
       isActive: ant.isActive,
       resolvedAt: ant.resolvedAt ?? undefined,
     })),
-    medications: (anamnesis.medications || []).map((m) => ({
-      id: m.idAnamnesisMedication,
-      medicationId: m.medicationId,
-      isActive: m.medication.isActive,
-      notes: undefined,
-      label: m.medication.label || m.medication.medicationCatalog?.name || null,
-      dose: m.medication.dose,
-      freq: m.medication.freq,
-      route: m.medication.route,
-    })),
-    allergies: (anamnesis.allergies || []).map((a) => ({
-      id: a.idAnamnesisAllergy,
-      allergyId: a.allergyId,
-      severity: a.allergy.severity,
-      reaction: a.allergy.reaction ?? undefined,
-      isActive: a.allergy.isActive,
-      notes: undefined,
-      label: a.allergy.label || a.allergy.allergyCatalog?.name || null,
-    })),
+        medications: (anamnesis.medications || []).map((m) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { label, dose, freq, route, ...rest } = {
+            id: m.idAnamnesisMedication,
+            medicationId: m.medicationId,
+            isActive: m.medication.isActive,
+            notes: undefined,
+            label: m.medication.label || m.medication.medicationCatalog?.name || null,
+            dose: m.medication.dose,
+            freq: m.medication.freq,
+            route: m.medication.route,
+          }
+          return rest
+        }),
+        allergies: (anamnesis.allergies || []).map((a) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { label, ...rest } = {
+            id: a.idAnamnesisAllergy,
+            allergyId: a.allergyId,
+            severity: a.allergy.severity,
+            reaction: a.allergy.reaction ?? undefined,
+            isActive: a.allergy.isActive,
+            notes: undefined,
+            label: a.allergy.label || a.allergy.allergyCatalog?.name || null,
+          }
+          return rest
+        }),
     womenSpecific: payload?.womenSpecific as AnamnesisCreateUpdateBody["womenSpecific"] ?? undefined,
     customNotes: (payload?.customNotes as string) ?? "",
   }
@@ -199,10 +210,12 @@ export function OutsideConsultationAnamnesisForm({
       const cleanedData = {
         ...data,
         medications: data.medications?.map((med) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { label, dose, freq, route, ...rest } = med
           return rest
         }),
         allergies: data.allergies?.map((all) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { label, ...rest } = all
           return rest
         }),
@@ -257,27 +270,43 @@ export function OutsideConsultationAnamnesisForm({
 
   // Tab configuration with change indicators
   const tabs = useMemo(() => {
-    const tabConfig = [
+    const baseTabs = [
       { id: "general", label: "General", icon: FileText },
       { id: "allergies", label: "Alergias", icon: AlertTriangle, critical: true },
       { id: "medications", label: "Medicaciones", icon: Pill, critical: true },
       { id: "medical", label: "Antecedentes", icon: Heart },
     ]
 
+    // Add conditional tabs based on age rules
+    if (ageRules.showPediatricQuestions) {
+      baseTabs.push({ id: "pediatric", label: "Pediátrico", icon: Baby })
+    }
+    if (ageRules.canShowWomenSpecific) {
+      baseTabs.push({ id: "women", label: "Mujeres", icon: Heart })
+    }
+
     // Add section change counts
-    return tabConfig.map((tab) => {
-      const sectionChanges = changes.filter(
-        (c) => c.section.toLowerCase() === tab.id || 
-               (tab.id === "medical" && c.section === "medical_history") ||
-               (tab.id === "general" && c.section === "habits")
-      )
+    return baseTabs.map((tab) => {
+      const sectionChanges = changes.filter((c) => {
+        const sectionLower = c.section.toLowerCase()
+        const tabIdLower = tab.id.toLowerCase()
+        
+        // Match exact section or handle special cases
+        if (sectionLower === tabIdLower) return true
+        if (tab.id === "medical" && (c.section === "medical_history" || sectionLower === "medical")) return true
+        if (tab.id === "general" && (c.section === "general" || c.section === "habits")) return true
+        if (tab.id === "women" && (c.section === "women_specific" || sectionLower === "women")) return true
+        if (tab.id === "pediatric" && (c.section === "pediatric" || sectionLower === "pediatric")) return true
+        
+        return false
+      })
       return {
         ...tab,
         changeCount: sectionChanges.length,
         hasCriticalChanges: sectionChanges.some((c) => c.severity === "critical"),
       }
     })
-  }, [changes])
+  }, [changes, ageRules])
 
   return (
     <>
@@ -323,10 +352,17 @@ export function OutsideConsultationAnamnesisForm({
         <FormProvider {...form}>
           <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              {/* Tab List - Responsive */}
+              {/* Tab List - Responsive with dynamic columns */}
               <TabsList className={cn(
                 "grid w-full gap-1 h-auto bg-muted/50 p-1 mb-4",
-                isInModal ? "grid-cols-4" : "grid-cols-2 sm:grid-cols-4"
+                // Dynamic grid columns based on number of tabs
+                isInModal 
+                  ? tabs.length === 4 ? "grid-cols-4" 
+                    : tabs.length === 5 ? "grid-cols-5" 
+                    : "grid-cols-6"
+                  : tabs.length === 4 ? "grid-cols-2 sm:grid-cols-4"
+                    : tabs.length === 5 ? "grid-cols-2 sm:grid-cols-5"
+                    : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
               )}>
                 {tabs.map((tab) => {
                   const Icon = tab.icon
@@ -390,6 +426,26 @@ export function OutsideConsultationAnamnesisForm({
                     ageRules={ageRules}
                   />
                 </TabsContent>
+
+                {ageRules.canShowWomenSpecific && (
+                  <TabsContent value="women" className="mt-0 space-y-4">
+                    <WomenSpecificSection
+                      form={form}
+                      canEdit={true}
+                      ageRules={ageRules}
+                    />
+                  </TabsContent>
+                )}
+
+                {ageRules.showPediatricQuestions && (
+                  <TabsContent value="pediatric" className="mt-0 space-y-4">
+                    <PediatricSection
+                      form={form}
+                      canEdit={true}
+                      ageRules={ageRules}
+                    />
+                  </TabsContent>
+                )}
               </div>
             </Tabs>
 

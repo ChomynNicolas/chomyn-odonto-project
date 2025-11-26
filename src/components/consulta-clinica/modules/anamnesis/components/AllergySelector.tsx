@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Plus, AlertTriangle, Loader2 } from "lucide-react"
+import { Plus, AlertTriangle } from "lucide-react"
 import { AutocompleteSearch, type SearchResult } from "./AutocompleteSearch"
 import { AllergyEntryCard, type AllergyEntry } from "./AllergyEntryCard"
 import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
@@ -44,7 +44,11 @@ interface CatalogAllergy {
 interface PatientAllergyItem {
   idPatientAllergy: number
   label: string | null
-  allergyCatalog: { name: string } | null
+  allergyCatalog: {
+    idAllergyCatalog: number
+    name: string
+    description: string | null
+  } | null
   severity: "MILD" | "MODERATE" | "SEVERE"
   reaction: string | null
   isActive: boolean
@@ -69,26 +73,44 @@ export function AllergySelector({
     reaction: "",
   })
 
-  // Search catalog allergies
+  // Search catalog allergies (also loads all if query is empty)
   const searchCatalog = useCallback(
     async (query: string): Promise<SearchResult[]> => {
-      if (!query.trim()) return []
+      console.log("🔍 [AllergySelector] Searching catalog with query:", query)
       setIsLoadingCatalog(true)
       try {
-        const res = await fetch(
-          `/api/anamnesis/allergies/catalog?search=${encodeURIComponent(query)}&limit=20`
-        )
-        if (!res.ok) throw new Error("Error al buscar en catálogo")
+        const searchParam = query.trim() ? `&search=${encodeURIComponent(query.trim())}` : ""
+        const url = `/api/allergies?limit=20&isActive=true&sortBy=name&sortOrder=asc${searchParam}`
+        console.log("🔍 [AllergySelector] Fetching from:", url)
+        
+        const res = await fetch(url)
+        console.log("🔍 [AllergySelector] Response status:", res.status, res.ok)
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          console.error("❌ [AllergySelector] API error:", errorData)
+          throw new Error(errorData.error || "Error al buscar en catálogo")
+        }
         const data = await res.json()
-        return (data.data as CatalogAllergy[]).map((item) => ({
+        console.log("🔍 [AllergySelector] Response data:", data)
+        
+        if (!data.ok) {
+          console.error("❌ [AllergySelector] Response not ok:", data.error)
+          throw new Error(data.error || "Error al buscar en catálogo")
+        }
+        
+        const results = (data.data as CatalogAllergy[]).map((item) => ({
           id: `catalog-${item.idAllergyCatalog}`,
           label: item.name,
           description: item.description || undefined,
           metadata: { catalogId: item.idAllergyCatalog, type: "catalog" },
         }))
+        
+        console.log("✅ [AllergySelector] Mapped results:", results.length, "items")
+        return results
       } catch (error) {
-        console.error("Error searching catalog:", error)
-        toast.error("Error al buscar en catálogo")
+        console.error("❌ [AllergySelector] Error searching catalog:", error)
+        toast.error(error instanceof Error ? error.message : "Error al buscar en catálogo")
         return []
       } finally {
         setIsLoadingCatalog(false)
@@ -104,8 +126,14 @@ export function AllergySelector({
       setIsLoadingPatient(true)
       try {
         const res = await fetch(`/api/pacientes/${pacienteId}/alergias`)
-        if (!res.ok) throw new Error("Error al buscar alergias del paciente")
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          throw new Error(errorData.error || "Error al buscar alergias del paciente")
+        }
         const data = await res.json()
+        if (!data.ok) {
+          throw new Error(data.error || "Error al buscar alergias del paciente")
+        }
         const allergies = (data.data as PatientAllergyItem[]) || []
         const queryLower = query.toLowerCase()
         const filtered = allergies
@@ -129,6 +157,7 @@ export function AllergySelector({
         }))
       } catch (error) {
         console.error("Error searching patient allergies:", error)
+        // Don't show toast for patient allergies search errors, just return empty
         return []
       } finally {
         setIsLoadingPatient(false)
@@ -140,16 +169,31 @@ export function AllergySelector({
   // Combined search function
   const handleSearch = useCallback(
     async (query: string): Promise<SearchResult[]> => {
+      console.log("🔍 [AllergySelector] handleSearch called with query:", query)
+      
+      // If query is empty, load initial catalog items only
+      if (!query.trim()) {
+        console.log("🔍 [AllergySelector] Empty query, loading initial catalog items")
+        const results = await searchCatalog("")
+        console.log("✅ [AllergySelector] Initial catalog results:", results.length)
+        return results
+      }
+      
+      // Otherwise, search both catalog and patient allergies
+      console.log("🔍 [AllergySelector] Searching both catalog and patient allergies")
       const [catalogResults, patientResults] = await Promise.all([
         searchCatalog(query),
         searchPatientAllergies(query),
       ])
-      return [...patientResults, ...catalogResults]
+      const combined = [...patientResults, ...catalogResults]
+      console.log("✅ [AllergySelector] Combined results:", combined.length, "items")
+      return combined
     },
     [searchCatalog, searchPatientAllergies]
   )
 
   const handleSelect = (result: SearchResult) => {
+    console.log("✅ [AllergySelector] Item selected:", result)
     const metadata = result.metadata as {
       type: "catalog" | "patient"
       catalogId?: number
@@ -160,6 +204,7 @@ export function AllergySelector({
 
     if (metadata.type === "patient" && metadata.allergyId) {
       // Link existing PatientAllergy
+      console.log("🔗 [AllergySelector] Linking existing PatientAllergy:", metadata.allergyId)
       append({
         allergyId: metadata.allergyId,
         severity: metadata.severity || "MODERATE",
@@ -167,13 +212,17 @@ export function AllergySelector({
         isActive: true,
       })
     } else if (metadata.type === "catalog" && metadata.catalogId) {
-      // Create from catalog
+      // Create from catalog - include label for display purposes
+      console.log("📦 [AllergySelector] Adding from catalog:", metadata.catalogId, result.label)
       append({
         catalogId: metadata.catalogId,
-        customLabel: result.label,
+        label: result.label, // Include label for display (from catalog name)
         severity: "MODERATE",
         isActive: true,
       })
+      toast.success(`Alergia "${result.label}" agregada del catálogo`)
+    } else {
+      console.warn("⚠️ [AllergySelector] Unknown metadata type or missing ID:", metadata)
     }
   }
 

@@ -55,6 +55,7 @@ export const AnamnesisMedicationLinkSchema = z.object({
   medicationId: z.number().int().positive().optional(), // For existing PatientMedication
   catalogId: z.number().int().positive().optional(), // For MedicationCatalog
   customLabel: z.string().min(1).max(255).optional(), // For custom entry
+  customDescription: z.string().max(1000).optional(), // For custom entry description
   customDose: z.string().max(100).optional(),
   customFreq: z.string().max(100).optional(),
   customRoute: z.string().max(100).optional(),
@@ -62,6 +63,7 @@ export const AnamnesisMedicationLinkSchema = z.object({
   isActive: z.boolean().default(true),
   // Display fields (from medication relation - for UI only, not sent to server)
   label: z.string().nullable().optional(), // From PatientMedication.label or MedicationCatalog.name
+  description: z.string().nullable().optional(), // From MedicationCatalog.description
   dose: z.string().nullable().optional(), // From PatientMedication.dose
   freq: z.string().nullable().optional(), // From PatientMedication.freq
   route: z.string().nullable().optional(), // From PatientMedication.route
@@ -209,6 +211,7 @@ export const AnamnesisAllergyResponseSchema = z.object({
     idPatientAllergy: z.number().int().positive(),
     label: z.string().nullable(),
     allergyCatalog: z.object({
+      idAllergyCatalog: z.number().int().positive(),
       name: z.string(),
     }).nullable(),
     severity: z.enum(["MILD", "MODERATE", "SEVERE"]),

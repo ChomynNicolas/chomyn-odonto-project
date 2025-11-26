@@ -33,6 +33,7 @@ export interface MedicationEntry {
   medicationId?: number
   catalogId?: number
   customLabel?: string
+  customDescription?: string
   customDose?: string
   customFreq?: string
   customRoute?: string
@@ -40,6 +41,7 @@ export interface MedicationEntry {
   isActive: boolean
   // Display fields (from medication relation)
   label?: string
+  description?: string | null
   dose?: string | null
   freq?: string | null
   route?: string | null
@@ -64,6 +66,7 @@ export function MedicationEntryCard({
   const [editedIsActive, setEditedIsActive] = useState(entry.isActive)
 
   const displayName = entry.label || entry.customLabel || "Medicación sin nombre"
+  const displayDescription = entry.description || entry.customDescription
   const displayDose = entry.dose || entry.customDose
   const displayFreq = entry.freq || entry.customFreq
   const displayRoute = entry.route || entry.customRoute
@@ -116,6 +119,9 @@ export function MedicationEntryCard({
                   </TooltipProvider>
                 )}
               </div>
+              {displayDescription && (
+                <p className="text-sm text-muted-foreground">{displayDescription}</p>
+              )}
               {(displayDose || displayFreq || displayRoute) && (
                 <div className="text-sm text-muted-foreground space-y-1">
                   {displayDose && <p>Dosis: {displayDose}</p>}
