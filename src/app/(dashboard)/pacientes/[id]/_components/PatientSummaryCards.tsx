@@ -10,11 +10,13 @@ import { RestrictedSection } from '@/lib/rbac/guards';
 import { Calendar, Clock, TrendingUp, XCircle, ClipboardList, FileCheck, AlertTriangle } from 'lucide-react';
 import { AnamnesisSummaryCard } from './shared/AnamnesisSummaryCard';
 import type { PatientOverviewDTO, RolNombre } from '@/types/patient';
+import type { RBACPermissions } from '@/lib/utils/rbac';
 
 interface PatientSummaryCardsProps {
   summaryCards: PatientOverviewDTO['summaryCards'];
   riskFlags: PatientOverviewDTO['riskFlags'];
   currentRole: RolNombre;
+  permissions?: RBACPermissions | null;
   patientId: number;
 }
 

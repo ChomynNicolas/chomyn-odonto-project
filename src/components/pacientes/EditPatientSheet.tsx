@@ -13,6 +13,9 @@ import { Textarea } from "@/components/ui/textarea"
 import type { PatientRecord } from "@/lib/types/patient"
 import { patientUpdateBodySchema, type PatientUpdateBody } from "@/app/api/pacientes/[id]/_schemas"
 import { toast } from "sonner"
+import { detectChanges, hasCriticalChanges, getCriticalChanges } from "@/lib/audit/diff-utils"
+import { ConfirmCriticalChangesDialog } from "./ConfirmCriticalChangesDialog"
+import type { PatientChangeRecord, PatientUpdatePayload } from "@/types/patient-edit.types"
 
 interface EditPatientSheetProps {
   open: boolean
@@ -28,6 +31,8 @@ type EditPatientFormData = z.infer<typeof editPatientSchema>
 
 export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: EditPatientSheetProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [pendingChanges, setPendingChanges] = useState<PatientChangeRecord[]>([])
 
   // Get primary email and phone from contacts
   const primaryEmail = patient.contacts?.find((c) => c.type === "EMAIL" && c.isPrimary)?.value || undefined
@@ -86,7 +91,32 @@ export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: Edi
     }
   }, [open, patient, form])
 
-  const onSubmit = async (data: EditPatientFormData) => {
+  // Helper function to convert PatientRecord to plain object for comparison
+  const getPatientOriginalData = (): Record<string, unknown> => {
+    const primaryEmail = patient.contacts?.find((c) => c.type === "EMAIL" && c.isPrimary)?.value || null
+    const primaryPhone = patient.contacts?.find((c) => (c.type === "PHONE" || c.type === "MOBILE") && c.isPrimary)?.value || null
+
+    return {
+      firstName: patient.firstName || "",
+      lastName: patient.lastName || "",
+      secondLastName: patient.secondLastName ?? null,
+      gender: patient.gender ?? null,
+      dateOfBirth: patient.dateOfBirth ? new Date(patient.dateOfBirth).toISOString() : null,
+      documentType: patient.documentType ?? null,
+      documentNumber: patient.documentNumber ?? null,
+      documentCountry: patient.documentCountry ?? null,
+      ruc: patient.ruc ?? null,
+      email: primaryEmail,
+      phone: primaryPhone,
+      address: patient.address ?? null,
+      city: patient.city ?? null,
+      emergencyContactName: patient.emergencyContactName ?? null,
+      emergencyContactPhone: patient.emergencyContactPhone ?? null,
+      status: patient.status ?? null,
+    }
+  }
+
+  const saveChanges = async (data: EditPatientFormData, changes: PatientChangeRecord[], motivo?: string) => {
     setIsSubmitting(true)
 
     try {
@@ -96,13 +126,19 @@ export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: Edi
         updatedAt: patient.updatedAt,
       }
 
+      const payload: PatientUpdatePayload = {
+        data: updateData,
+        changes,
+        ...(motivo && { motivoCambioCritico: motivo }),
+      }
+
       const response = await fetch(`/api/pacientes/${patient.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           ...(patient.etag && { "If-Match": patient.etag }),
         },
-        body: JSON.stringify(updateData),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
@@ -110,15 +146,74 @@ export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: Edi
         throw new Error(errorData.error || "Error al actualizar paciente")
       }
 
-      toast.success("Paciente actualizado correctamente")
-      onSuccess?.()
-      onOpenChange(false)
+      const result = await response.json()
+      if (result.ok) {
+        toast.success("Paciente actualizado correctamente")
+        onSuccess?.()
+        onOpenChange(false)
+      } else {
+        throw new Error(result.error || "Error al actualizar paciente")
+      }
     } catch (error) {
-      console.error("Error updating patient:", error)
+      console.error("[EditPatientSheet] Error updating patient:", error)
       toast.error(error instanceof Error ? error.message : "Error al actualizar paciente")
+      throw error // Re-throw to allow dialog to handle it
     } finally {
       setIsSubmitting(false)
+      setShowConfirmDialog(false)
     }
+  }
+
+  const onSubmit = async (data: EditPatientFormData) => {
+    // Get original patient data for comparison
+    const originalData = getPatientOriginalData()
+
+    // Prepare updated data for comparison (convert null/undefined to consistent format)
+    // Use Record<string, unknown> to avoid strict type checking issues
+    const updatedData: Record<string, unknown> = {
+      firstName: data.firstName || "",
+      lastName: data.lastName || "",
+      secondLastName: data.secondLastName ?? null,
+      gender: data.gender ?? null,
+      dateOfBirth: data.dateOfBirth ?? null,
+      documentType: data.documentType ?? null,
+      documentNumber: data.documentNumber ?? null,
+      documentCountry: data.documentCountry ?? null,
+      ruc: data.ruc ?? null,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      address: data.address ?? null,
+      city: data.city ?? null,
+      emergencyContactName: data.emergencyContactName ?? null,
+      emergencyContactPhone: data.emergencyContactPhone ?? null,
+      status: data.status ?? null,
+    }
+
+    // Detect changes
+    const changes = detectChanges(originalData, updatedData)
+
+    // If no changes, show info and return
+    if (changes.length === 0) {
+      toast.info("No se detectaron cambios")
+      return
+    }
+
+    // Check if there are critical changes
+    if (hasCriticalChanges(changes)) {
+      // Store pending changes and show confirmation dialog
+      setPendingChanges(changes)
+      setShowConfirmDialog(true)
+      return
+    }
+
+    // No critical changes, save directly
+    await saveChanges(data, changes)
+  }
+
+  const handleConfirmCritical = async (motivo: string) => {
+    // Get current form data
+    const currentData = form.getValues()
+    await saveChanges(currentData, pendingChanges, motivo)
   }
 
   return (
@@ -455,6 +550,15 @@ export function EditPatientSheet({ open, onOpenChange, patient, onSuccess }: Edi
           </form>
         </Form>
       </SheetContent>
+
+      {/* Critical Changes Confirmation Dialog */}
+      <ConfirmCriticalChangesDialog
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+        criticalChanges={getCriticalChanges(pendingChanges)}
+        onConfirm={handleConfirmCritical}
+        isLoading={isSubmitting}
+      />
     </Sheet>
   )
 }

@@ -58,6 +58,8 @@ export const pacienteRepo = {
       genero: Genero | string
       fechaNacimiento: Date | null
       direccion: string | null
+      ciudad?: string | null
+      pais?: string | null
       doc: {
         tipo: TipoDocumento | string
         numero: string
@@ -74,6 +76,8 @@ export const pacienteRepo = {
         genero: (data.genero as Genero) ?? null,
         fechaNacimiento: data.fechaNacimiento,
         direccion: data.direccion,
+        ciudad: data.ciudad?.trim() ?? null,
+        pais: data.pais ?? "PY",
         estaActivo: true,
         documento: {
           create: {

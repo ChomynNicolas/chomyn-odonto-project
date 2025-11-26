@@ -62,21 +62,32 @@ export function AuditDiffViewer({ metadata }: AuditDiffViewerProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {metadata.diff.modified?.map((change, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-medium">{change.field}</TableCell>
-                    <TableCell>
-                      <span className="text-red-600 dark:text-red-400 line-through">
-                        {String(change.oldValue ?? "—")}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-green-600 dark:text-green-400 font-medium">
-                        {String(change.newValue ?? "—")}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {metadata.diff.modified?.map((change, idx) => {
+                  const fieldLabel = (change as any).fieldLabel || change.field
+                  const isCritical = (change as any).isCritical || false
+                  return (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium">
+                        {fieldLabel}
+                        {isCritical && (
+                          <Badge variant="destructive" className="ml-2 text-xs">
+                            Crítico
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-red-600 dark:text-red-400 line-through">
+                          {String(change.oldValue ?? "—")}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-green-600 dark:text-green-400 font-medium">
+                          {String(change.newValue ?? "—")}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
                 {(!metadata.diff.modified || metadata.diff.modified.length === 0) && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground">

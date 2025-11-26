@@ -3,6 +3,7 @@
 'use client';
 
 import { usePatientOverview } from '@/lib/hooks/use-patient-overview';
+import { usePatientPermissions } from '@/lib/hooks/use-patient-permissions';
 import { PatientHeader } from './PatientHeader';
 import { PatientSummaryCards } from './PatientSummaryCards';
 import { PatientTabs } from './PatientTabs';
@@ -17,16 +18,14 @@ interface PatientWorkspaceProps {
   patientId: number;
 }
 
-function useCurrentUserRole(): RolNombre {
-  // TODO: Replace with actual session data
-  return 'ADMIN';
-}
-
 export function PatientWorkspace({ patientId }: PatientWorkspaceProps) {
-  const currentRole = useCurrentUserRole();
+  const { role, permissions, isLoading: isLoadingPermissions } = usePatientPermissions();
   const { data, isLoading, error, refetch } = usePatientOverview(patientId);
 
-  if (isLoading) {
+  // Derive currentRole from permissions hook
+  const currentRole: RolNombre = role ?? 'RECEP';
+
+  if (isLoading || isLoadingPermissions) {
     return <PatientWorkspaceSkeleton />;
   }
 
@@ -60,12 +59,13 @@ export function PatientWorkspace({ patientId }: PatientWorkspaceProps) {
         contacts={data.contacts}
         riskFlags={data.riskFlags}
         currentRole={currentRole}
+        permissions={permissions}
         patientId={patientId}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 space-y-6">
-          <PatientTabs patientId={patientId} currentRole={currentRole} />
+          <PatientTabs patientId={patientId} currentRole={currentRole} permissions={permissions} />
         </div>
 
         <div className="lg:col-span-1">
@@ -73,13 +73,14 @@ export function PatientWorkspace({ patientId }: PatientWorkspaceProps) {
             summaryCards={data.summaryCards}
             riskFlags={data.riskFlags}
             currentRole={currentRole}
+            permissions={permissions}
             patientId={patientId}
           />
         </div>
       </div>
 
       {/* Quick Actions Floating Button */}
-      <PatientQuickActions patientId={patientId} currentRole={currentRole} />
+      <PatientQuickActions patientId={patientId} currentRole={currentRole} permissions={permissions} />
     </div>
   );
 }

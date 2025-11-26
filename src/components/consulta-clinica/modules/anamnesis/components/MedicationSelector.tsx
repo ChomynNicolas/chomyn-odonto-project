@@ -3,13 +3,14 @@
 
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { useFieldArray, UseFormReturn } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Plus, Pill, Loader2 } from "lucide-react"
+import { Plus, Pill } from "lucide-react"
 import { AutocompleteSearch, type SearchResult } from "./AutocompleteSearch"
 import { MedicationEntryCard, type MedicationEntry } from "./MedicationEntryCard"
 import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
@@ -59,22 +60,34 @@ export function MedicationSelector({
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false)
   const [customForm, setCustomForm] = useState({
     label: "",
-    dose: "",
-    freq: "",
-    route: "",
+    description: "",
   })
 
-  // Search catalog medications
+  // Search catalog medications (también carga todos si query está vacío)
   const searchCatalog = useCallback(
     async (query: string): Promise<SearchResult[]> => {
-      if (!query.trim()) return []
       setIsLoadingCatalog(true)
       try {
+        // Construir parámetros de búsqueda según el schema del endpoint
+        const searchParam = query.trim() ? `&search=${encodeURIComponent(query.trim())}` : ""
+        
+        // Usar el endpoint correcto /api/medication-catalog con los parámetros correctos
         const res = await fetch(
-          `/api/anamnesis/medications/catalog?search=${encodeURIComponent(query)}&limit=20`
+          `/api/medication-catalog?limit=20&isActive=true&sortBy=name&sortOrder=asc${searchParam}`
         )
-        if (!res.ok) throw new Error("Error al buscar en catálogo")
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          throw new Error(errorData.error || "Error al buscar en catálogo")
+        }
+        
         const data = await res.json()
+        
+        if (!data.ok) {
+          throw new Error(data.error || "Error al buscar en catálogo")
+        }
+        
+        // Mapear la respuesta según el schema MedicationCatalogItem
         return (data.data as CatalogMedication[]).map((item) => ({
           id: `catalog-${item.idMedicationCatalog}`,
           label: item.name,
@@ -83,7 +96,7 @@ export function MedicationSelector({
         }))
       } catch (error) {
         console.error("Error searching catalog:", error)
-        toast.error("Error al buscar en catálogo")
+        toast.error(error instanceof Error ? error.message : "Error al buscar en catálogo")
         return []
       } finally {
         setIsLoadingCatalog(false)
@@ -99,8 +112,18 @@ export function MedicationSelector({
       setIsLoadingPatient(true)
       try {
         const res = await fetch(`/api/pacientes/${pacienteId}/medicacion`)
-        if (!res.ok) throw new Error("Error al buscar medicaciones del paciente")
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          throw new Error(errorData.error || "Error al buscar medicaciones del paciente")
+        }
+        
         const data = await res.json()
+        
+        if (!data.ok) {
+          throw new Error(data.error || "Error al buscar medicaciones del paciente")
+        }
+        
         const medications = (data.data as PatientMedicationItem[]) || []
         const queryLower = query.toLowerCase()
         const filtered = medications
@@ -111,6 +134,7 @@ export function MedicationSelector({
                 .includes(queryLower) && med.isActive
           )
           .slice(0, 10)
+          
         return filtered.map((med) => ({
           id: `patient-${med.idPatientMedication}`,
           label: med.label || med.medicationCatalog?.name || "Sin nombre",
@@ -127,6 +151,7 @@ export function MedicationSelector({
         }))
       } catch (error) {
         console.error("Error searching patient medications:", error)
+        // No mostrar toast para errores de búsqueda de paciente, solo retornar vacío
         return []
       } finally {
         setIsLoadingPatient(false)
@@ -138,10 +163,18 @@ export function MedicationSelector({
   // Combined search function
   const handleSearch = useCallback(
     async (query: string): Promise<SearchResult[]> => {
+      // Si el query está vacío, cargar solo el catálogo inicial
+      if (!query.trim()) {
+        return await searchCatalog("")
+      }
+      
+      // Si hay query, buscar en ambos: catálogo y medicaciones del paciente
       const [catalogResults, patientResults] = await Promise.all([
         searchCatalog(query),
         searchPatientMedications(query),
       ])
+      
+      // Priorizar medicaciones del paciente sobre el catálogo
       return [...patientResults, ...catalogResults]
     },
     [searchCatalog, searchPatientMedications]
@@ -158,27 +191,34 @@ export function MedicationSelector({
     }
 
     if (metadata.type === "patient" && metadata.medicationId) {
-      // Link existing PatientMedication
+      // Vincular PatientMedication existente
       append({
         medicationId: metadata.medicationId,
         isActive: true,
+        // Incluir label para display (desde PatientMedication)
+        label: result.label,
+        dose: metadata.dose ?? undefined,
+        freq: metadata.freq ?? undefined,
+        route: metadata.route ?? undefined,
       })
+      toast.success(`Medicación "${result.label}" agregada`)
     } else if (metadata.type === "catalog" && metadata.catalogId) {
-      // Create from catalog
+      // Crear desde catálogo - incluir label y description para display
       append({
         catalogId: metadata.catalogId,
-        customLabel: result.label,
         isActive: true,
+        // Incluir label y description para display (desde MedicationCatalog)
+        label: result.label,
+        description: result.description || undefined,
       })
+      toast.success(`Medicación "${result.label}" agregada del catálogo`)
     }
   }
 
   const handleCustomEntry = (query: string) => {
     setCustomForm({
       label: query,
-      dose: "",
-      freq: "",
-      route: "",
+      description: "",
     })
     setIsCustomDialogOpen(true)
   }
@@ -191,14 +231,12 @@ export function MedicationSelector({
 
     append({
       customLabel: customForm.label.trim(),
-      customDose: customForm.dose.trim() || undefined,
-      customFreq: customForm.freq.trim() || undefined,
-      customRoute: customForm.route.trim() || undefined,
+      customDescription: customForm.description.trim() || undefined,
       isActive: true,
     })
 
     setIsCustomDialogOpen(false)
-    setCustomForm({ label: "", dose: "", freq: "", route: "" })
+    setCustomForm({ label: "", description: "" })
     toast.success("Medicación personalizada agregada")
   }
 
@@ -219,13 +257,15 @@ export function MedicationSelector({
       medicationId: value.medicationId,
       catalogId: value.catalogId,
       customLabel: value.customLabel,
+      customDescription: value.customDescription,
       customDose: value.customDose,
       customFreq: value.customFreq,
       customRoute: value.customRoute,
       notes: value.notes,
       isActive: value.isActive ?? true,
-      // Include display fields if available (from loaded anamnesis)
+      // Incluir campos de display si están disponibles (de anamnesis cargada)
       label: value.label ?? undefined,
+      description: value.description ?? undefined,
       dose: value.dose ?? undefined,
       freq: value.freq ?? undefined,
       route: value.route ?? undefined,
@@ -308,43 +348,22 @@ export function MedicationSelector({
                 required
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="custom-dose">Dosis</Label>
-                <Input
-                  id="custom-dose"
-                  value={customForm.dose}
-                  onChange={(e) =>
-                    setCustomForm({ ...customForm, dose: e.target.value })
-                  }
-                  placeholder="Ej: 500mg"
-                  maxLength={100}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="custom-freq">Frecuencia</Label>
-                <Input
-                  id="custom-freq"
-                  value={customForm.freq}
-                  onChange={(e) =>
-                    setCustomForm({ ...customForm, freq: e.target.value })
-                  }
-                  placeholder="Ej: Cada 8h"
-                  maxLength={100}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="custom-route">Vía</Label>
-                <Input
-                  id="custom-route"
-                  value={customForm.route}
-                  onChange={(e) =>
-                    setCustomForm({ ...customForm, route: e.target.value })
-                  }
-                  placeholder="Ej: Oral"
-                  maxLength={100}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="custom-description">Descripción</Label>
+              <Textarea
+                id="custom-description"
+                value={customForm.description}
+                onChange={(e) =>
+                  setCustomForm({ ...customForm, description: e.target.value })
+                }
+                placeholder="Descripción opcional del medicamento..."
+                rows={4}
+                maxLength={1000}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                {customForm.description.length}/1000 caracteres
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -352,7 +371,7 @@ export function MedicationSelector({
               variant="outline"
               onClick={() => {
                 setIsCustomDialogOpen(false)
-                setCustomForm({ label: "", dose: "", freq: "", route: "" })
+                setCustomForm({ label: "", description: "" })
               }}
             >
               Cancelar
@@ -366,4 +385,3 @@ export function MedicationSelector({
     </div>
   )
 }
-

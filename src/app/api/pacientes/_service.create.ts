@@ -39,6 +39,8 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
       genero: generoDB,
       fechaNacimiento: body.fechaNacimiento ? new Date(body.fechaNacimiento) : null,
       direccion: body.direccion ?? null,
+      ciudad: body.ciudad?.trim() ?? null,
+      pais: body.pais ?? "PY",
       doc: {
         tipo: body.tipoDocumento ?? "CI",
         numero: body.numeroDocumento.trim(),
@@ -81,9 +83,8 @@ export async function createPaciente(body: PacienteCreateBody, actorUserId: numb
     }
 
     // 3) Paciente (metadatos)
+    // Nota: ciudad y pais ahora se guardan directamente en Persona.ciudad y Persona.pais
     const notasJson: Record<string, unknown> = {}
-    if (body.ciudad) notasJson.ciudad = body.ciudad
-    if (body.pais) notasJson.pais = body.pais
     if (body.observaciones) notasJson.observaciones = body.observaciones
 
     const paciente = await pacienteRepo.createPaciente(tx, {

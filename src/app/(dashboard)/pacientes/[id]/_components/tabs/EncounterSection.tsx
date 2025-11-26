@@ -4,10 +4,12 @@
 'use client';
 
 import { memo, useMemo } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { DiagnosisItem } from './DiagnosisItem';
-import { Activity, Calendar, User, FileText } from 'lucide-react';
+import { Activity, Calendar, User, FileText, ExternalLink } from 'lucide-react';
 import type { ClinicalHistoryEntryDTO } from '@/types/patient';
 import { formatDate } from '@/lib/utils/patient-helpers';
 
@@ -72,7 +74,21 @@ export const EncounterSection = memo(function EncounterSection({
               )}
             </div>
           </div>
-          <Badge variant="outline">{entry.type}</Badge>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge variant="outline">{entry.type}</Badge>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              aria-label={`Ver detalle completo de la consulta del ${entry.date}`}
+            >
+              <Link href={`/pacientes/${patientId}/consultas/${entry.consultation.citaId}`}>
+                <ExternalLink className="h-3 w-3" />
+                <span className="hidden sm:inline">Ver Detalle</span>
+              </Link>
+            </Button>
+          </div>
         </div>
       </CardHeader>
 

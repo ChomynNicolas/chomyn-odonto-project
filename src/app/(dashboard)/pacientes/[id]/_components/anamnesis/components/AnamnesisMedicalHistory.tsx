@@ -1,0 +1,69 @@
+// src/app/(dashboard)/pacientes/[id]/_components/anamnesis/components/AnamnesisMedicalHistory.tsx
+"use client"
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Activity } from "lucide-react"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import type { PatientAnamnesisDTO } from "@/types/patient"
+import { memo } from "react"
+
+interface AnamnesisMedicalHistoryProps {
+  anamnesis: PatientAnamnesisDTO
+}
+
+export const AnamnesisMedicalHistory = memo(function AnamnesisMedicalHistory({
+  anamnesis,
+}: AnamnesisMedicalHistoryProps) {
+  const activeAntecedents = anamnesis.antecedents?.filter((a) => a.isActive) || []
+
+  return (
+    <Card className="animate-in fade-in slide-in-from-left-2 duration-300">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-primary" />
+          Historia Médica
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {anamnesis.motivoConsulta && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Motivo de Consulta</h4>
+            <p className="text-sm leading-relaxed">{anamnesis.motivoConsulta}</p>
+          </div>
+        )}
+
+        {activeAntecedents.length > 0 ? (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Enfermedades Crónicas</h4>
+            <div className="space-y-2">
+              {activeAntecedents.map((ant) => (
+                <div
+                  key={ant.idAnamnesisAntecedent}
+                  className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 transition-colors hover:bg-muted/70"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">{ant.antecedentCatalog?.name || ant.customName}</div>
+                    {ant.notes && <p className="text-sm text-muted-foreground mt-1">{ant.notes}</p>}
+                    {ant.diagnosedAt && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Diagnosticado: {format(new Date(ant.diagnosedAt), "MMM yyyy", { locale: es })}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">
+                    {ant.antecedentCatalog?.category || ant.customCategory || "Otro"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No hay enfermedades crónicas registradas</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+})
+

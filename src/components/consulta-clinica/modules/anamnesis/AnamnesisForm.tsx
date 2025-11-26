@@ -1,16 +1,25 @@
 // src/components/consulta-clinica/modules/anamnesis/AnamnesisForm.tsx
-// Main anamnesis form component with normalized structure
-
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { Loader2, Save, FileText, ArrowUp } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, Save, FileText, ArrowUp, Info, AlertCircle, RotateCcw, CircleDot } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   AnamnesisCreateUpdateBodySchema,
   type AnamnesisCreateUpdateBody,
@@ -24,7 +33,10 @@ import { GeneralInformationSection } from "./sections/GeneralInformationSection"
 import { MedicalHistorySection } from "./sections/MedicalHistorySection"
 import { MedicationsSection } from "./sections/MedicationsSection"
 import { WomenSpecificSection } from "./sections/WomenSpecificSection"
+import { PediatricSection } from "./sections/PediatricSection"
 import { ProgressTracker } from "./components/ProgressTracker"
+import { calculateAge, getAnamnesisRulesByAge, getAgeContextMessage } from "@/lib/utils/age-utils"
+import { useUnsavedChanges } from "./hooks/useUnsavedChanges"
 
 interface AnamnesisFormProps {
   pacienteId: number
@@ -33,13 +45,63 @@ interface AnamnesisFormProps {
   onSave?: () => void
   canEdit?: boolean
   patientGender?: "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
+  patientBirthDate?: Date | string | null // Nueva prop
   anamnesisContext?: AnamnesisContext | null
   isLoadingAnamnesis?: boolean
 }
 
-// Helper function to map anamnesis response to form values (moved outside component to avoid re-creation)
-function mapAnamnesisToFormValues(anamnesis: AnamnesisResponse, consultaId?: number): AnamnesisCreateUpdateBody {
-  return {
+// Helper function to map anamnesis response to form values
+function mapAnamnesisToFormValues(
+  anamnesis: AnamnesisResponse,
+  consultaId?: number
+): AnamnesisCreateUpdateBody {
+  // Extract payload with type safety
+  const payload = anamnesis.payload as Record<string, any> | null
+  const womenSpecificPayload = payload?.womenSpecific as
+    | {
+        embarazada?: boolean | null
+        semanasEmbarazo?: number | null
+        ultimaMenstruacion?: string | null
+        planificacionFamiliar?: string | null
+      }
+    | undefined
+  const pediatricPayload = payload?.pediatricSpecific as
+    | {
+        tieneHabitosSuccion?: boolean | null
+        lactanciaRegistrada?: string | boolean | null
+      }
+    | undefined
+
+  // Women-specific: prioritize payload, then direct field (backward compatibility)
+  const womenSpecific = womenSpecificPayload
+    ? {
+        embarazada: womenSpecificPayload.embarazada ?? anamnesis.embarazada ?? null,
+        semanasEmbarazo: womenSpecificPayload.semanasEmbarazo ?? null,
+        ultimaMenstruacion: womenSpecificPayload.ultimaMenstruacion ?? null,
+        planificacionFamiliar: womenSpecificPayload.planificacionFamiliar ?? "",
+      }
+    : anamnesis.embarazada !== null && anamnesis.embarazada !== undefined
+    ? {
+        embarazada: anamnesis.embarazada,
+        semanasEmbarazo: null,
+        ultimaMenstruacion: null,
+        planificacionFamiliar: "",
+      }
+    : undefined
+
+  // Pediatric-specific: prioritize payload, then direct field (backward compatibility)
+  // For lactanciaRegistrada: if it comes as enum string from payload, use it; if boolean from DB, leave undefined
+  const lactanciaRegistrada =
+    pediatricPayload?.lactanciaRegistrada !== undefined && pediatricPayload?.lactanciaRegistrada !== null
+      ? pediatricPayload.lactanciaRegistrada
+      : undefined // Don't convert old boolean to enum, let user select
+
+  const tieneHabitosSuccion =
+    pediatricPayload?.tieneHabitosSuccion !== undefined
+      ? pediatricPayload.tieneHabitosSuccion
+      : anamnesis.tieneHabitosSuccion ?? undefined
+
+  const mappedData = {
     motivoConsulta: anamnesis.motivoConsulta || "",
     tieneDolorActual: anamnesis.tieneDolorActual,
     dolorIntensidad: anamnesis.dolorIntensidad ?? undefined,
@@ -52,8 +114,8 @@ function mapAnamnesisToFormValues(anamnesis: AnamnesisResponse, consultaId?: num
     higieneCepilladosDia: anamnesis.higieneCepilladosDia ?? undefined,
     usaHiloDental: anamnesis.usaHiloDental ?? undefined,
     ultimaVisitaDental: anamnesis.ultimaVisitaDental ?? undefined,
-    tieneHabitosSuccion: anamnesis.tieneHabitosSuccion ?? undefined,
-    lactanciaRegistrada: anamnesis.lactanciaRegistrada ?? undefined,
+    tieneHabitosSuccion,
+    lactanciaRegistrada,
     antecedents: (anamnesis.antecedents || []).map((ant) => ({
       antecedentId: ant.antecedentId ?? undefined,
       customName: ant.customName ?? undefined,
@@ -63,39 +125,43 @@ function mapAnamnesisToFormValues(anamnesis: AnamnesisResponse, consultaId?: num
       isActive: ant.isActive,
       resolvedAt: ant.resolvedAt ?? undefined,
     })),
-    medications: (anamnesis.medications || []).map((m) => ({
-      id: m.idAnamnesisMedication,
-      medicationId: m.medicationId,
-      isActive: m.medication.isActive,
-      notes: undefined,
-      // Include display fields from medication relation
-      label: m.medication.label || m.medication.medicationCatalog?.name || null,
-      dose: m.medication.dose,
-      freq: m.medication.freq,
-      route: m.medication.route,
-    })),
+    medications: (anamnesis.medications || []).map((m) => {
+      const isFromCatalog = !!m.medication.medicationCatalog
+      const isCustom = !m.medication.medicationCatalog && !!m.medication.label
+      
+      return {
+        id: m.idAnamnesisMedication,
+        medicationId: m.medicationId,
+        catalogId: isFromCatalog ? m.medication.medicationCatalog?.idMedicationCatalog : undefined,
+        customLabel: isCustom ? m.medication.label : undefined,
+        customDescription: isCustom && m.notes ? m.notes : undefined,
+        isActive: m.medication.isActive,
+        notes: isFromCatalog ? m.notes : undefined, // Notes only for catalog medications (not customDescription)
+        label: m.medication.label || m.medication.medicationCatalog?.name || null,
+        description: m.medication.medicationCatalog?.description || null,
+        dose: m.medication.dose,
+        freq: m.medication.freq,
+        route: m.medication.route,
+      }
+    }),
     allergies: (anamnesis.allergies || []).map((a) => ({
       id: a.idAnamnesisAllergy,
       allergyId: a.allergyId,
+      // Include catalogId if the allergy comes from catalog
+      catalogId: a.allergy.allergyCatalog?.idAllergyCatalog ?? undefined,
       severity: a.allergy.severity,
       reaction: a.allergy.reaction ?? undefined,
       isActive: a.allergy.isActive,
       notes: undefined,
-      // Include display field from allergy relation
       label: a.allergy.label || a.allergy.allergyCatalog?.name || null,
     })),
-    womenSpecific:
-      anamnesis.embarazada !== null && anamnesis.embarazada !== undefined
-        ? {
-            embarazada: anamnesis.embarazada,
-            semanasEmbarazo: null,
-            ultimaMenstruacion: null,
-            planificacionFamiliar: "",
-          }
-        : undefined,
-    customNotes: ((anamnesis.payload as Record<string, unknown>)?.customNotes as string | undefined) ?? "",
+    womenSpecific,
+    customNotes: (payload?.customNotes as string | undefined) ?? "",
     consultaId: consultaId,
   }
+
+  console.log("🔍 Mapped data from DB:", mappedData)
+  return mappedData
 }
 
 export function AnamnesisForm({
@@ -104,12 +170,15 @@ export function AnamnesisForm({
   initialData,
   onSave,
   canEdit = true,
-  patientGender,
+  patientGender = "NO_ESPECIFICADO",
+  patientBirthDate,
   anamnesisContext,
   isLoadingAnamnesis = false,
 }: AnamnesisFormProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false)
+  const [showErrorSummary, setShowErrorSummary] = useState(false)
   const { config } = useAnamnesisConfig()
 
   const generalRef = useRef<HTMLDivElement>(null)
@@ -117,6 +186,21 @@ export function AnamnesisForm({
   const medicationsRef = useRef<HTMLDivElement>(null)
   const allergiesRef = useRef<HTMLDivElement>(null)
   const womenRef = useRef<HTMLDivElement>(null)
+  const pediatricRef = useRef<HTMLDivElement>(null)
+  const errorSummaryRef = useRef<HTMLDivElement>(null)
+
+  // Calcular edad y reglas de visualización
+  const ageInfo = useMemo(() => {
+    return calculateAge(patientBirthDate ?? null)
+  }, [patientBirthDate])
+
+  const ageRules = useMemo(() => {
+    return getAnamnesisRulesByAge(ageInfo, patientGender)
+  }, [ageInfo, patientGender])
+
+  const ageContextMessage = useMemo(() => {
+    return getAgeContextMessage(ageInfo)
+  }, [ageInfo])
 
   const form = useForm<AnamnesisCreateUpdateBody>({
     resolver: zodResolver(AnamnesisCreateUpdateBodySchema),
@@ -144,14 +228,103 @@ export function AnamnesisForm({
     },
   })
 
-  // Load initial data - use data passed from parent (no duplicate fetching)
+  // Track form dirty state and errors
+  const { isDirty, errors, isValid } = form.formState
+  const hasErrors = Object.keys(errors).length > 0
+
+  // Unsaved changes warning
+  const { hasUnsavedChanges, resetUnsavedChanges } = useUnsavedChanges({
+    isDirty,
+    enabled: canEdit,
+    warningMessage: "Tiene cambios sin guardar en la anamnesis. ¿Está seguro que desea salir?",
+  })
+
+  // Load initial data
   useEffect(() => {
     if (initialData) {
       form.reset(mapAnamnesisToFormValues(initialData, consultaId))
+      resetUnsavedChanges()
     }
-    // If no initialData, form will use default values (empty form for new anamnesis)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pacienteId, consultaId, initialData])
+
+  // Get error messages for display
+  const getErrorMessages = useCallback(() => {
+    const messages: { field: string; message: string }[] = []
+    
+    if (errors.motivoConsulta) {
+      messages.push({ field: "Motivo de consulta", message: errors.motivoConsulta.message || "Campo requerido" })
+    }
+    if (errors.dolorIntensidad) {
+      messages.push({ field: "Intensidad del dolor", message: errors.dolorIntensidad.message || "Valor inválido" })
+    }
+    if (errors.antecedents) {
+      messages.push({ field: "Antecedentes", message: "Revise los antecedentes médicos" })
+    }
+    if (errors.medications) {
+      messages.push({ field: "Medicaciones", message: "Revise las medicaciones" })
+    }
+    if (errors.allergies) {
+      messages.push({ field: "Alergias", message: "Revise las alergias" })
+    }
+    if (errors.womenSpecific) {
+      messages.push({ field: "Información para mujeres", message: "Revise la información específica" })
+    }
+    
+    return messages
+  }, [errors])
+
+  // Scroll to first error field
+  const scrollToFirstError = useCallback(() => {
+    const firstErrorKey = Object.keys(errors)[0]
+    if (!firstErrorKey) return
+
+    // Map error keys to section refs
+    const errorToRef: Record<string, React.RefObject<HTMLDivElement | null>> = {
+      motivoConsulta: generalRef,
+      tieneDolorActual: generalRef,
+      dolorIntensidad: generalRef,
+      urgenciaPercibida: generalRef,
+      tieneEnfermedadesCronicas: medicalRef,
+      antecedents: medicalRef,
+      expuestoHumoTabaco: medicalRef,
+      bruxismo: medicalRef,
+      tieneMedicacionActual: medicationsRef,
+      medications: medicationsRef,
+      tieneAlergias: allergiesRef,
+      allergies: allergiesRef,
+      womenSpecific: womenRef,
+    }
+
+    const targetRef = errorToRef[firstErrorKey]
+    if (targetRef?.current) {
+      targetRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }, [errors])
+
+  // Handle form validation errors
+  const handleInvalidSubmit = useCallback(() => {
+    setShowErrorSummary(true)
+    scrollToFirstError()
+    
+    // Scroll to error summary first
+    setTimeout(() => {
+      errorSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 100)
+  }, [scrollToFirstError])
+
+  // Handle discard changes
+  const handleDiscardChanges = useCallback(() => {
+    if (initialData) {
+      form.reset(mapAnamnesisToFormValues(initialData, consultaId))
+    } else {
+      form.reset()
+    }
+    resetUnsavedChanges()
+    setShowDiscardDialog(false)
+    setShowErrorSummary(false)
+    toast.info("Cambios descartados")
+  }, [form, initialData, consultaId, resetUnsavedChanges])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -172,44 +345,71 @@ export function AnamnesisForm({
   const allergies = form.watch("allergies")
   const womenSpecific = form.watch("womenSpecific")
 
-  const sections = [
-    {
-      id: "general",
-      label: "Información General",
-      isComplete:
-        !!motivoConsulta &&
-        (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined)),
-      ref: generalRef,
-    },
-    {
-      id: "medical",
-      label: "Antecedentes Médicos",
-      isComplete: !tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0),
-      ref: medicalRef,
-    },
-    {
-      id: "medications",
-      label: "Medicación Actual",
-      isComplete: !tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0),
-      ref: medicationsRef,
-    },
-    {
-      id: "allergies",
-      label: "Alergias",
-      isComplete: !tieneAlergias || (tieneAlergias && allergies && allergies.length > 0),
-      ref: allergiesRef,
-    },
-    ...(patientGender === "FEMENINO"
-      ? [
-          {
-            id: "women",
-            label: "Información para Mujeres",
-            isComplete: womenSpecific?.embarazada !== null && womenSpecific?.embarazada !== undefined,
-            ref: womenRef,
-          },
-        ]
-      : []),
-  ]
+  // Secciones dinámicas según edad y género
+  const sections = useMemo(() => {
+    const baseSections = [
+      {
+        id: "general",
+        label: "Información General",
+        isComplete:
+          !!motivoConsulta &&
+          (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined)),
+        ref: generalRef,
+      },
+      {
+        id: "medical",
+        label: "Antecedentes Médicos",
+        isComplete: !tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0),
+        ref: medicalRef,
+      },
+      {
+        id: "medications",
+        label: "Medicación Actual",
+        isComplete: !tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0),
+        ref: medicationsRef,
+      },
+      {
+        id: "allergies",
+        label: "Alergias",
+        isComplete: !tieneAlergias || (tieneAlergias && allergies && allergies.length > 0),
+        ref: allergiesRef,
+      },
+    ]
+
+    // Agregar sección pediátrica si aplica
+    if (ageRules.showPediatricQuestions) {
+      baseSections.push({
+        id: "pediatric",
+        label: "Información Pediátrica",
+        isComplete: true, // Ajustar según campos requeridos
+        ref: pediatricRef,
+      })
+    }
+
+    // Agregar sección de mujeres si aplica
+    if (ageRules.canShowWomenSpecific) {
+      baseSections.push({
+        id: "women",
+        label: "Información para Mujeres",
+        isComplete: womenSpecific?.embarazada !== null && womenSpecific?.embarazada !== undefined,
+        ref: womenRef,
+      })
+    }
+
+    return baseSections
+  }, [
+    motivoConsulta,
+    tieneDolorActual,
+    dolorIntensidad,
+    tieneEnfermedadesCronicas,
+    antecedents,
+    tieneMedicacionActual,
+    medications,
+    tieneAlergias,
+    allergies,
+    womenSpecific,
+    ageRules,
+  ])
 
   const handleSectionClick = (sectionId: string) => {
     const section = sections.find((s) => s.id === sectionId)
@@ -229,8 +429,12 @@ export function AnamnesisForm({
     }
 
     setIsSaving(true)
+    setShowErrorSummary(false)
+    
     try {
-      // Clean display fields from medications and allergies before sending (these are UI-only)
+      console.log("📤 Submitting data:", data)
+
+      // Limpiar campos según edad/género antes de enviar
       const cleanedData = {
         ...data,
         medications: data.medications?.map((med) => {
@@ -243,8 +447,12 @@ export function AnamnesisForm({
           const { label, ...rest } = all
           return rest
         }),
+        // Eliminar womenSpecific si no aplica por edad
+        womenSpecific: ageRules.canShowWomenSpecific ? data.womenSpecific : undefined,
         consultaId,
       }
+
+      console.log("📦 Cleaned data to send:", cleanedData)
 
       const res = await fetch(`/api/pacientes/${pacienteId}/anamnesis`, {
         method: "POST",
@@ -257,6 +465,13 @@ export function AnamnesisForm({
         throw new Error(error.error || "Error al guardar anamnesis")
       }
 
+      const responseData = await res.json()
+      console.log("✅ Response from server:", responseData)
+
+      // Reset form state after successful save
+      form.reset(data)
+      resetUnsavedChanges()
+      
       toast.success("Anamnesis guardada correctamente")
       onSave?.()
     } catch (error) {
@@ -279,8 +494,6 @@ export function AnamnesisForm({
     return <AnamnesisFormSkeleton />
   }
 
-  const showWomenSection = patientGender === "FEMENINO"
-
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -298,6 +511,17 @@ export function AnamnesisForm({
                     <FileText className="h-5 w-5 text-primary" />
                   </div>
                   Anamnesis
+                  {ageInfo && (
+                    <span className="text-sm font-normal text-muted-foreground">
+                      ({ageInfo.years} año{ageInfo.years !== 1 ? "s" : ""})
+                    </span>
+                  )}
+                  {hasUnsavedChanges && (
+                    <Badge variant="secondary" className="ml-2 gap-1 animate-pulse">
+                      <CircleDot className="h-3 w-3" />
+                      Sin guardar
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription className="text-base leading-relaxed">
                   Información clínica completa del paciente. Los campos marcados con{" "}
@@ -305,6 +529,15 @@ export function AnamnesisForm({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8 pb-8">
+                {/* Alerta contextual por edad */}
+                {ageContextMessage && (
+                  <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Información Contextual</AlertTitle>
+                    <AlertDescription>{ageContextMessage}</AlertDescription>
+                  </Alert>
+                )}
+
                 {!canEditForm && (
                   <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
                     <AlertDescription className="text-amber-900 dark:text-amber-100">
@@ -313,33 +546,92 @@ export function AnamnesisForm({
                   </Alert>
                 )}
 
+                {/* Error Summary */}
+                {showErrorSummary && hasErrors && (
+                  <div ref={errorSummaryRef}>
+                    <Alert variant="destructive" className="border-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error de validación</AlertTitle>
+                      <AlertDescription>
+                        <p className="mb-2">Por favor corrija los siguientes errores antes de guardar:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {getErrorMessages().map((error, index) => (
+                            <li key={index} className="text-sm">
+                              <strong>{error.field}:</strong> {error.message}
+                            </li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
+
                 <FormProvider {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  <form onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)} className="space-y-8">
                     <div ref={generalRef}>
-                      <GeneralInformationSection form={form} canEdit={canEditForm} />
+                      <GeneralInformationSection
+                        form={form}
+                        canEdit={canEditForm}
+                        ageRules={ageRules}
+                        simplifiedLanguage={ageRules.simplifiedLanguage}
+                      />
                     </div>
 
                     <div ref={medicalRef}>
-                      <MedicalHistorySection form={form} canEdit={canEditForm} pacienteId={pacienteId} />
+                      <MedicalHistorySection
+                        form={form}
+                        canEdit={canEditForm}
+                        pacienteId={pacienteId}
+                        ageRules={ageRules}
+                      />
                     </div>
 
                     <div ref={medicationsRef}>
-                      <MedicationsSection form={form} canEdit={canEditForm} pacienteId={pacienteId} />
+                      <MedicationsSection
+                        form={form}
+                        canEdit={canEditForm}
+                        pacienteId={pacienteId}
+                        ageRules={ageRules}
+                      />
                     </div>
 
                     <div ref={allergiesRef}>
                       <AllergiesSection form={form} canEdit={canEditForm} pacienteId={pacienteId} />
                     </div>
 
-                    {showWomenSection && (
+                    {ageRules.showPediatricQuestions && (
+                      <div ref={pediatricRef}>
+                        <PediatricSection form={form} canEdit={canEditForm} ageRules={ageRules} />
+                      </div>
+                    )}
+
+                    {ageRules.canShowWomenSpecific && (
                       <div ref={womenRef}>
-                        <WomenSpecificSection form={form} canEdit={canEditForm} />
+                        <WomenSpecificSection form={form} canEdit={canEditForm} ageRules={ageRules} />
                       </div>
                     )}
 
                     {canEditForm && (
                       <div className="flex justify-end gap-3 pt-6 border-t-2">
-                        <Button type="submit" disabled={isSaving} size="lg" className="min-w-[160px]">
+                        {hasUnsavedChanges && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="lg"
+                            onClick={() => setShowDiscardDialog(true)}
+                            disabled={isSaving}
+                            className="min-w-[140px]"
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Descartar
+                          </Button>
+                        )}
+                        <Button 
+                          type="submit" 
+                          disabled={isSaving} 
+                          size="lg" 
+                          className="min-w-[160px]"
+                        >
                           {isSaving ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -372,6 +664,28 @@ export function AnamnesisForm({
           <ArrowUp className="h-5 w-5" />
         </Button>
       )}
+
+      {/* Discard Changes Confirmation Dialog */}
+      <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Descartar cambios?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tiene cambios sin guardar en la anamnesis. Si descarta los cambios, se perderán
+              todas las modificaciones realizadas desde la última vez que guardó.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDiscardChanges}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Descartar cambios
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

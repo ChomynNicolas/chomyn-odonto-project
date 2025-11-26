@@ -11,6 +11,13 @@ import {
   logAllergyChange,
   type AuditAction,
 } from "@/lib/services/anamnesis-audit.service"
+import {
+  createAnamnesisAuditLog,
+  createAnamnesisSnapshot,
+  type AnamnesisState,
+} from "@/lib/services/anamnesis-audit-complete.service"
+import { AuditAction as GeneralAuditAction, AuditEntity } from "@/lib/audit/actions"
+import { writeAudit } from "@/lib/audit/log"
 
 /**
  * GET /api/pacientes/[id]/anamnesis
@@ -138,7 +145,9 @@ export async function GET(
           label: med.medication.label,
           medicationCatalog: med.medication.medicationCatalog
             ? {
+                idMedicationCatalog: med.medication.medicationCatalog.idMedicationCatalog,
                 name: med.medication.medicationCatalog.name,
+                description: med.medication.medicationCatalog.description,
               }
             : null,
           dose: med.medication.dose,
@@ -146,6 +155,7 @@ export async function GET(
           route: med.medication.route,
           isActive: med.medication.isActive,
         },
+        notes: (med as any).notes || null, // Include notes for customDescription mapping
       })),
       allergies: anamnesis.allergies.map((all) => ({
         idAnamnesisAllergy: all.idAnamnesisAllergy,
@@ -155,6 +165,7 @@ export async function GET(
           label: all.allergy.label,
           allergyCatalog: all.allergy.allergyCatalog
             ? {
+                idAllergyCatalog: all.allergy.allergyCatalog.idAllergyCatalog,
                 name: all.allergy.allergyCatalog.name,
               }
             : null,
@@ -181,6 +192,48 @@ export async function GET(
   } catch (error) {
     console.error("Error fetching anamnesis:", error)
     return NextResponse.json({ error: "Error al cargar anamnesis" }, { status: 500 })
+  }
+}
+
+/**
+ * Helper function to calculate age from birth date
+ */
+function calcularEdad(fechaNacimiento: Date | null): number {
+  if (!fechaNacimiento) return 0
+  const hoy = new Date()
+  const edad = hoy.getFullYear() - fechaNacimiento.getFullYear()
+  const mesDiff = hoy.getMonth() - fechaNacimiento.getMonth()
+  const diaDiff = hoy.getDate() - fechaNacimiento.getDate()
+  return edad - (mesDiff < 0 || (mesDiff === 0 && diaDiff < 0) ? 1 : 0)
+}
+
+/**
+ * Helper function to convert Prisma anamnesis to AnamnesisState for audit
+ */
+function convertToAnamnesisState(anamnesis: any): AnamnesisState {
+  return {
+    idPatientAnamnesis: anamnesis.idPatientAnamnesis,
+    pacienteId: anamnesis.pacienteId,
+    tipo: anamnesis.tipo,
+    motivoConsulta: anamnesis.motivoConsulta,
+    tieneDolorActual: anamnesis.tieneDolorActual,
+    dolorIntensidad: anamnesis.dolorIntensidad,
+    urgenciaPercibida: anamnesis.urgenciaPercibida,
+    tieneEnfermedadesCronicas: anamnesis.tieneEnfermedadesCronicas,
+    tieneAlergias: anamnesis.tieneAlergias,
+    tieneMedicacionActual: anamnesis.tieneMedicacionActual,
+    embarazada: anamnesis.embarazada,
+    expuestoHumoTabaco: anamnesis.expuestoHumoTabaco,
+    bruxismo: anamnesis.bruxismo,
+    higieneCepilladosDia: anamnesis.higieneCepilladosDia,
+    usaHiloDental: anamnesis.usaHiloDental,
+    ultimaVisitaDental: anamnesis.ultimaVisitaDental?.toISOString() || null,
+    tieneHabitosSuccion: anamnesis.tieneHabitosSuccion,
+    lactanciaRegistrada: anamnesis.lactanciaRegistrada,
+    payload: anamnesis.payload as Record<string, unknown> | null,
+    antecedents: anamnesis.antecedents || [],
+    medications: anamnesis.medications || [],
+    allergies: anamnesis.allergies || [],
   }
 }
 
@@ -217,6 +270,7 @@ export async function POST(
 
     // Parse and validate request body
     const body = await req.json()
+    console.log("📥 Received data:", body)
     const data = AnamnesisCreateUpdateBodySchema.parse(body)
 
     // Verify patient exists and get age/gender for tipo determination
@@ -229,33 +283,112 @@ export async function POST(
       return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
     }
 
-    // Determine tipo (ADULTO vs PEDIATRICO) based on age
-    let tipo: "ADULTO" | "PEDIATRICO" = "ADULTO"
-    if (paciente.persona.fechaNacimiento) {
-      const fechaNacimiento = new Date(paciente.persona.fechaNacimiento)
-      const hoy = new Date()
-      const edad = hoy.getFullYear() - fechaNacimiento.getFullYear()
-      const mesDiff = hoy.getMonth() - fechaNacimiento.getMonth()
-      const diaDiff = hoy.getDate() - fechaNacimiento.getDate()
-      const edadExacta = edad - (mesDiff < 0 || (mesDiff === 0 && diaDiff < 0) ? 1 : 0)
-      tipo = edadExacta < 18 ? "PEDIATRICO" : "ADULTO"
+    // Calculate age and determine tipo
+    const fechaNacimiento = paciente.persona.fechaNacimiento
+      ? new Date(paciente.persona.fechaNacimiento)
+      : null
+    const edad = calcularEdad(fechaNacimiento)
+    const tipo: "ADULTO" | "PEDIATRICO" = edad < 18 ? "PEDIATRICO" : "ADULTO"
+
+    // Validations: gender for womenSpecific
+    if (data.womenSpecific && paciente.persona.genero !== "FEMENINO") {
+      return NextResponse.json(
+        { error: "womenSpecific solo aplica para género FEMENINO" },
+        { status: 400 }
+      )
     }
 
-    // Build payload JSON for custom notes (backward compatibility)
-    const payload = data.customNotes ? { customNotes: data.customNotes } : undefined
+    // Validations: age for pregnancy
+    if (data.womenSpecific?.embarazada === true && edad < 15) {
+      return NextResponse.json(
+        { error: "Paciente menor de 15 años no puede estar embarazada" },
+        { status: 400 }
+      )
+    }
 
-    // Extract women-specific fields if provided
+    // Build complete payload JSON
+    const payload: Record<string, any> = {}
+
+    // Custom notes
+    if (data.customNotes?.trim()) {
+      payload.customNotes = data.customNotes.trim()
+    }
+
+    // Women-specific data
+    if (data.womenSpecific) {
+      payload.womenSpecific = {
+        embarazada: data.womenSpecific.embarazada ?? null,
+        semanasEmbarazo: data.womenSpecific.semanasEmbarazo ?? null,
+        ultimaMenstruacion: data.womenSpecific.ultimaMenstruacion ?? null,
+        planificacionFamiliar: data.womenSpecific.planificacionFamiliar?.trim() || null,
+      }
+    }
+
+    // Pediatric-specific data
+    if (tipo === "PEDIATRICO") {
+      payload.pediatricSpecific = {
+        tieneHabitosSuccion: data.tieneHabitosSuccion ?? null,
+        lactanciaRegistrada: data.lactanciaRegistrada ?? null, // Can be enum string or boolean
+      }
+    }
+
+    // Metadata
+    payload._metadata = {
+      patientAge: edad,
+      patientGender: paciente.persona.genero,
+      formVersion: "2.0",
+      completedAt: new Date().toISOString(),
+    }
+
+    const finalPayload = Object.keys(payload).length > 0 ? payload : undefined
+    console.log("📦 Built payload:", finalPayload)
+
+    // Extract women-specific fields if provided (for direct DB field)
     const embarazada = data.womenSpecific?.embarazada ?? null
 
-    // Check if anamnesis already exists for versioning
+    // Handle lactanciaRegistrada: if it's a string enum, don't save to direct DB field
+    // The enum value goes in payload.pediatricSpecific.lactanciaRegistrada
+    // The direct DB field (Boolean?) is only for backward compatibility with old boolean values
+    const lactanciaRegistradaForDB =
+      typeof data.lactanciaRegistrada === "string"
+        ? null // Don't save enum string to Boolean field
+        : data.lactanciaRegistrada ?? null // Save boolean or null
+
+    // Check if anamnesis already exists for versioning and audit
     const existing = await prisma.patientAnamnesis.findUnique({
       where: { pacienteId },
       include: {
-        antecedents: true,
-        medications: true,
-        allergies: true,
+        antecedents: {
+          include: { antecedentCatalog: true },
+        },
+        medications: {
+          include: {
+            medication: {
+              include: { medicationCatalog: true },
+            },
+          },
+        },
+        allergies: {
+          include: {
+            allergy: {
+              include: { allergyCatalog: true },
+            },
+          },
+        },
       },
     })
+
+    // Get previous state for audit (if updating)
+    const previousState: AnamnesisState | null = existing ? convertToAnamnesisState(existing) : null
+    const isCreate = !existing
+    const previousVersionNumber = existing?.versionNumber || null
+
+    // Get user role for audit
+    const user = await prisma.usuario.findUnique({
+      where: { idUsuario: userId },
+      include: { rol: true },
+    })
+    const actorRole = (user?.rol?.nombreRol as "ADMIN" | "ODONT" | "RECEP") || "RECEP"
 
     // Upsert anamnesis with normalized relationships
     const anamnesis = await prisma.$transaction(async (tx) => {
@@ -278,9 +411,10 @@ export async function POST(
           usaHiloDental: data.usaHiloDental,
           ultimaVisitaDental: data.ultimaVisitaDental ? new Date(data.ultimaVisitaDental) : null,
           tieneHabitosSuccion: data.tieneHabitosSuccion,
-          lactanciaRegistrada: data.lactanciaRegistrada,
-          ...(payload !== undefined && { payload }),
+          lactanciaRegistrada: lactanciaRegistradaForDB, // Boolean or null only (enum goes in payload)
+          ...(finalPayload !== undefined && { payload: finalPayload }),
           creadoPorUserId: userId,
+          versionNumber: 1, // Initial version
         },
         update: {
           motivoConsulta: data.motivoConsulta,
@@ -297,10 +431,11 @@ export async function POST(
           usaHiloDental: data.usaHiloDental,
           ultimaVisitaDental: data.ultimaVisitaDental ? new Date(data.ultimaVisitaDental) : null,
           tieneHabitosSuccion: data.tieneHabitosSuccion,
-          lactanciaRegistrada: data.lactanciaRegistrada,
-          ...(payload !== undefined && { payload }),
+          lactanciaRegistrada: lactanciaRegistradaForDB, // Boolean or null only (enum goes in payload)
+          ...(finalPayload !== undefined && { payload: finalPayload }),
           actualizadoPorUserId: userId,
           updatedAt: new Date(),
+          versionNumber: { increment: 1 }, // Increment version
         },
         include: {
           creadoPor: { select: { idUsuario: true, nombreApellido: true } },
@@ -390,6 +525,10 @@ export async function POST(
               },
             })
             medicationId = newMed.idPatientMedication
+            // Store customDescription in notes for custom medications
+            if (medInput.customDescription) {
+              medInput.notes = medInput.customDescription
+            }
           } else {
             throw new Error("Medicación debe tener medicationId, catalogId, o customLabel")
           }
@@ -671,36 +810,6 @@ export async function POST(
         )
       }
 
-      // Create version history if updating existing anamnesis
-      if (existing) {
-        await tx.patientAnamnesisVersion.create({
-          data: {
-            pacienteId,
-            anamnesisId: result.idPatientAnamnesis,
-            consultaId: data.consultaId || null,
-            tipo: existing.tipo,
-            motivoConsulta: existing.motivoConsulta,
-            dolorIntensidad: existing.dolorIntensidad,
-            tieneDolorActual: existing.tieneDolorActual,
-            urgenciaPercibida: existing.urgenciaPercibida,
-            tieneEnfermedadesCronicas: existing.tieneEnfermedadesCronicas,
-            tieneAlergias: existing.tieneAlergias,
-            tieneMedicacionActual: existing.tieneMedicacionActual,
-            embarazada: existing.embarazada,
-            expuestoHumoTabaco: existing.expuestoHumoTabaco,
-            bruxismo: existing.bruxismo,
-            higieneCepilladosDia: existing.higieneCepilladosDia,
-            usaHiloDental: existing.usaHiloDental,
-            ultimaVisitaDental: existing.ultimaVisitaDental,
-            tieneHabitosSuccion: existing.tieneHabitosSuccion,
-            lactanciaRegistrada: existing.lactanciaRegistrada,
-            payload: existing.payload as object,
-            motivoCambio: "Actualización desde consulta",
-            creadoPorUserId: userId,
-          },
-        })
-      }
-
       // Fetch complete anamnesis with relationships for response
       return await tx.patientAnamnesis.findUnique({
         where: { idPatientAnamnesis: result.idPatientAnamnesis },
@@ -742,6 +851,61 @@ export async function POST(
 
     if (!anamnesis) {
       throw new Error("Error al crear/actualizar anamnesis")
+    }
+
+    console.log("✅ Saved anamnesis ID:", anamnesis.idPatientAnamnesis)
+
+    // Handle outside consultation edits
+    const isOutsideConsultation = !data.consultaId && data.editContext?.isOutsideConsultation
+    if (isOutsideConsultation && !isCreate && data.editContext) {
+      try {
+        const { processOutsideConsultationEdit } = await import(
+          "@/lib/services/anamnesis-outside-consultation.service"
+        )
+        const newState = convertToAnamnesisState(anamnesis)
+        
+        await processOutsideConsultationEdit({
+          anamnesisId: anamnesis.idPatientAnamnesis,
+          pacienteId,
+          previousState,
+          newState,
+          actorId: userId,
+          actorRole,
+          context: {
+            isOutsideConsultation: true,
+            informationSource: data.editContext.informationSource,
+            verifiedWithPatient: data.editContext.verifiedWithPatient,
+            reason: data.editContext.reason,
+            requiresReview: true, // Will be determined by field analysis
+          },
+          headers: req.headers,
+          requestPath: req.nextUrl.pathname,
+        })
+      } catch (outsideEditError) {
+        console.error("[Outside Consultation Edit] Error:", outsideEditError)
+        // Don't fail the request, but log the error
+      }
+    }
+
+    // Register in general AuditLog for consistency
+    try {
+      await writeAudit({
+        actorId: userId,
+        action: isCreate ? GeneralAuditAction.ANAMNESIS_CREATE : GeneralAuditAction.ANAMNESIS_UPDATE,
+        entity: AuditEntity.PatientAnamnesis,
+        entityId: anamnesis.idPatientAnamnesis,
+        metadata: {
+          pacienteId,
+          versionNumber: anamnesis.versionNumber,
+          consultaId: data.consultaId || null,
+          isOutsideConsultation: isOutsideConsultation || false,
+        },
+        headers: req.headers,
+        path: req.nextUrl.pathname,
+      })
+    } catch (auditError) {
+      console.error("[Audit] Error writing to general AuditLog:", auditError)
+      // Don't fail the request if audit fails
     }
 
     // Transform to response format
@@ -793,7 +957,9 @@ export async function POST(
           label: med.medication.label,
           medicationCatalog: med.medication.medicationCatalog
             ? {
+                idMedicationCatalog: med.medication.medicationCatalog.idMedicationCatalog,
                 name: med.medication.medicationCatalog.name,
+                description: med.medication.medicationCatalog.description,
               }
             : null,
           dose: med.medication.dose,
@@ -801,6 +967,7 @@ export async function POST(
           route: med.medication.route,
           isActive: med.medication.isActive,
         },
+        notes: (med as any).notes || null, // Include notes for customDescription mapping
       })),
       allergies: anamnesis.allergies.map((all) => ({
         idAnamnesisAllergy: all.idAnamnesisAllergy,
@@ -810,6 +977,7 @@ export async function POST(
           label: all.allergy.label,
           allergyCatalog: all.allergy.allergyCatalog
             ? {
+                idAllergyCatalog: all.allergy.allergyCatalog.idAllergyCatalog,
                 name: all.allergy.allergyCatalog.name,
               }
             : null,
@@ -857,6 +1025,153 @@ export async function POST(
 
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Error al guardar anamnesis" },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE endpoint for soft delete
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 })
+    }
+
+    const { id } = await params
+    const pacienteId = parseInt(id, 10)
+    const userId = parseInt(session.user.id, 10)
+
+    if (isNaN(pacienteId) || isNaN(userId)) {
+      return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
+    }
+
+    // Verify patient exists
+    const paciente = await prisma.paciente.findUnique({
+      where: { idPaciente: pacienteId },
+      select: { idPaciente: true },
+    })
+
+    if (!paciente) {
+      return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 })
+    }
+
+    // Get anamnesis
+    const anamnesis = await prisma.patientAnamnesis.findUnique({
+      where: { pacienteId },
+      include: {
+        antecedents: {
+          include: { antecedentCatalog: true },
+        },
+        medications: {
+          include: {
+            medication: {
+              include: { medicationCatalog: true },
+            },
+          },
+        },
+        allergies: {
+          include: {
+            allergy: {
+              include: { allergyCatalog: true },
+            },
+          },
+        },
+      },
+    })
+
+    if (!anamnesis) {
+      return NextResponse.json({ error: "Anamnesis no encontrada" }, { status: 404 })
+    }
+
+    if (anamnesis.isDeleted) {
+      return NextResponse.json({ error: "La anamnesis ya está eliminada" }, { status: 400 })
+    }
+
+    // Check permissions (only ADMIN and ODONT can delete)
+    const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    if (userRole === "RECEP") {
+      return NextResponse.json({ error: "No tiene permisos para eliminar anamnesis" }, { status: 403 })
+    }
+
+    // Parse body for reason
+    const body = await req.json().catch(() => ({}))
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "Eliminación de anamnesis"
+
+    // Get previous state for audit
+    const previousState: AnamnesisState | null = convertToAnamnesisState(anamnesis)
+
+    // Soft delete in transaction
+    await prisma.$transaction(async (tx) => {
+      // Mark as deleted
+      await tx.patientAnamnesis.update({
+        where: { idPatientAnamnesis: anamnesis.idPatientAnamnesis },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedByUserId: userId,
+          deletedReason: reason,
+        },
+      })
+
+      // Create final snapshot
+      await createAnamnesisSnapshot(
+        anamnesis.idPatientAnamnesis,
+        anamnesis.versionNumber,
+        reason,
+        null,
+        req.headers,
+        tx
+      )
+
+      // Create audit log
+      await createAnamnesisAuditLog(
+        {
+          action: "DELETE",
+          anamnesisId: anamnesis.idPatientAnamnesis,
+          pacienteId,
+          actorId: userId,
+          actorRole,
+          previousState,
+          newState: null,
+          reason,
+          headers: req.headers,
+          path: req.nextUrl.pathname,
+          previousVersionNumber: anamnesis.versionNumber,
+          newVersionNumber: null,
+        },
+        tx
+      )
+    })
+
+    // Register in general AuditLog
+    try {
+      await writeAudit({
+        actorId: userId,
+        action: GeneralAuditAction.ANAMNESIS_DELETE,
+        entity: AuditEntity.PatientAnamnesis,
+        entityId: anamnesis.idPatientAnamnesis,
+        metadata: {
+          pacienteId,
+          reason,
+        },
+        headers: req.headers,
+        path: req.nextUrl.pathname,
+      })
+    } catch (auditError) {
+      console.error("[Audit] Error writing to general AuditLog:", auditError)
+    }
+
+    return NextResponse.json({
+      message: "Anamnesis eliminada correctamente",
+    })
+  } catch (error) {
+    console.error("Error in DELETE /api/pacientes/[id]/anamnesis:", error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Error al eliminar anamnesis" },
       { status: 500 }
     )
   }

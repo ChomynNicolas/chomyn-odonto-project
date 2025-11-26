@@ -9,7 +9,7 @@ import { auth } from "@/auth"
 import { errors } from "@/app/api/_http"
 import { auditLogFiltersSchema } from "../_schemas"
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import { buildAuditLogWhere } from "@/lib/audit/build-audit-where"
 import { ACTION_LABELS, ENTITY_LABELS } from "@/lib/types/audit"
 
 export async function GET(req: NextRequest) {
@@ -29,55 +29,8 @@ export async function GET(req: NextRequest) {
     const searchParams = Object.fromEntries(req.nextUrl.searchParams.entries())
     const filters = auditLogFiltersSchema.parse(searchParams)
 
-    // Construir condiciones de filtro (mismo que en GET /api/audit/logs)
-    const where: Prisma.AuditLogWhereInput = {}
-
-    if (filters.dateFrom || filters.dateTo) {
-      where.createdAt = {}
-      if (filters.dateFrom) {
-        where.createdAt.gte = new Date(filters.dateFrom)
-      }
-      if (filters.dateTo) {
-        where.createdAt.lte = new Date(filters.dateTo)
-      }
-    }
-
-    if (filters.actorId) {
-      where.actorId = filters.actorId
-    }
-
-    if (filters.actions && filters.actions.length > 0) {
-      where.action = { in: filters.actions }
-    } else if (filters.action) {
-      where.action = filters.action
-    }
-
-    if (filters.entities && filters.entities.length > 0) {
-      where.entity = { in: filters.entities }
-    } else if (filters.entity) {
-      where.entity = filters.entity
-    }
-
-    if (filters.entityId) {
-      where.entityId = filters.entityId
-    }
-
-    if (filters.ip) {
-      where.ip = filters.ip
-    }
-
-    if (filters.search) {
-      where.OR = [
-        { action: { contains: filters.search, mode: "insensitive" } },
-        { entity: { contains: filters.search, mode: "insensitive" } },
-        {
-          metadata: {
-            path: ["summary"],
-            string_contains: filters.search,
-          },
-        },
-      ]
-    }
+    // Construir condiciones de filtro usando helper centralizado
+    const where = buildAuditLogWhere(filters)
 
     // Obtener todos los registros (sin límite de paginación para exportación)
     const logs = await prisma.auditLog.findMany({

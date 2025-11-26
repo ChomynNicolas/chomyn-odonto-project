@@ -142,7 +142,7 @@ export function PacienteWizard() {
         responsablePago: values.responsablePago,
       }
 
-      console.log("[v0] Guardando paciente:", payload, "Intent:", intent)
+      console.log("Guardando paciente:", payload, "Intent:", intent)
 
       const idempotencyKey = `paciente-create-${Date.now()}-${Math.random().toString(36).substring(7)}`
 
