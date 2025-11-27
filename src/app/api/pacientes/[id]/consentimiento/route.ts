@@ -95,6 +95,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (e instanceof ConsentimientoError) {
       if (e.status === 404) return errors.notFound(e.message)
       if (e.status === 403) return errors.forbidden(e.message)
+      // Handle new appointment-specific consent errors
+      if (e.code === "APPOINTMENT_REQUIRED") {
+        return errors.validation(e.message)
+      }
+      if (e.code === "CONSENT_ALREADY_EXISTS") {
+        return errors.conflict(e.message)
+      }
       return errors.apiError?.(e.status, e.code, e.message, e.extra) ?? errors.internal(e.message)
     }
 

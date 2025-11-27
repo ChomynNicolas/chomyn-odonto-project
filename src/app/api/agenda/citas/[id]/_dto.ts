@@ -140,9 +140,11 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
   }
 
   if (esMenor === true) {
-    // Es menor de edad: verificar consentimiento vigente a la fecha/hora de la cita
+    // Es menor de edad: verificar consentimiento vigente para ESTA cita específica
+    // Solo se aceptan consentimientos específicos para esta cita (esEspecificoPorCita = true)
     const consentimientoMenor = cita.paciente.consentimientos.find(
-      (c) => c.tipo === "CONSENTIMIENTO_MENOR_ATENCION" && c.vigente_hasta >= cita.inicio
+      (c) => c.tipo === "CONSENTIMIENTO_MENOR_ATENCION" && 
+             c.Cita_idCita === citaId
     )
 
     if (consentimientoMenor) {
@@ -156,7 +158,7 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
         responsableNombre,
         responsableTipoVinculo: "RESPONSABLE",
         citaId: consentimientoMenor.Cita_idCita ?? null,
-        esEspecificoPorCita: consentimientoMenor.Cita_idCita !== null,
+        esEspecificoPorCita: true, // Always per-appointment
       }
     } else {
       minorConsentStatus.consentimientoVigente = false

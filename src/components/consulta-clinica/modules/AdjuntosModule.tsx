@@ -17,7 +17,6 @@ import { formatDate } from "@/lib/utils/patient-helpers"
 import type { AdjuntoTipo } from "@prisma/client"
 import Image from "next/image"
 import {
-  MAX_FILE_SIZE_BYTES,
   MAX_FILE_SIZE_MB,
   ALLOWED_MIME_TYPES,
   validateFile,
@@ -197,12 +196,12 @@ export function AdjuntosModule({ citaId, consulta, canEdit, onUpdate }: Adjuntos
           publicId: uploadResult.public_id,
           folder: uploadResult.folder || folder,
           resourceType: uploadResult.resource_type,
-          format: uploadResult.format,
+          format: uploadResult.format ?? null,
           bytes: uploadResult.bytes,
-          width: uploadResult.width,
-          height: uploadResult.height,
-          duration: uploadResult.duration,
-          originalFilename: uploadResult.original_filename || file.name,
+          width: uploadResult.width ?? null,
+          height: uploadResult.height ?? null,
+          duration: uploadResult.duration ?? null,
+          originalFilename: uploadResult.original_filename || file.name || null,
           secureUrl: uploadResult.secure_url,
           tipo,
           descripcion: descripcion.trim() || null,

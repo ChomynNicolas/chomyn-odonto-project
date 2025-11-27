@@ -40,7 +40,6 @@ import {
 } from "lucide-react"
 import type { CitaDetalleDTO, CurrentUser, EstadoCita, AccionCita } from "@/types/agenda"
 import { cn } from "@/lib/utils"
-import { formatDate } from "@/lib/utils/patient-helpers"
 import { isMinorAt } from "@/lib/utils/consent-helpers"
 import Image from "next/image"
 
@@ -537,26 +536,15 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                             <div className="flex items-start gap-1.5">
                               <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
                               <p>
-                                <strong>Firmado:</strong> {consentimientoStatus.consentimientoResumen.responsableNombre}
+                                <strong>Firmado por:</strong> {consentimientoStatus.consentimientoResumen.responsableNombre}
                               </p>
                             </div>
-                            {consentimientoStatus.consentimientoResumen.esEspecificoPorCita &&
-                            consentimientoStatus.consentimientoResumen.citaId ? (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido para:</strong> Esta cita específica únicamente
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido hasta:</strong>{" "}
-                                  {formatDate(consentimientoStatus.consentimientoResumen.vigenteHasta)}
-                                </p>
-                              </div>
-                            )}
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
+                              <p>
+                                <strong>Válido para:</strong> Esta cita específica (#{dto.idCita})
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -570,7 +558,11 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                             </div>
                           </div>
                           <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-                            Se requiere consentimiento firmado por el responsable del menor.
+                            Se requiere consentimiento firmado por el responsable del menor{" "}
+                            <strong>para esta cita específica (#{dto.idCita})</strong>.
+                          </p>
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 italic">
+                            Cada cita requiere un nuevo consentimiento.
                           </p>
                         </div>
                       )}
@@ -600,26 +592,16 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                             <div className="flex items-start gap-1.5">
                               <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
                               <p>
-                                <strong>Firmado:</strong>{" "}
+                                <strong>Firmado por:</strong>{" "}
                                 {consentimientoStatus.cirugiaConsentimientoResumen.responsableNombre}
                               </p>
                             </div>
-                            {consentimientoStatus.cirugiaConsentimientoResumen.esEspecificoPorCita ? (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido para:</strong> Esta cita quirúrgica específica únicamente
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido hasta:</strong>{" "}
-                                  {formatDate(consentimientoStatus.cirugiaConsentimientoResumen.vigenteHasta)}
-                                </p>
-                              </div>
-                            )}
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
+                              <p>
+                                <strong>Válido para:</strong> Esta cita quirúrgica (#{dto.idCita})
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -635,10 +617,13 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                           <p className="text-xs leading-relaxed text-red-800 dark:text-red-200">
                             Se requiere consentimiento de cirugía firmado{" "}
                             {consentimientoStatus.esMenorAlInicio ? "por el responsable del menor" : "por el paciente"}{" "}
-                            para iniciar la consulta.
+                            <strong>para esta cita quirúrgica específica (#{dto.idCita})</strong>.
                           </p>
                           <p className="text-xs text-red-700 dark:text-red-300 mt-2 font-medium">
                             El consentimiento se firma durante el check-in y debe subirse antes de iniciar la consulta.
+                          </p>
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1 italic">
+                            Cada procedimiento quirúrgico requiere un nuevo consentimiento.
                           </p>
                         </div>
                       )}

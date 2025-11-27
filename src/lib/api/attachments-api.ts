@@ -1,6 +1,6 @@
 // API client for patient attachments
 
-import type { Attachment, AttachmentType, AttachmentContext } from "@/lib/types/patient"
+import type { Attachment, AttachmentType, AttachmentFilterType, AttachmentContext, ConsentType } from "@/lib/types/patient"
 
 export interface AttachmentsResponse {
   adjuntos: Attachment[]
@@ -21,7 +21,7 @@ export interface AttachmentsResponse {
 
 export interface FetchAttachmentsParams {
   pacienteId: string
-  tipo?: AttachmentType
+  tipo?: AttachmentFilterType  // Now includes "CONSENT" and "all"
   search?: string
   page?: number
   limit?: number
@@ -57,7 +57,8 @@ export async function fetchAttachments(
     limit: String(limit),
   })
 
-  if (tipo) {
+  // Only send tipo to API if it's not "all" (which means fetch everything)
+  if (tipo && tipo !== "all") {
     searchParams.append("tipo", tipo)
   }
 
@@ -335,5 +336,30 @@ export function getAttachmentTypeGroup(type: AttachmentType): "xrays" | "photos"
   if (type === "INTRAORAL_PHOTO" || type === "EXTRAORAL_PHOTO" || type === "IMAGE") return "photos"
   if (type === "DOCUMENT" || type === "PDF" || type === "LAB_REPORT") return "documents"
   return "other"
+}
+
+/**
+ * Get consent type label in Spanish
+ */
+export function getConsentTypeLabel(type: ConsentType | string): string {
+  const labels: Record<string, string> = {
+    CONSENTIMIENTO_MENOR_ATENCION: "Consentimiento Menor de Edad",
+    TRATAMIENTO_ESPECIFICO: "Tratamiento Específico",
+    ANESTESIA: "Anestesia",
+    CIRUGIA: "Cirugía",
+    RADIOGRAFIA: "Radiografía",
+    DATOS_PERSONALES: "Datos Personales",
+    OTRO: "Otro",
+  }
+  return labels[type] || type
+}
+
+/**
+ * Get filter type label in Spanish (includes consent filter)
+ */
+export function getFilterTypeLabel(type: AttachmentFilterType): string {
+  if (type === "all") return "Todos"
+  if (type === "CONSENT") return "Consentimientos"
+  return getAttachmentTypeLabel(type as AttachmentType)
 }
 

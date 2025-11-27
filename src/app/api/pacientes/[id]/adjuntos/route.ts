@@ -49,7 +49,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     // Parse query parameters
     const { searchParams } = new URL(req.url)
-    const tipo = searchParams.get("tipo") as
+    const tipoParam = searchParams.get("tipo")
+    // "CONSENT" is a virtual filter type for consentimientos only
+    const isConsentFilter = tipoParam === "CONSENT"
+    const tipo = isConsentFilter ? null : (tipoParam as
       | "XRAY"
       | "INTRAORAL_PHOTO"
       | "EXTRAORAL_PHOTO"
@@ -58,11 +61,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       | "PDF"
       | "LAB_REPORT"
       | "OTHER"
-      | null
+      | null)
     const search = searchParams.get("search") || null
     const page = Number.parseInt(searchParams.get("page") || "1")
     const limit = Number.parseInt(searchParams.get("limit") || "20")
     const offset = (page - 1) * limit
+
+    // Determine what to include based on filter
+    // - No filter (null): include both adjuntos and consentimientos
+    // - "CONSENT": include only consentimientos
+    // - Any AdjuntoTipo: include only adjuntos of that type
+    const includeAdjuntos = !isConsentFilter
+    const includeConsentimientos = !tipoParam || isConsentFilter
+
+    // Consent type label mapping for search
+    const consentTypeLabels: Record<string, string[]> = {
+      CONSENTIMIENTO_MENOR_ATENCION: ["menor", "atencion", "atención", "menor de edad"],
+      TRATAMIENTO_ESPECIFICO: ["tratamiento", "especifico", "específico"],
+      ANESTESIA: ["anestesia"],
+      CIRUGIA: ["cirugia", "cirugía", "quirurgico", "quirúrgico"],
+      RADIOGRAFIA: ["radiografia", "radiografía", "rx"],
+      DATOS_PERSONALES: ["datos", "personales", "privacidad"],
+      OTRO: ["otro", "otros"],
+    }
 
     // Build where clause to get ALL attachments for the patient:
     // 1. Direct attachments (pacienteId = pacienteId)
@@ -109,20 +130,83 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       ]
     }
 
-    // Fetch attachments AND consentimientos (fetch all, then paginate after combining)
-    // We need to fetch both separately, combine them, sort, and then paginate
+    // Build consentimiento search filter - includes observaciones and tipo label matching
+    const buildConsentSearchFilter = (searchTerm: string): Prisma.ConsentimientoWhereInput => {
+      const searchLower = searchTerm.toLowerCase()
+      
+      // Find consent types that match the search term
+      const matchingTypes = Object.entries(consentTypeLabels)
+        .filter(([, labels]) => labels.some(label => label.includes(searchLower) || searchLower.includes(label)))
+        .map(([type]) => type as "CONSENTIMIENTO_MENOR_ATENCION" | "TRATAMIENTO_ESPECIFICO" | "ANESTESIA" | "CIRUGIA" | "RADIOGRAFIA" | "DATOS_PERSONALES" | "OTRO")
+
+      return {
+        OR: [
+          { observaciones: { contains: searchTerm, mode: "insensitive" } },
+          ...(matchingTypes.length > 0 ? [{ tipo: { in: matchingTypes } }] : []),
+        ],
+      }
+    }
+
+    // Fetch attachments AND consentimientos based on filter settings
+    // Only fetch what's needed based on the filter
     const [adjuntos, totalAdjuntos, consentimientos, totalConsentimientos] = await Promise.all([
-      prisma.adjunto.findMany({
-        where,
-        include: {
-          uploadedBy: {
-            select: {
-              idUsuario: true,
-              nombreApellido: true,
+      // Only fetch adjuntos if not filtering by CONSENT
+      includeAdjuntos
+        ? prisma.adjunto.findMany({
+            where,
+            include: {
+              uploadedBy: {
+                select: {
+                  idUsuario: true,
+                  nombreApellido: true,
+                },
+              },
+              consulta: {
+                select: {
+                  cita: {
+                    select: {
+                      idCita: true,
+                      inicio: true,
+                      tipo: true,
+                    },
+                  },
+                },
+              },
+              procedimiento: {
+                select: {
+                  idConsultaProcedimiento: true,
+                  consulta: {
+                    select: {
+                      cita: {
+                        select: {
+                          idCita: true,
+                          inicio: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
-          },
-          consulta: {
-            select: {
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve([]),
+      includeAdjuntos ? prisma.adjunto.count({ where }) : Promise.resolve(0),
+      // Only fetch consentimientos if filter is null or "CONSENT"
+      includeConsentimientos
+        ? prisma.consentimiento.findMany({
+            where: {
+              Paciente_idPaciente: pacienteId,
+              activo: true,
+              ...(search ? buildConsentSearchFilter(search) : {}),
+            },
+            include: {
+              registradoPor: {
+                select: {
+                  idUsuario: true,
+                  nombreApellido: true,
+                },
+              },
               cita: {
                 select: {
                   idCita: true,
@@ -131,69 +215,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 },
               },
             },
-          },
-          procedimiento: {
-            select: {
-              idConsultaProcedimiento: true,
-              consulta: {
-                select: {
-                  cita: {
-                    select: {
-                      idCita: true,
-                      inicio: true,
-                    },
-                  },
-                },
-              },
+            orderBy: { registrado_en: "desc" },
+          })
+        : Promise.resolve([]),
+      includeConsentimientos
+        ? prisma.consentimiento.count({
+            where: {
+              Paciente_idPaciente: pacienteId,
+              activo: true,
+              ...(search ? buildConsentSearchFilter(search) : {}),
             },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        // Fetch all, we'll paginate after combining
-      }),
-      prisma.adjunto.count({ where }),
-      // Fetch consentimientos for the patient
-      prisma.consentimiento.findMany({
-        where: {
-          Paciente_idPaciente: pacienteId,
-          activo: true,
-          // Apply search filter if provided (only search in observaciones, tipo is an enum)
-          ...(search
-            ? {
-                observaciones: { contains: search, mode: "insensitive" },
-              }
-            : {}),
-        },
-        include: {
-          registradoPor: {
-            select: {
-              idUsuario: true,
-              nombreApellido: true,
-            },
-          },
-          cita: {
-            select: {
-              idCita: true,
-              inicio: true,
-              tipo: true,
-            },
-          },
-        },
-        orderBy: { registrado_en: "desc" },
-        // Fetch all, we'll paginate after combining
-      }),
-      prisma.consentimiento.count({
-        where: {
-          Paciente_idPaciente: pacienteId,
-          activo: true,
-          // Apply search filter if provided (only search in observaciones, tipo is an enum)
-          ...(search
-            ? {
-                observaciones: { contains: search, mode: "insensitive" },
-              }
-            : {}),
-        },
-      }),
+          })
+        : Promise.resolve(0),
     ])
 
     // Map adjuntos to response format
@@ -338,6 +371,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           firmadoEn: c.firmado_en.toISOString(),
           vigenteHasta: c.vigente_hasta.toISOString(),
           vigente: new Date() <= c.vigente_hasta,
+          esEspecificoPorCita: c.esEspecificoPorCita,
+          citaId: c.Cita_idCita,
         },
       }
     })

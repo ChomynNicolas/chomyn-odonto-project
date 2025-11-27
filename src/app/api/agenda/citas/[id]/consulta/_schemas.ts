@@ -203,15 +203,15 @@ export const createAttachmentSchema = z.object({
   publicId: z.string().min(1),
   folder: z.string().min(1),
   resourceType: z.string(),
-  format: z.string().optional(),
+  format: z.string().nullable().optional(),
   bytes: z.number().int().positive(),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
-  duration: z.number().optional(),
-  originalFilename: z.string().optional(),
+  width: z.number().int().positive().nullable().optional(),
+  height: z.number().int().positive().nullable().optional(),
+  duration: z.number().nullable().optional(),
+  originalFilename: z.string().nullable().optional(),
   secureUrl: z.string().url(),
   tipo: z.nativeEnum(AdjuntoTipo),
-  descripcion: z.string().max(500).optional(),
+  descripcion: z.string().max(500).nullable().optional(),
 })
 
 export type CreateAttachmentInput = z.infer<typeof createAttachmentSchema>

@@ -92,10 +92,14 @@ export const AuditAction = {
   // Attachment Operations
   ADJUNTO_CREATE: "ADJUNTO_CREATE",
   ADJUNTO_DELETE: "ADJUNTO_DELETE",
+  ADJUNTO_VIEW: "ADJUNTO_VIEW",
+  ADJUNTO_DOWNLOAD: "ADJUNTO_DOWNLOAD",
   // Consent Operations
   CONSENTIMIENTO_CREATE: "CONSENTIMIENTO_CREATE",
   CONSENTIMIENTO_REVOKE: "CONSENTIMIENTO_REVOKE",
   CONSENTIMIENTO_UPDATE: "CONSENTIMIENTO_UPDATE",
+  CONSENTIMIENTO_VIEW: "CONSENTIMIENTO_VIEW",
+  CONSENTIMIENTO_DOWNLOAD: "CONSENTIMIENTO_DOWNLOAD",
   // Anamnesis Operations
   ANAMNESIS_CREATE: "ANAMNESIS_CREATE",
   ANAMNESIS_UPDATE: "ANAMNESIS_UPDATE",
@@ -104,6 +108,12 @@ export const AuditAction = {
   ANAMNESIS_RESTORE: "ANAMNESIS_RESTORE",
   ANAMNESIS_EXPORT: "ANAMNESIS_EXPORT",
   ANAMNESIS_PRINT: "ANAMNESIS_PRINT",
+  // Report Operations
+  REPORT_GENERATE: "REPORT_GENERATE",
+  REPORT_GENERATE_FAILED: "REPORT_GENERATE_FAILED",
+  REPORT_EXPORT_PDF: "REPORT_EXPORT_PDF",
+  REPORT_EXPORT_CSV: "REPORT_EXPORT_CSV",
+  REPORT_PRINT: "REPORT_PRINT",
   // — futuras acciones comunes —
   // PATIENT_VIEW: "PATIENT_VIEW",
   // USER_LOGIN: "USER_LOGIN",
@@ -135,6 +145,8 @@ export const AuditEntity = {
   // Anamnesis Entity
   PatientAnamnesis: "PatientAnamnesis",
   Anamnesis: "Anamnesis", // Alias en español
+  // Report Entity
+  Report: "Report",
   // agrega las que necesites
 } as const
 export type AuditEntity = typeof AuditEntity[keyof typeof AuditEntity]
