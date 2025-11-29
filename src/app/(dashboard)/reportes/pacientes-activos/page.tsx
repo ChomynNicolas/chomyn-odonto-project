@@ -80,10 +80,6 @@ export default function PacientesActivosReportPage() {
     }
   }, [currentFilters, fetchReport])
 
-  const handlePrint = useCallback(() => {
-    window.print()
-  }, [])
-
   const renderCell = useCallback((column: { key: string; label: string }, row: PacienteActivoRow) => {
     if (column.key === "genero") {
       return row.genero ? GENDER_LABELS[row.genero] || row.genero : "-"
@@ -120,7 +116,6 @@ export default function PacientesActivosReportPage() {
       config={config}
       isLoading={isLoading}
       error={error}
-      onPrint={handlePrint}
       filters={
         <ReportFiltersForm
           schema={pacientesActivosFiltersSchema}
@@ -212,7 +207,6 @@ export default function PacientesActivosReportPage() {
         </ReportFiltersForm>
       }
       kpis={data && <ReportKpiCards kpis={data.kpis} isLoading={isLoading} />}
-      onPrint={handlePrint}
     >
       {data && (
         <div className="mb-4 flex items-center justify-end print:hidden">

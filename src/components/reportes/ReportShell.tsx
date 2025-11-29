@@ -8,7 +8,7 @@
 
 import { ReactNode } from "react"
 import Link from "next/link"
-import { ChevronLeft, FileText, Printer, Download } from "lucide-react"
+import { ChevronLeft, FileText, Download } from "lucide-react"
 import type { ReportConfig } from "@/types/reportes"
 
 interface ReportShellProps {
@@ -28,8 +28,6 @@ interface ReportShellProps {
   error?: string | null
   /** Callback for PDF export */
   onExportPdf?: () => void
-  /** Callback for print */
-  onPrint?: () => void
   /** Export loading state */
   isExporting?: boolean
 }
@@ -43,7 +41,6 @@ export function ReportShell({
   isLoading,
   error,
   onExportPdf,
-  onPrint,
   isExporting,
 }: ReportShellProps) {
   return (
@@ -70,16 +67,6 @@ export function ReportShell({
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
-            {onPrint && (
-              <button
-                onClick={onPrint}
-                disabled={isLoading || isExporting}
-                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                <Printer className="h-4 w-4" />
-                <span className="hidden sm:inline">Imprimir</span>
-              </button>
-            )}
             {onExportPdf && (
               <button
                 onClick={onExportPdf}
@@ -102,20 +89,6 @@ export function ReportShell({
           </div>
         </div>
       </header>
-
-      {/* Print Header - Only visible on print */}
-      <div className="hidden print:block print:mb-6">
-        <div className="flex items-center justify-between border-b pb-4">
-          <div>
-            <h1 className="text-xl font-bold">{config.name}</h1>
-            <p className="text-sm text-gray-600">{config.description}</p>
-          </div>
-          <div className="text-right text-sm text-gray-500">
-            <p>Generado: {new Date().toLocaleDateString("es-PY")}</p>
-            <p>{new Date().toLocaleTimeString("es-PY")}</p>
-          </div>
-        </div>
-      </div>
 
       {/* Filters section */}
       {filters && (

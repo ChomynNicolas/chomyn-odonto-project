@@ -125,6 +125,10 @@ export function ReportTable<T>({
                   const value = getNestedValue(row, String(column.key))
                   const formattedValue = formatCellValue(value, column.format)
 
+                  // Use renderCell if provided, but fallback to formattedValue if it returns null/undefined
+                  const cellContent = renderCell ? renderCell(column, row) : null
+                  const displayValue = cellContent != null ? cellContent : formattedValue
+
                   return (
                     <td
                       key={String(column.key)}
@@ -132,7 +136,7 @@ export function ReportTable<T>({
                         column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : ""
                       }`}
                     >
-                      {renderCell ? renderCell(column, row) : formattedValue}
+                      {displayValue}
                     </td>
                   )
                 })}

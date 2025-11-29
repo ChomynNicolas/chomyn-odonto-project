@@ -21,12 +21,10 @@ interface GeneralInformationSectionProps {
 }
 
 export function GeneralInformationSection({ form, canEdit }: GeneralInformationSectionProps) {
-  // Calculate completion
-  const motivoConsulta = form.watch("motivoConsulta")
+  // Calculate completion (motivoConsulta removed - it's now in consulta)
   const tieneDolorActual = form.watch("tieneDolorActual")
   const dolorIntensidad = form.watch("dolorIntensidad")
   const isComplete =
-    !!motivoConsulta &&
     (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined))
 
   return (
@@ -43,35 +41,6 @@ export function GeneralInformationSection({ form, canEdit }: GeneralInformationS
         </div>
       </CardHeader>
       <CardContent className="space-y-8">
-        <FormField
-          control={form.control}
-          name="motivoConsulta"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-base font-medium flex items-center gap-2">
-                Motivo de consulta
-                <span className="text-destructive text-lg">*</span>
-                <Badge variant="secondary" className="ml-auto">
-                  {field.value?.length || 0}/200
-                </Badge>
-              </FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  placeholder="Ej: Dolor en muela superior derecha"
-                  maxLength={200}
-                  disabled={!canEdit}
-                  className="text-base h-11"
-                />
-              </FormControl>
-              <FormDescription className="text-sm leading-relaxed">
-                Describa brevemente el motivo principal de la consulta
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <FormField
           control={form.control}
           name="tieneDolorActual"

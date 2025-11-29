@@ -58,6 +58,9 @@ export async function repoCreatePlan(data: {
     estimatedCostCents?: number | null
     priority?: number | null
     notes?: string | null
+    requiresMultipleSessions?: boolean
+    totalSessions?: number | null
+    currentSession?: number | null
   }>
 }) {
   return db.$transaction(async (tx) => {
@@ -96,6 +99,9 @@ export async function repoCreatePlan(data: {
         estimatedCostCents: step.estimatedCostCents ?? null,
         priority: step.priority ?? null,
         notes: step.notes ?? null,
+        requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+        totalSessions: step.totalSessions ?? null,
+        currentSession: step.currentSession ?? (step.requiresMultipleSessions ? 1 : null),
         status: "PENDING" as TreatmentStepStatus,
       })),
     })
@@ -154,6 +160,9 @@ export async function repoUpdatePlan(
       estimatedCostCents?: number | null
       priority?: number | null
       notes?: string | null
+      requiresMultipleSessions?: boolean
+      totalSessions?: number | null
+      currentSession?: number | null
     }>
   }
 ) {
@@ -213,6 +222,9 @@ export async function repoUpdatePlan(
               estimatedCostCents: step.estimatedCostCents ?? null,
               priority: step.priority ?? null,
               notes: step.notes ?? null,
+              requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+              totalSessions: step.totalSessions ?? null,
+              currentSession: step.currentSession ?? null,
             },
           })
         } else {
@@ -229,6 +241,9 @@ export async function repoUpdatePlan(
               estimatedCostCents: step.estimatedCostCents ?? null,
               priority: step.priority ?? null,
               notes: step.notes ?? null,
+              requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+              totalSessions: step.totalSessions ?? null,
+              currentSession: step.currentSession ?? (step.requiresMultipleSessions ? 1 : null),
               status: "PENDING" as TreatmentStepStatus,
             },
           })
@@ -313,6 +328,27 @@ export async function repoGetPlan(planId: number) {
           },
         },
         orderBy: { order: "asc" },
+      },
+    },
+  })
+}
+
+export async function repoGetStepWithPlan(stepId: number) {
+  return db.treatmentStep.findUnique({
+    where: { idTreatmentStep: stepId },
+    include: {
+      plan: {
+        select: {
+          idTreatmentPlan: true,
+          pacienteId: true,
+        },
+      },
+      procedimientoCatalogo: {
+        select: {
+          idProcedimiento: true,
+          code: true,
+          nombre: true,
+        },
       },
     },
   })

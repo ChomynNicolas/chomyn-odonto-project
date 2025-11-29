@@ -16,6 +16,7 @@ import { UploadConsentDialog } from "@/components/pacientes/consentimientos/Uplo
 import { NuevaCitaSheet } from "./NuevaCitaSheet"
 import type { CitaConsentimientoStatus } from "@/app/api/agenda/citas/[id]/_dto"
 import { handleApiError, showSuccessToast, showErrorToast } from "@/lib/messages/agenda-toast-helpers"
+import { useFollowUpContext } from "@/hooks/useFollowUpContext"
 import {
   Calendar,
   Clock,
@@ -65,6 +66,14 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
   const [cancelSubmitting, setCancelSubmitting] = React.useState(false)
   const [uploadConsentOpen, setUploadConsentOpen] = React.useState(false)
   const [rescheduleOpen, setRescheduleOpen] = React.useState(false)
+  const [followUpOpen, setFollowUpOpen] = React.useState(false)
+
+  // Fetch follow-up context only for COMPLETED appointments
+  const isCompleted = dto?.estado === "COMPLETED"
+  const { data: followUpContext, isLoading: isLoadingFollowUp } = useFollowUpContext(
+    idCita,
+    isCompleted
+  )
 
   const loadData = React.useCallback(
     async (forceRefresh = false) => {
@@ -742,16 +751,41 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
         {dto && (
           <div className="flex flex-wrap gap-1.5">
             {(currentUser?.role === "ADMIN" || currentUser?.role === "ODONT") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                window.open(`/agenda/citas/${dto.idCita}/consulta`, "_blank")
+              }}
+              className="gap-1.5 font-semibold text-xs h-9 flex-1 sm:flex-none"
+            >
+              <Stethoscope className="h-3.5 w-3.5" />
+              Consulta
+            </Button>
+            )}
+            
+            {/* Follow-up appointment button - only for COMPLETED appointments */}
+            {dto.estado === "COMPLETED" && (
               <Button
-                variant="outline"
+                variant={followUpContext?.hasPendingSessions ? "default" : "outline"}
                 size="sm"
-                onClick={() => {
-                  window.open(`/agenda/citas/${dto.idCita}/consulta`, "_blank")
-                }}
+                onClick={() => setFollowUpOpen(true)}
+                disabled={isLoadingFollowUp}
                 className="gap-1.5 font-semibold text-xs h-9 flex-1 sm:flex-none"
+                title={
+                  followUpContext?.hasPendingSessions
+                    ? "Programar próxima sesión del plan de tratamiento"
+                    : "Crear cita de seguimiento"
+                }
               >
-                <Stethoscope className="h-3.5 w-3.5" />
-                Consulta
+                <Calendar className="h-3.5 w-3.5" />
+                {isLoadingFollowUp ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : followUpContext?.hasPendingSessions ? (
+                  "Próxima sesión"
+                ) : (
+                  "Seguimiento"
+                )}
               </Button>
             )}
             <Button
@@ -882,6 +916,29 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
             await loadData()
             onAfterChange?.()
             showSuccessToast("CITA_REPROGRAMADA")
+          }}
+        />
+      )}
+
+      {dto && (
+        <NuevaCitaSheet
+          open={followUpOpen}
+          onOpenChange={setFollowUpOpen}
+          mode="follow-up"
+          citaId={dto.idCita}
+          citaData={dto}
+          followUpContext={followUpContext || null}
+          currentUser={currentUser}
+          defaults={
+            followUpContext?.recommendedFollowUpDate
+              ? { inicio: new Date(followUpContext.recommendedFollowUpDate) }
+              : undefined
+          }
+          onSuccess={async () => {
+            setFollowUpOpen(false)
+            await loadData()
+            onAfterChange?.()
+            showSuccessToast("CITA_CREATED")
           }}
         />
       )}

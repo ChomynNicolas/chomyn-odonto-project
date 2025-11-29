@@ -30,12 +30,14 @@ export default function TopProcedimientosReportPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [data, setData] = useState<TopProcedimientosResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [currentFilters, setCurrentFilters] = useState<TopProcedimientosFilters | null>(null)
 
   const config = REPORT_CONFIGS["top-procedimientos"]
 
   const fetchReport = useCallback(async (filters: TopProcedimientosFilters) => {
     setIsLoading(true)
     setError(null)
+    setCurrentFilters(filters)
 
     try {
       const response = await fetch("/api/reportes/top-procedimientos", {
@@ -60,16 +62,11 @@ export default function TopProcedimientosReportPage() {
     }
   }, [])
 
-  const handlePrint = useCallback(() => {
-    window.print()
-  }, [])
-
   return (
     <ReportShell
       config={config}
       isLoading={isLoading}
       error={error}
-      onPrint={handlePrint}
       filters={
         <ReportFiltersForm
           schema={topProcedimientosFiltersSchema}
@@ -111,7 +108,6 @@ export default function TopProcedimientosReportPage() {
         </ReportFiltersForm>
       }
       kpis={data && <ReportKpiCards kpis={data.kpis} isLoading={isLoading} />}
-      onPrint={handlePrint}
     >
       {data && (
         <div className="mb-4 flex items-center justify-end print:hidden">
@@ -129,7 +125,7 @@ export default function TopProcedimientosReportPage() {
               { label: "Ingresos", key: "ingresosTotalCents" },
             ]}
             tableData={data.data as unknown as Array<Record<string, unknown>>}
-            filters={{}}
+            filters={currentFilters as unknown as Record<string, unknown>}
             filterLabels={{
               startDate: "Fecha desde",
               endDate: "Fecha hasta",

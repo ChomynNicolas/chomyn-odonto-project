@@ -71,10 +71,6 @@ export default function ProcedimientosReportPage() {
     }
   }, [currentFilters, fetchReport])
 
-  const handlePrint = useCallback(() => {
-    window.print()
-  }, [])
-
   const renderCell = useCallback((column: { key: string; label: string }, row: ProcedimientoRealizadoRow) => {
     if (column.key === "fecha") {
       return new Date(row.fecha).toLocaleDateString("es-PY")
@@ -110,7 +106,6 @@ export default function ProcedimientosReportPage() {
       config={config}
       isLoading={isLoading}
       error={error}
-      onPrint={handlePrint}
       filters={
         <ReportFiltersForm
           schema={procedimientosFiltersSchema}
@@ -139,7 +134,6 @@ export default function ProcedimientosReportPage() {
         </ReportFiltersForm>
       }
       kpis={data && <ReportKpiCards kpis={data.kpis} isLoading={isLoading} />}
-      onPrint={handlePrint}
     >
       {data && (
         <div className="mb-4 flex items-center justify-end print:hidden">

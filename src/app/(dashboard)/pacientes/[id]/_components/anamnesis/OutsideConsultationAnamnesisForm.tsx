@@ -67,7 +67,7 @@ function mapAnamnesisToFormValues(
 ): AnamnesisCreateUpdateBody {
   if (!anamnesis) {
     return {
-      motivoConsulta: "",
+      // motivoConsulta removed - it's now in consulta, not anamnesis
       tieneDolorActual: false,
       dolorIntensidad: undefined,
       urgenciaPercibida: undefined,
@@ -92,7 +92,7 @@ function mapAnamnesisToFormValues(
   const payload = anamnesis.payload as Record<string, unknown> | null
 
   return {
-    motivoConsulta: anamnesis.motivoConsulta || "",
+    // motivoConsulta removed - it's now in consulta, not anamnesis
     tieneDolorActual: anamnesis.tieneDolorActual,
     dolorIntensidad: anamnesis.dolorIntensidad ?? undefined,
     urgenciaPercibida: anamnesis.urgenciaPercibida ?? undefined,

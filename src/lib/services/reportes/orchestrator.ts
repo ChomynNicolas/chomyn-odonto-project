@@ -81,14 +81,56 @@ export async function executeReport<T extends ReportType>(
     }
 
     // 3. Validate filters
-    const validationResult = safeValidateReportFilters(reportType, rawFilters)
+    // For export mode (pageSize > 100), validate without pageSize to avoid schema limits
+    const isExportMode = typeof rawFilters === "object" && 
+                        rawFilters !== null && 
+                        "pageSize" in rawFilters &&
+                        typeof (rawFilters as Record<string, unknown>).pageSize === "number" &&
+                        (rawFilters as Record<string, unknown>).pageSize > 100
+    
+    const filtersToValidate = isExportMode 
+      ? (() => {
+          // Remove pageSize for validation, will add it back after
+          const { pageSize, ...rest } = rawFilters as Record<string, unknown>
+          return rest
+        })()
+      : rawFilters
+    
+    const validationResult = safeValidateReportFilters(reportType, filtersToValidate)
     if (!validationResult.success) {
+      const flattenedErrors = validationResult.error.flatten()
+      
+      // Build a descriptive error message with field-specific errors
+      const fieldErrors = Object.entries(flattenedErrors.fieldErrors || {})
+        .map(([field, messages]) => {
+          const msgArray = Array.isArray(messages) ? messages : [messages]
+          return `${field}: ${msgArray.join(", ")}`
+        })
+      
+      const formErrors = flattenedErrors.formErrors || []
+      
+      let errorMessage = "Filtros inválidos"
+      if (fieldErrors.length > 0) {
+        errorMessage += `. Errores: ${fieldErrors.join("; ")}`
+      } else if (formErrors.length > 0) {
+        errorMessage += `. ${formErrors.join("; ")}`
+      }
+      
       return createReportError(
         ReportErrorCode.VALIDATION_ERROR,
-        "Filtros inválidos",
-        { errors: validationResult.error.flatten() }
+        errorMessage,
+        { errors: flattenedErrors }
       )
     }
+    
+    // Restore pageSize for export mode after validation
+    const finalFilters = isExportMode
+      ? {
+          ...validationResult.data,
+          pageSize: (rawFilters as Record<string, unknown>).pageSize,
+          page: (rawFilters as Record<string, unknown>).page ?? 1,
+        }
+      : validationResult.data
 
     // 4. Get service and execute
     const service = serviceRegistry[reportType]
@@ -99,9 +141,9 @@ export async function executeReport<T extends ReportType>(
       )
     }
 
-    // 5. Execute with typed filters
+    // 5. Execute with typed filters (including pageSize for export mode)
     const result = await service.execute(
-      validationResult.data as ReportFiltersMap[T],
+      finalFilters as ReportFiltersMap[T],
       user
     )
 

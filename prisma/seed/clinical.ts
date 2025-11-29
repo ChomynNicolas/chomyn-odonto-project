@@ -5,7 +5,8 @@ import {
   TreatmentStepStatus,
   DiagnosisStatus,
   AllergySeverity,
-  type AdjuntoTipo,
+  AdjuntoTipo,
+  AccessMode,
 } from "@prisma/client"
 import { faker } from "@faker-js/faker"
 
@@ -66,7 +67,8 @@ export async function ensureConsultaParaCita(
     performedByProfessionalId: number
     createdByUserId: number
     status?: ConsultaEstado
-    reason?: string | null
+    startedAt?: Date | null
+    finishedAt?: Date | null
     diagnosis?: string | null
     clinicalNotes?: string | null
   },
@@ -79,7 +81,8 @@ export async function ensureConsultaParaCita(
       performedById: params.performedByProfessionalId,
       createdByUserId: params.createdByUserId,
       status: params.status ?? ConsultaEstado.DRAFT,
-      reason: params.reason ?? null,
+      startedAt: params.startedAt ?? null,
+      finishedAt: params.finishedAt ?? null,
       diagnosis: params.diagnosis ?? null,
       clinicalNotes: params.clinicalNotes ?? null,
     },
@@ -98,6 +101,7 @@ export async function addLineaProcedimiento(
     unitPriceCents?: number | null
     totalCents?: number | null
     treatmentStepId?: number | null
+    diagnosisId?: number | null
     resultNotes?: string | null
   },
 ) {
@@ -115,7 +119,7 @@ export async function addLineaProcedimiento(
   }
   const total = params.totalCents ?? (unit != null ? unit * q : null)
 
-  return prisma.consultaProcedimiento.create({
+  const procedimiento = await prisma.consultaProcedimiento.create({
     data: {
       consultaId: params.consultaCitaId,
       procedureId,
@@ -126,26 +130,65 @@ export async function addLineaProcedimiento(
       unitPriceCents: unit,
       totalCents: total,
       treatmentStepId: params.treatmentStepId ?? null,
-      resultNotes: params.resultNotes ?? null,
+      diagnosisId: params.diagnosisId ?? null,
+      resultNotes: params.resultNotes ?? faker.helpers.arrayElement([
+        "Procedimiento completado satisfactoriamente",
+        "Sin complicaciones",
+        "Paciente toleró bien el tratamiento",
+        "Se indica control en 7 días",
+      ]),
     },
   })
+
+  // If linked to a treatment step, update the step status
+  if (params.treatmentStepId) {
+    await prisma.treatmentStep.update({
+      where: { idTreatmentStep: params.treatmentStepId },
+      data: {
+        status: TreatmentStepStatus.COMPLETED,
+        completedAt: new Date(),
+      },
+    })
+  }
+
+  return procedimiento
 }
 
-function deriveStorageFromUrl(url: string, originalName?: string) {
+function deriveStorageFromUrl(url: string, originalName?: string, mimeType?: string) {
   const u = new URL(url)
   const file = originalName ?? u.pathname.split("/").pop() ?? "file.bin"
   const dot = file.lastIndexOf(".")
   const nameNoExt = dot > -1 ? file.slice(0, dot) : file
   const ext = dot > -1 ? file.slice(dot + 1) : "bin"
+  
+  // Determine resource type from mime type or extension
+  let resourceType = "image"
+  if (mimeType) {
+    if (mimeType.startsWith("video/")) resourceType = "video"
+    else if (mimeType.startsWith("application/pdf")) resourceType = "raw"
+    else if (mimeType.startsWith("application/") || mimeType.startsWith("text/")) resourceType = "raw"
+  }
+
+  // Determine dimensions for images
+  const width = resourceType === "image" ? faker.number.int({ min: 800, max: 4000 }) : null
+  const height = resourceType === "image" ? faker.number.int({ min: 600, max: 3000 }) : null
+
   return {
     publicId: `seed/${nameNoExt}-${Math.random().toString(36).slice(2, 8)}`,
     folder: "seed",
-    resourceType: "image",
+    resourceType,
     format: ext,
     secureUrl: url,
+    width,
+    height,
   }
 }
 
+/**
+ * Creates an attachment (Adjunto) linked to a consulta, paciente, and optionally a procedimiento.
+ * This function properly handles Cloudinary-like storage metadata and ensures all required fields
+ * are populated according to the Prisma schema.
+ */
 export async function addAdjuntoConsulta(
   prisma: PrismaClient,
   params: {
@@ -157,26 +200,127 @@ export async function addAdjuntoConsulta(
     size: number
     tipo: AdjuntoTipo
     procedimientoId?: number | null
+    pacienteId?: number | null
+    descripcion?: string | null
     metadata?: any
   },
 ) {
-  const st = deriveStorageFromUrl(params.url, params.originalName)
+  // Derive storage metadata from URL and filename
+  const st = deriveStorageFromUrl(params.url, params.originalName, params.mimeType)
+  
+  // Ensure publicId is unique by adding timestamp
+  const uniquePublicId = `${st.publicId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  
   return prisma.adjunto.create({
     data: {
       consultaId: params.consultaCitaId,
+      pacienteId: params.pacienteId ?? null,
       procedimientoId: params.procedimientoId ?? null,
       tipo: params.tipo,
-      descripcion: params.originalName,
-      publicId: st.publicId,
+      descripcion: params.descripcion ?? params.originalName,
+      publicId: uniquePublicId,
       folder: st.folder,
-      resourceType: st.resourceType,
+      resourceType: st.resourceType as any,
       format: st.format,
       secureUrl: st.secureUrl,
       bytes: params.size,
+      width: st.width,
+      height: st.height,
       originalFilename: params.originalName,
       uploadedByUserId: params.uploadedByUserId,
+      accessMode: AccessMode.AUTHENTICATED,
+      isActive: true,
     },
   })
+}
+
+/**
+ * Creates comprehensive attachments (Adjuntos) for a consulta with realistic variety.
+ * Generates X-rays, intraoral photos, and documents with appropriate probabilities.
+ * All attachments are properly linked to the consulta, paciente, and optionally procedimientos.
+ */
+export async function addComprehensiveAdjuntos(
+  prisma: PrismaClient,
+  params: {
+    consultaCitaId: number
+    pacienteId: number
+    uploadedByUserId: number
+    procedimientoIds?: number[]
+  }
+) {
+  const adjuntos = []
+
+  // Add X-ray with probability (60% chance)
+  if (faker.datatype.boolean({ probability: 0.6 })) {
+    try {
+      const xray = await addAdjuntoConsulta(prisma, {
+        consultaCitaId: params.consultaCitaId,
+        pacienteId: params.pacienteId,
+        uploadedByUserId: params.uploadedByUserId,
+        url: `https://example.com/xray_${params.consultaCitaId}_${Date.now()}.jpg`,
+        originalName: `xray_${params.consultaCitaId}.jpg`,
+        mimeType: "image/jpeg",
+        size: faker.number.int({ min: 200_000, max: 2_000_000 }),
+        tipo: AdjuntoTipo.XRAY,
+        procedimientoId: faker.helpers.maybe(() => faker.helpers.arrayElement(params.procedimientoIds ?? []), { probability: 0.5 }),
+        descripcion: faker.helpers.arrayElement([
+          "Radiografía periapical",
+          "Radiografía panorámica",
+          "Radiografía bitewing",
+        ]),
+      })
+      adjuntos.push(xray)
+    } catch (error: any) {
+      // Log but don't throw - continue with other attachments
+      console.error(`Error creating X-ray attachment: ${error.message}`)
+    }
+  }
+
+  // Add intraoral photo with probability (50% chance)
+  if (faker.datatype.boolean({ probability: 0.5 })) {
+    try {
+      const photo = await addAdjuntoConsulta(prisma, {
+        consultaCitaId: params.consultaCitaId,
+        pacienteId: params.pacienteId,
+        uploadedByUserId: params.uploadedByUserId,
+        url: `https://example.com/intraoral_${params.consultaCitaId}_${Date.now()}.jpg`,
+        originalName: `intraoral_${params.consultaCitaId}.jpg`,
+        mimeType: "image/jpeg",
+        size: faker.number.int({ min: 150_000, max: 1_500_000 }),
+        tipo: AdjuntoTipo.INTRAORAL_PHOTO,
+        descripcion: faker.helpers.arrayElement([
+          "Foto intraoral anterior",
+          "Foto intraoral posterior",
+          "Foto de detalle",
+        ]),
+      })
+      adjuntos.push(photo)
+    } catch (error: any) {
+      console.error(`Error creating intraoral photo: ${error.message}`)
+    }
+  }
+
+  // Add document/PDF with lower probability (20% chance)
+  if (faker.datatype.boolean({ probability: 0.2 })) {
+    try {
+      const doc = await addAdjuntoConsulta(prisma, {
+        consultaCitaId: params.consultaCitaId,
+        pacienteId: params.pacienteId,
+        uploadedByUserId: params.uploadedByUserId,
+        url: `https://example.com/doc_${params.consultaCitaId}_${Date.now()}.pdf`,
+        originalName: `documento_${params.consultaCitaId}.pdf`,
+        mimeType: "application/pdf",
+        size: faker.number.int({ min: 50_000, max: 500_000 }),
+        tipo: AdjuntoTipo.DOCUMENT,
+        descripcion: "Documento adjunto",
+      })
+      adjuntos.push(doc)
+    } catch (error: any) {
+      console.error(`Error creating document attachment: ${error.message}`)
+    }
+  }
+
+  return adjuntos
 }
 
 /** Historia clínica breve, diagnósticos, alergias, medicación, vitales */
@@ -188,73 +332,111 @@ export async function addClinicalBasics(
     data: {
       pacienteId: params.pacienteId,
       consultaId: params.consultaId ?? null,
-      title: "Antecedentes",
-      notes: "Antecedentes odontológicos registrados automáticamente para demo.",
+      title: faker.helpers.arrayElement([
+        "Antecedentes",
+        "Historia clínica inicial",
+        "Notas de consulta",
+        "Evolución",
+      ]),
+      notes: faker.helpers.arrayElement([
+        "Antecedentes odontológicos registrados automáticamente para demo.",
+        "Paciente refiere buena salud general.",
+        "Sin antecedentes relevantes.",
+        "Historia clínica completa registrada.",
+      ]),
       createdByUserId: params.createdByUserId,
     },
   })
 
-  // Diagnóstico activo desde catálogo
-  const dx = await prisma.diagnosisCatalog.findFirst()
-  if (dx) {
-    await prisma.patientDiagnosis.create({
-      data: {
-        pacienteId: params.pacienteId,
-        diagnosisId: dx.idDiagnosisCatalog,
-        label: dx.name,
-        status: DiagnosisStatus.ACTIVE,
-        notes: "Diagnóstico demo",
-        createdByUserId: params.createdByUserId,
-        consultaId: params.consultaId ?? null,
-      },
-    })
+  // Diagnóstico activo desde catálogo (con probabilidad)
+  if (faker.datatype.boolean({ probability: 0.7 })) {
+    const diagnoses = await prisma.diagnosisCatalog.findMany({ where: { isActive: true }, take: 3 })
+    if (diagnoses.length > 0) {
+      const dx = faker.helpers.arrayElement(diagnoses)
+      await prisma.patientDiagnosis.create({
+        data: {
+          pacienteId: params.pacienteId,
+          diagnosisId: dx.idDiagnosisCatalog,
+          label: dx.name,
+          status: DiagnosisStatus.ACTIVE,
+          notes: faker.helpers.arrayElement([
+            "Diagnóstico establecido en consulta",
+            "Hallazgo clínico",
+            "Diagnóstico confirmado",
+          ]),
+          createdByUserId: params.createdByUserId,
+          consultaId: params.consultaId ?? null,
+        },
+      })
+    }
   }
 
-  // Alergia activa
-  const alg = await prisma.allergyCatalog.findFirst()
-  if (alg) {
-    await prisma.patientAllergy.create({
-      data: {
-        pacienteId: params.pacienteId,
-        allergyId: alg.idAllergyCatalog,
-        label: alg.name,
-        severity: AllergySeverity.MODERATE,
-        reaction: "Rash leve",
-        createdByUserId: params.createdByUserId,
-      },
-    })
+  // Alergia activa (con probabilidad)
+  if (faker.datatype.boolean({ probability: 0.3 })) {
+    const allergies = await prisma.allergyCatalog.findMany({ where: { isActive: true }, take: 2 })
+    if (allergies.length > 0) {
+      const alg = faker.helpers.arrayElement(allergies)
+      await prisma.patientAllergy.create({
+        data: {
+          pacienteId: params.pacienteId,
+          allergyId: alg.idAllergyCatalog,
+          label: alg.name,
+          severity: faker.helpers.arrayElement([
+            AllergySeverity.MILD,
+            AllergySeverity.MODERATE,
+            AllergySeverity.SEVERE,
+          ]),
+          reaction: faker.helpers.arrayElement([
+            "Rash leve",
+            "Reacción cutánea",
+            "Reacción respiratoria",
+            "Anafilaxis",
+          ]),
+          createdByUserId: params.createdByUserId,
+        },
+      })
+    }
   }
 
-  // Medicación en curso
-  const med = await prisma.medicationCatalog.findFirst()
-  if (med) {
-    await prisma.patientMedication.create({
-      data: {
-        pacienteId: params.pacienteId,
-        medicationId: med.idMedicationCatalog,
-        label: med.name,
-        dose: "1 comp",
-        freq: "c/8h",
-        route: "VO",
-        startAt: new Date(),
-        isActive: true,
-        createdByUserId: params.createdByUserId,
-      },
-    })
+  // Medicación en curso (con probabilidad)
+  if (faker.datatype.boolean({ probability: 0.4 })) {
+    const medications = await prisma.medicationCatalog.findMany({ where: { isActive: true }, take: 2 })
+    if (medications.length > 0) {
+      const med = faker.helpers.arrayElement(medications)
+      await prisma.patientMedication.create({
+        data: {
+          pacienteId: params.pacienteId,
+          medicationId: med.idMedicationCatalog,
+          label: med.name,
+          dose: faker.helpers.arrayElement(["1 comp", "500mg", "1 tableta", "2 comp"]),
+          freq: faker.helpers.arrayElement(["c/8h", "c/12h", "1x día", "2x día"]),
+          route: faker.helpers.arrayElement(["VO", "IM", "IV"]),
+          startAt: faker.date.past({ years: 1 }),
+          endAt: faker.helpers.maybe(() => faker.date.future({ years: 1 }), { probability: 0.5 }),
+          isActive: true,
+          createdByUserId: params.createdByUserId,
+        },
+      })
+    }
   }
 
-  // Vitals “de sillón”
+  // Vitals "de sillón" con variación
   await prisma.patientVitals.create({
     data: {
       pacienteId: params.pacienteId,
       consultaId: params.consultaId ?? null,
-      heightCm: 170,
-      weightKg: 72,
-      bmi: 24.9,
-      bpSyst: 120,
-      bpDiast: 78,
-      heartRate: 72,
-      notes: "Signos vitales dentro de parámetros.",
+      heightCm: faker.number.int({ min: 150, max: 190 }),
+      weightKg: faker.number.int({ min: 50, max: 100 }),
+      bmi: faker.number.float({ min: 18, max: 30, fractionDigits: 1 }),
+      bpSyst: faker.number.int({ min: 100, max: 140 }),
+      bpDiast: faker.number.int({ min: 60, max: 90 }),
+      heartRate: faker.number.int({ min: 60, max: 100 }),
+      notes: faker.helpers.arrayElement([
+        "Signos vitales dentro de parámetros.",
+        "Presión arterial normal.",
+        "Frecuencia cardíaca regular.",
+        "Sin alteraciones.",
+      ]),
       createdByUserId: params.createdByUserId,
     },
   })
@@ -269,32 +451,87 @@ export async function addOdontoAndPerio(
     data: {
       pacienteId: params.pacienteId,
       consultaId: params.consultaId ?? null,
-      notes: "Odontograma de referencia demo",
+      notes: faker.helpers.arrayElement([
+        "Odontograma de referencia",
+        "Estado dental actual",
+        "Evaluación odontológica",
+      ]),
       createdByUserId: params.createdByUserId,
     },
   })
 
+  // Create more comprehensive odontogram entries
+  const teethToRecord = faker.helpers.arrayElements(
+    [11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48],
+    { min: 3, max: 8 }
+  )
+
+  const conditions = ["INTACT", "CARIES", "FILLED", "ROOT_CANAL", "CROWN", "MISSING", "FRACTURED"] as const
+  const surfaces = ["O", "M", "D", "V", "L", "MO", "DO", "MOD"] as const
+
+  const entries = teethToRecord.flatMap((tooth) => {
+    const condition = faker.helpers.arrayElement(conditions)
+    const hasSurface = faker.datatype.boolean({ probability: 0.6 })
+    if (hasSurface) {
+      return [
+        {
+          snapshotId: od.idOdontogramSnapshot,
+          toothNumber: tooth,
+          surface: faker.helpers.arrayElement(surfaces),
+          condition,
+          notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }),
+        },
+      ]
+    }
+    return [
+      {
+        snapshotId: od.idOdontogramSnapshot,
+        toothNumber: tooth,
+        surface: null,
+        condition,
+        notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }),
+      },
+    ]
+  })
+
   await prisma.odontogramEntry.createMany({
-    data: [
-      { snapshotId: od.idOdontogramSnapshot, toothNumber: 16, surface: "O", condition: "CARIES" },
-      { snapshotId: od.idOdontogramSnapshot, toothNumber: 26, surface: "O", condition: "FILLED" },
-    ],
+    data: entries,
+    skipDuplicates: true,
   })
 
   const perio = await prisma.periodontogramSnapshot.create({
     data: {
       pacienteId: params.pacienteId,
       consultaId: params.consultaId ?? null,
-      notes: "Periodontograma demo",
+      notes: faker.helpers.arrayElement([
+        "Periodontograma de referencia",
+        "Evaluación periodontal",
+        "Estado de encías",
+      ]),
       createdByUserId: params.createdByUserId,
     },
   })
 
+  // Create more comprehensive periodontogram measures
+  const teethForPerio = faker.helpers.arrayElements(teethToRecord, { min: 2, max: 6 })
+  const sites = ["DB", "B", "MB", "DL", "L", "ML"] as const
+
+  const measures = teethForPerio.flatMap((tooth) =>
+    sites.map((site) => ({
+      snapshotId: perio.idPeriodontogramSnapshot,
+      toothNumber: tooth,
+      site,
+      probingDepthMm: faker.number.int({ min: 1, max: 6 }),
+      bleeding: faker.helpers.arrayElement(["NONE", "YES"] as const),
+      plaque: faker.datatype.boolean({ probability: 0.3 }),
+      mobility: faker.helpers.maybe(() => faker.number.int({ min: 0, max: 3 }), { probability: 0.2 }),
+      furcation: faker.helpers.maybe(() => faker.number.int({ min: 0, max: 3 }), { probability: 0.1 }),
+    }))
+  )
+
   await prisma.periodontogramMeasure.createMany({
-    data: [
-      { snapshotId: perio.idPeriodontogramSnapshot, toothNumber: 16, site: "MB", probingDepthMm: 3, bleeding: "NONE" },
-      { snapshotId: perio.idPeriodontogramSnapshot, toothNumber: 16, site: "B", probingDepthMm: 2, bleeding: "NONE" },
-    ],
+    data: measures,
+    skipDuplicates: true,
   })
 }
 

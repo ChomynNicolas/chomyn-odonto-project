@@ -695,6 +695,12 @@ model TreatmentStep {
   status               TreatmentStepStatus @default(PENDING) @map("status")
   notes                String?             @map("notes")
 
+  // Multi-session support
+  requiresMultipleSessions Boolean @default(false) @map("requires_multiple_sessions")
+  totalSessions           Int?                     @map("total_sessions")
+  currentSession          Int?    @default(1)      @map("current_session")
+  completedAt             DateTime?                 @map("completed_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

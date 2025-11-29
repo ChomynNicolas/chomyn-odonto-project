@@ -106,7 +106,7 @@ export type AnamnesisWomenSpecific = z.infer<typeof AnamnesisWomenSpecificSchema
 // Main anamnesis create/update body schema
 export const AnamnesisCreateUpdateBodySchema = z.object({
   // General information
-  motivoConsulta: z.string().min(1).max(200),
+  motivoConsulta: z.string().max(200).optional().nullable(), // Optional - moved to consulta
   tieneDolorActual: z.boolean().default(false),
   dolorIntensidad: z.number().int().min(1).max(10).optional().nullable(),
   urgenciaPercibida: AnamnesisUrgenciaEnum.optional().nullable(),

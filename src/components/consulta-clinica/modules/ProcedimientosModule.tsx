@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Activity, Trash2, Edit, Search, Clock, ClipboardList } from "lucide-react"
+import { Plus, Activity, Trash2, Edit, Search, Clock, ClipboardList, Info } from "lucide-react"
 import { toast } from "sonner"
 import type { ConsultaClinicaDTO, ProcedimientoDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
 import { TreatmentStepStatus, DienteSuperficie } from "@prisma/client"
@@ -207,7 +208,10 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate, user
       ? `${step.procedimientoCatalogo.code} - ${step.procedimientoCatalogo.nombre}`
       : step.serviceType || "Procedimiento"
     const priority = step.priority ? ` (Prioridad ${step.priority})` : ""
-    return `#${step.order} - ${procedureName}${priority}`
+    const sessionInfo = step.requiresMultipleSessions && step.totalSessions
+      ? ` (Sesión ${step.currentSession ?? 1}/${step.totalSessions})`
+      : ""
+    return `#${step.order} - ${procedureName}${priority}${sessionInfo}`
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -481,6 +485,18 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate, user
                         <p className="text-xs text-muted-foreground">
                           Al vincular, el paso se marcará como completado automáticamente
                         </p>
+                        {treatmentStepId && (() => {
+                          const selectedStep = consulta.planTratamiento?.steps.find((s) => s.id === treatmentStepId)
+                          return selectedStep?.requiresMultipleSessions && selectedStep.totalSessions ? (
+                            <Alert className="mt-2">
+                              <Info className="h-4 w-4" />
+                              <AlertDescription>
+                                Este paso de tratamiento requiere {selectedStep.totalSessions} sesiones. 
+                                Actualmente en sesión {selectedStep.currentSession ?? 1} de {selectedStep.totalSessions}.
+                              </AlertDescription>
+                            </Alert>
+                          ) : null
+                        })()}
                       </div>
                     )}
                     

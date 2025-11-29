@@ -287,6 +287,10 @@ export interface TreatmentStepDTO {
   priority: number | null
   status: TreatmentStepStatus
   notes: string | null
+  requiresMultipleSessions?: boolean
+  totalSessions?: number | null
+  currentSession?: number | null
+  completedAt?: string | null
   createdAt: string
   updatedAt: string
 }

@@ -72,13 +72,7 @@ export const ClinicalSummary = memo(function ClinicalSummary({ patientId, curren
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Motivo de consulta */}
-        {anamnesis.motivoConsulta && (
-          <div>
-            <p className="text-sm font-medium mb-1">Motivo de Consulta</p>
-            <p className="text-sm text-muted-foreground">{anamnesis.motivoConsulta}</p>
-          </div>
-        )}
+        {/* motivoConsulta removed - it's now in consulta, not anamnesis */}
 
         {/* Urgencia */}
         {anamnesis.urgenciaPercibida && anamnesis.urgenciaPercibida !== 'RUTINA' && (

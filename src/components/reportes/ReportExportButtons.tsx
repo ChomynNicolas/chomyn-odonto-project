@@ -3,16 +3,17 @@
 
 /**
  * Report Export Buttons Component
- * Provides PDF export, CSV export, and print functionality for reports.
+ * Provides PDF export and CSV export functionality for reports.
  */
 
 import { useState, useCallback } from "react"
-import { Download, Printer, Loader2, FileText, FileSpreadsheet, ChevronDown } from "lucide-react"
+import { Download, Loader2, FileText, FileSpreadsheet, ChevronDown } from "lucide-react"
 import {
   generateReportPdf,
   downloadBlob,
   generateReportFilename,
   formatFiltersForExport,
+  normalizeFiltersForExport,
   type PdfExportOptions,
   type ExportScope,
 } from "@/lib/utils/report-export"
@@ -22,11 +23,11 @@ import {
   generateCsvFilename,
   type CsvExportOptions,
 } from "@/lib/utils/report-export-csv"
-import { auditReportExport, auditReportPrint } from "@/lib/services/reportes/audit"
 import { useSession } from "next-auth/react"
 import type { ReportType, ReportKpi, ReportMetadata } from "@/types/reportes"
 import { toast } from "sonner"
 import { ExportScopeBadge } from "./ExportScopeBadge"
+import { safeValidateReportFilters } from "@/lib/validation/reportes"
 
 interface ReportExportButtonsProps {
   reportType: ReportType
@@ -45,6 +46,43 @@ interface ReportExportButtonsProps {
   totalRecords?: number
   onExportStart?: () => void
   onExportEnd?: () => void
+}
+
+/**
+ * Helper function to log audit entry for report export via API.
+ * Fails silently if audit logging fails (doesn't affect export).
+ */
+async function logExportAudit(
+  reportType: ReportType,
+  userId: number,
+  username: string,
+  role: "ADMIN" | "ODONT" | "RECEP",
+  filters: Record<string, unknown>,
+  format: "pdf" | "csv",
+  scope?: "currentPage" | "fullDataset",
+  recordCount?: number,
+  fileSizeBytes?: number
+): Promise<void> {
+  try {
+    await fetch(`/api/reportes/${reportType}/audit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        username,
+        role,
+        reportType,
+        filters,
+        format,
+        scope,
+        recordCount,
+        fileSizeBytes,
+      }),
+    })
+  } catch (error) {
+    // Log error but don't throw - audit failures shouldn't affect export
+    console.error("[ReportExport] Audit logging failed:", error)
+  }
 }
 
 export function ReportExportButtons({
@@ -85,16 +123,59 @@ export function ReportExportButtons({
 
       // For full dataset, fetch all records from export endpoint
       if (scope === "fullDataset") {
+        // Normalize filters before sending (remove empty arrays, pagination fields, etc.)
+        const normalizedFilters = normalizeFiltersForExport(filters)
+        
+        // Optional: Validate filters in frontend before sending (better UX)
+        const validationResult = safeValidateReportFilters(reportType, normalizedFilters)
+        if (!validationResult.success) {
+          const flattenedErrors = validationResult.error.flatten()
+          const fieldErrors = Object.entries(flattenedErrors.fieldErrors || {})
+            .map(([field, messages]) => {
+              const msgArray = Array.isArray(messages) ? messages : [messages]
+              return `${field}: ${msgArray.join(", ")}`
+            })
+          
+          const errorMsg = fieldErrors.length > 0
+            ? `Filtros inválidos: ${fieldErrors.join("; ")}`
+            : "Filtros inválidos. Por favor, verifica los valores ingresados."
+          
+          setIsExporting(false)
+          onExportEnd?.()
+          toast.error("Error de validación", { description: errorMsg })
+          return
+        }
+        
         toast.info("Obteniendo todos los registros...", { duration: 2000 })
+        
         const response = await fetch(`/api/reportes/${reportType}/export`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filters }),
+          body: JSON.stringify({ filters: normalizedFilters }),
         })
 
         const result = await response.json()
         if (!result.ok) {
-          throw new Error(result.error || "Error al obtener datos para exportar")
+          // Extract detailed error message if available
+          let errorMessage = result.error || "Error al obtener datos para exportar"
+          
+          // If there are validation error details, include them
+          if (result.details?.errors) {
+            const errorDetails = result.details.errors
+            const fieldErrors = errorDetails.fieldErrors
+              ? Object.entries(errorDetails.fieldErrors)
+                  .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(", ") : messages}`)
+                  .join("; ")
+              : null
+            
+            if (fieldErrors) {
+              errorMessage = `Filtros inválidos: ${fieldErrors}`
+            } else if (errorDetails.formErrors && errorDetails.formErrors.length > 0) {
+              errorMessage = `Filtros inválidos: ${errorDetails.formErrors.join(", ")}`
+            }
+          }
+          
+          throw new Error(errorMessage)
         }
 
         exportData = result.data.data as unknown as Array<Record<string, unknown>>
@@ -124,20 +205,19 @@ export function ReportExportButtons({
       const filename = generateReportFilename(reportType, "pdf")
       downloadBlob(blob, filename)
 
-      // Audit log
+      // Audit log (non-blocking)
       if (session?.user?.id) {
-        await auditReportExport({
-          userId: parseInt(session.user.id, 10),
-          username: session.user.username || session.user.name || "unknown",
-          role: (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
+        await logExportAudit(
           reportType,
+          parseInt(session.user.id, 10),
+          session.user.username || session.user.name || "unknown",
+          (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
           filters,
-          format: "pdf",
+          "pdf",
           scope,
           recordCount,
-          fileSizeBytes: blob.size,
-          headers: new Headers(),
-        })
+          blob.size
+        )
       }
 
       toast.success("PDF exportado exitosamente", {
@@ -185,16 +265,59 @@ export function ReportExportButtons({
 
       // For full dataset, fetch all records from export endpoint
       if (scope === "fullDataset") {
+        // Normalize filters before sending (remove empty arrays, pagination fields, etc.)
+        const normalizedFilters = normalizeFiltersForExport(filters)
+        
+        // Optional: Validate filters in frontend before sending (better UX)
+        const validationResult = safeValidateReportFilters(reportType, normalizedFilters)
+        if (!validationResult.success) {
+          const flattenedErrors = validationResult.error.flatten()
+          const fieldErrors = Object.entries(flattenedErrors.fieldErrors || {})
+            .map(([field, messages]) => {
+              const msgArray = Array.isArray(messages) ? messages : [messages]
+              return `${field}: ${msgArray.join(", ")}`
+            })
+          
+          const errorMsg = fieldErrors.length > 0
+            ? `Filtros inválidos: ${fieldErrors.join("; ")}`
+            : "Filtros inválidos. Por favor, verifica los valores ingresados."
+          
+          setIsExporting(false)
+          onExportEnd?.()
+          toast.error("Error de validación", { description: errorMsg })
+          return
+        }
+        
         toast.info("Obteniendo todos los registros...", { duration: 2000 })
+        
         const response = await fetch(`/api/reportes/${reportType}/export`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filters }),
+          body: JSON.stringify({ filters: normalizedFilters }),
         })
 
         const result = await response.json()
         if (!result.ok) {
-          throw new Error(result.error || "Error al obtener datos para exportar")
+          // Extract detailed error message if available
+          let errorMessage = result.error || "Error al obtener datos para exportar"
+          
+          // If there are validation error details, include them
+          if (result.details?.errors) {
+            const errorDetails = result.details.errors
+            const fieldErrors = errorDetails.fieldErrors
+              ? Object.entries(errorDetails.fieldErrors)
+                  .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(", ") : messages}`)
+                  .join("; ")
+              : null
+            
+            if (fieldErrors) {
+              errorMessage = `Filtros inválidos: ${fieldErrors}`
+            } else if (errorDetails.formErrors && errorDetails.formErrors.length > 0) {
+              errorMessage = `Filtros inválidos: ${errorDetails.formErrors.join(", ")}`
+            }
+          }
+          
+          throw new Error(errorMessage)
         }
 
         exportData = result.data.data as unknown as Array<Record<string, unknown>>
@@ -217,21 +340,20 @@ export function ReportExportButtons({
       const filename = generateCsvFilename(reportType)
       downloadCsv(csvContent, filename)
 
-      // Audit log
+      // Audit log (non-blocking)
       if (session?.user?.id) {
         const blob = new Blob([csvContent], { type: "text/csv" })
-        await auditReportExport({
-          userId: parseInt(session.user.id, 10),
-          username: session.user.username || session.user.name || "unknown",
-          role: (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
+        await logExportAudit(
           reportType,
+          parseInt(session.user.id, 10),
+          session.user.username || session.user.name || "unknown",
+          (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
           filters,
-          format: "csv",
+          "csv",
           scope,
           recordCount,
-          fileSizeBytes: blob.size,
-          headers: new Headers(),
-        })
+          blob.size
+        )
       }
 
       toast.success("CSV exportado exitosamente", {
@@ -258,26 +380,6 @@ export function ReportExportButtons({
     onExportEnd,
   ])
 
-  const handlePrint = useCallback(() => {
-    window.print()
-
-    // Audit log
-    if (session?.user?.id && filters) {
-      auditReportPrint({
-        userId: parseInt(session.user.id, 10),
-        username: session.user.username || session.user.name || "unknown",
-        role: (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP",
-        reportType,
-        filters,
-        headers: new Headers(),
-      }).catch((err) => {
-        console.error("[ReportExport] Print audit error:", err)
-      })
-    }
-
-    toast.success("Ventana de impresión abierta")
-  }, [session, filters, reportType])
-
   const hasData = metadata && tableData && tableData.length > 0
   const recordCount = tableData?.length
 
@@ -291,17 +393,6 @@ export function ReportExportButtons({
           totalRecords={totalRecords}
         />
       )}
-
-      {/* Print Button */}
-      <button
-        onClick={handlePrint}
-        disabled={disabled || !metadata}
-        className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-        title="Imprimir reporte (Ctrl+P)"
-      >
-        <Printer className="h-4 w-4" />
-        <span className="hidden sm:inline">Imprimir</span>
-      </button>
 
       {/* Export Dropdown */}
       <div className="relative">

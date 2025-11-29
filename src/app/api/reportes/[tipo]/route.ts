@@ -7,7 +7,7 @@
  * Body: { filters: ReportFilters }
  */
 
-import { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { ok, errors } from "@/app/api/_http"
 import { prisma } from "@/lib/prisma"
@@ -98,10 +98,25 @@ export async function POST(
 
     // 8. Return response
     if (!result.success) {
-      // Map error codes to HTTP status
+      // Map error codes to HTTP status and include details if available
       switch (result.error.code) {
-        case "VALIDATION_ERROR":
+        case "VALIDATION_ERROR": {
+          // Include validation error details in the response for better debugging
+          const errorDetails = result.error.details?.errors
+          if (errorDetails) {
+            // Return error with details as JSON (extending ApiError format)
+            return NextResponse.json(
+              {
+                ok: false,
+                code: "VALIDATION_ERROR",
+                error: result.error.message,
+                details: { errors: errorDetails },
+              },
+              { status: 400 }
+            )
+          }
           return errors.validation(result.error.message)
+        }
         case "FORBIDDEN":
           return errors.forbidden(result.error.message)
         case "NOT_FOUND":

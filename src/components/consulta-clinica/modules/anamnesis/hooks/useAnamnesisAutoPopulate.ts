@@ -33,7 +33,7 @@ export function useAnamnesisAutoPopulate({
   ];
 
   const variableFields = [
-    'motivoConsulta',
+    // motivoConsulta removed - it's now in consulta, not anamnesis
     'tieneDolorActual',
     'dolorIntensidad',
     'urgenciaPercibida',
@@ -141,10 +141,7 @@ export function useAnamnesisAutoPopulate({
     }
 
     // Populate variable fields
-    if (fieldsToPopulate.includes('motivoConsulta') && previousAnamnesis.motivoConsulta) {
-      form.setValue('motivoConsulta', previousAnamnesis.motivoConsulta);
-      confirmedFields.push('motivoConsulta');
-    }
+    // motivoConsulta removed - it's now in consulta, not anamnesis
 
     if (fieldsToPopulate.includes('tieneDolorActual')) {
       form.setValue('tieneDolorActual', previousAnamnesis.tieneDolorActual);

@@ -3,9 +3,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import type { TreatmentPlansResponse } from '@/types/treatment-plans';
 
 export function useTreatmentPlans(patientId: number, includeInactive = false) {
-  return useQuery({
+  return useQuery<TreatmentPlansResponse>({
     queryKey: ['patient', 'treatment-plans', patientId, includeInactive],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -23,7 +24,7 @@ export function useTreatmentPlans(patientId: number, includeInactive = false) {
       }
       
       const response = await res.json();
-      return response.data;
+      return response.data as TreatmentPlansResponse;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
   });

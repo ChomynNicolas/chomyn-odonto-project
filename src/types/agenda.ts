@@ -238,3 +238,27 @@ export interface RescheduleRequest {
   duracionMinutos?: number
   motivo: string
 }
+
+// ============================================================================
+// FOLLOW-UP APPOINTMENT CONTEXT
+// ============================================================================
+
+export interface NextSessionInfo {
+  stepId: number
+  stepOrder: number
+  stepName: string
+  currentSession: number
+  totalSessions: number
+  nextSessionNumber: number
+  estimatedDurationMin: number | null
+}
+
+export interface FollowUpContext {
+  hasActivePlan: boolean
+  planId: number | null
+  planTitle: string | null
+  hasPendingSessions: boolean
+  nextSessions: NextSessionInfo[]
+  recommendedFollowUpDate: string | null // ISO
+  isMultiSessionFollowUp: boolean
+}

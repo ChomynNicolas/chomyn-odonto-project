@@ -86,10 +86,6 @@ export default function CitasSummaryReportPage() {
     }
   }, [currentFilters, fetchReport])
 
-  const handlePrint = useCallback(() => {
-    window.print()
-  }, [])
-
   const renderCell = useCallback((column: { key: string; label: string }, row: CitaSummaryRow) => {
     if (column.key === "estado") {
       return (
@@ -121,7 +117,6 @@ export default function CitasSummaryReportPage() {
       config={config}
       isLoading={isLoading}
       error={error}
-      onPrint={handlePrint}
       filters={
         <ReportFiltersForm
           schema={citasSummaryFiltersSchema}

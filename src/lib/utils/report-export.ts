@@ -335,6 +335,41 @@ export function generateReportFilename(
 }
 
 /**
+ * Normalize filters for export by:
+ * - Removing empty arrays (converting to undefined)
+ * - Removing page and pageSize fields (backend will set these)
+ * - Converting null values to undefined
+ * - Ensuring proper types
+ */
+export function normalizeFiltersForExport(
+  filters: Record<string, unknown>
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(filters)) {
+    // Skip pagination fields - they will be set by the backend
+    if (key === "page" || key === "pageSize") {
+      continue
+    }
+
+    // Convert null to undefined
+    if (value === null) {
+      continue
+    }
+
+    // Remove empty arrays (convert to undefined for optional fields)
+    if (Array.isArray(value) && value.length === 0) {
+      continue
+    }
+
+    // Keep other values as-is
+    normalized[key] = value
+  }
+
+  return normalized
+}
+
+/**
  * Format filters for display in exports.
  */
 export function formatFiltersForExport(

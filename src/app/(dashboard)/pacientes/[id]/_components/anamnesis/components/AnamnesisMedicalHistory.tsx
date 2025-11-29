@@ -27,12 +27,7 @@ export const AnamnesisMedicalHistory = memo(function AnamnesisMedicalHistory({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {anamnesis.motivoConsulta && (
-          <div>
-            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Motivo de Consulta</h4>
-            <p className="text-sm leading-relaxed">{anamnesis.motivoConsulta}</p>
-          </div>
-        )}
+        {/* motivoConsulta removed - it's now in consulta, not anamnesis */}
 
         {activeAntecedents.length > 0 ? (
           <div>

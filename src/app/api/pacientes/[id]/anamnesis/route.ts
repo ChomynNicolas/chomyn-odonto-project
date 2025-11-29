@@ -397,7 +397,7 @@ export async function POST(
         create: {
           pacienteId,
           tipo,
-          motivoConsulta: data.motivoConsulta,
+          motivoConsulta: data.motivoConsulta ?? null, // Optional - moved to consulta
           tieneDolorActual: data.tieneDolorActual,
           dolorIntensidad: data.dolorIntensidad,
           urgenciaPercibida: data.urgenciaPercibida,
@@ -417,7 +417,7 @@ export async function POST(
           versionNumber: 1, // Initial version
         },
         update: {
-          motivoConsulta: data.motivoConsulta,
+          motivoConsulta: data.motivoConsulta ?? null, // Optional - moved to consulta
           tieneDolorActual: data.tieneDolorActual,
           dolorIntensidad: data.dolorIntensidad,
           urgenciaPercibida: data.urgenciaPercibida,

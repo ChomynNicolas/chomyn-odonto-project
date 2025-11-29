@@ -32,10 +32,10 @@ export function AnamnesisStatusBadge({ anamnesis, isLoading }: AnamnesisStatusBa
     );
   }
 
-  // Calculate completeness
-  const hasRequiredFields = !!anamnesis.motivoConsulta;
+  // Calculate completeness (motivoConsulta removed - it's now in consulta, not anamnesis)
   const hasMedicalHistory = anamnesis.tieneEnfermedadesCronicas || anamnesis.tieneAlergias || anamnesis.tieneMedicacionActual;
-  const isComplete = hasRequiredFields && (hasMedicalHistory || !anamnesis.tieneEnfermedadesCronicas);
+  // Anamnesis is considered complete if it exists (motivoConsulta is no longer required)
+  const isComplete = true; // Anamnesis exists, so it's considered complete
 
   // Check if outdated (more than 1 year old)
   const updatedAt = new Date(anamnesis.updatedAt);

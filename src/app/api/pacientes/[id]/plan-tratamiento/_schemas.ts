@@ -23,6 +23,9 @@ const StepSchema = z.object({
   estimatedCostCents: z.number().int().nonnegative().nullable().optional(),
   priority: z.number().int().min(1).max(5).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
+  requiresMultipleSessions: z.boolean().optional(),
+  totalSessions: z.number().int().min(2).max(10).nullable().optional(),
+  currentSession: z.number().int().positive().nullable().optional(),
 })
 
 const CreateStepSchema = StepSchema
@@ -47,7 +50,20 @@ export const UpdateStepStatusSchema = z.object({
   status: TreatmentStepStatusSchema,
 })
 
+export const CompleteSessionSchema = z.object({
+  currentSession: z.number().int().positive(),
+  sessionNotes: z.string().max(1000).optional(),
+  scheduleNextSession: z.boolean(),
+  nextSessionData: z.object({
+    date: z.string(),
+    time: z.string().regex(/^\d{2}:\d{2}$/),
+    professionalId: z.number().int().positive(),
+    duration: z.number().int().positive().optional(),
+  }).optional(),
+})
+
 export type CreatePlanInput = z.infer<typeof CreatePlanSchema>
 export type UpdatePlanInput = z.infer<typeof UpdatePlanSchema>
 export type UpdateStepStatusInput = z.infer<typeof UpdateStepStatusSchema>
+export type CompleteSessionInput = z.infer<typeof CompleteSessionSchema>
 

@@ -7,11 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed/index.ts",
     "download-fonts": "node scripts/download-outfit-font.js"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts",
+    "seed": "tsx prisma/seed/index.ts",
     "schema": "prisma/schema.prisma"
   },
   "dependencies": {

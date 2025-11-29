@@ -102,7 +102,7 @@ function mapAnamnesisToFormValues(
       : anamnesis.tieneHabitosSuccion ?? undefined
 
   const mappedData = {
-    motivoConsulta: anamnesis.motivoConsulta || "",
+    // motivoConsulta removed - it's now in consulta, not anamnesis
     tieneDolorActual: anamnesis.tieneDolorActual,
     dolorIntensidad: anamnesis.dolorIntensidad ?? undefined,
     urgenciaPercibida: anamnesis.urgenciaPercibida ?? undefined,
@@ -205,7 +205,7 @@ export function AnamnesisForm({
   const form = useForm<AnamnesisCreateUpdateBody>({
     resolver: zodResolver(AnamnesisCreateUpdateBodySchema),
     defaultValues: {
-      motivoConsulta: "",
+      motivoConsulta: undefined, // Optional - moved to consulta
       tieneDolorActual: false,
       dolorIntensidad: undefined,
       urgenciaPercibida: undefined,
@@ -242,7 +242,10 @@ export function AnamnesisForm({
   // Load initial data
   useEffect(() => {
     if (initialData) {
-      form.reset(mapAnamnesisToFormValues(initialData, consultaId))
+      const mappedData = mapAnamnesisToFormValues(initialData, consultaId)
+      // Remove motivoConsulta from form data (it's now in consulta)
+      const { motivoConsulta, ...formData } = mappedData
+      form.reset(formData)
       resetUnsavedChanges()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,9 +255,7 @@ export function AnamnesisForm({
   const getErrorMessages = useCallback(() => {
     const messages: { field: string; message: string }[] = []
     
-    if (errors.motivoConsulta) {
-      messages.push({ field: "Motivo de consulta", message: errors.motivoConsulta.message || "Campo requerido" })
-    }
+    // motivoConsulta removed - it's now in consulta
     if (errors.dolorIntensidad) {
       messages.push({ field: "Intensidad del dolor", message: errors.dolorIntensidad.message || "Valor inválido" })
     }
@@ -281,7 +282,7 @@ export function AnamnesisForm({
 
     // Map error keys to section refs
     const errorToRef: Record<string, React.RefObject<HTMLDivElement | null>> = {
-      motivoConsulta: generalRef,
+      // motivoConsulta removed - it's now in consulta
       tieneDolorActual: generalRef,
       dolorIntensidad: generalRef,
       urgenciaPercibida: generalRef,
@@ -334,7 +335,7 @@ export function AnamnesisForm({
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  const motivoConsulta = form.watch("motivoConsulta")
+  // motivoConsulta removed - it's now in consulta
   const tieneDolorActual = form.watch("tieneDolorActual")
   const dolorIntensidad = form.watch("dolorIntensidad")
   const tieneEnfermedadesCronicas = form.watch("tieneEnfermedadesCronicas")
@@ -352,7 +353,6 @@ export function AnamnesisForm({
         id: "general",
         label: "Información General",
         isComplete:
-          !!motivoConsulta &&
           (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined)),
         ref: generalRef,
       },
@@ -398,7 +398,7 @@ export function AnamnesisForm({
 
     return baseSections
   }, [
-    motivoConsulta,
+    // motivoConsulta removed - it's now in consulta
     tieneDolorActual,
     dolorIntensidad,
     tieneEnfermedadesCronicas,
@@ -437,6 +437,8 @@ export function AnamnesisForm({
       // Limpiar campos según edad/género antes de enviar
       const cleanedData = {
         ...data,
+        // Remove motivoConsulta - it's now in consulta, not anamnesis
+        motivoConsulta: undefined,
         medications: data.medications?.map((med) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { label, dose, freq, route, ...rest } = med

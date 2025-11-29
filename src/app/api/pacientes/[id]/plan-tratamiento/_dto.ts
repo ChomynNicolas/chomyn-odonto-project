@@ -15,6 +15,9 @@ export interface CreatePlanBody {
     estimatedCostCents?: number | null
     priority?: number | null
     notes?: string | null
+    requiresMultipleSessions?: boolean
+    totalSessions?: number | null
+    currentSession?: number | null
   }>
 }
 
@@ -32,6 +35,9 @@ export interface UpdatePlanBody {
     estimatedCostCents?: number | null
     priority?: number | null
     notes?: string | null
+    requiresMultipleSessions?: boolean
+    totalSessions?: number | null
+    currentSession?: number | null
   }>
 }
 

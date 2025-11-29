@@ -496,16 +496,35 @@ async function seedPatientsAndPersonas() {
       }
     });
 
-    // Create document
-    await prisma.documento.create({
-      data: {
-        personaId: persona.idPersona,
-        tipo: data.docTipo,
-        numero: data.docNumero,
-        paisEmision: 'PY',
-        fechaEmision: addMonths(new Date(), -36)
+    // Create document (handle duplicates gracefully)
+    try {
+      await prisma.documento.create({
+        data: {
+          personaId: persona.idPersona,
+          tipo: data.docTipo,
+          numero: data.docNumero,
+          paisEmision: 'PY',
+          fechaEmision: addMonths(new Date(), -36)
+        }
+      });
+    } catch (error: any) {
+      // Ignore duplicate document errors (P2002)
+      if (error.code !== 'P2002') {
+        throw error;
       }
-    });
+      // If document already exists, try to link it to this persona if personaId is different
+      const existingDoc = await prisma.documento.findFirst({
+        where: {
+          tipo: data.docTipo,
+          numero: data.docNumero,
+          paisEmision: 'PY'
+        }
+      });
+      if (existingDoc && existingDoc.personaId !== persona.idPersona) {
+        // Document exists for different persona - skip (this shouldn't happen in real scenario)
+        console.log(`⚠️ Document ${data.docNumero} already exists for different persona, skipping`);
+      }
+    }
 
     // Create patient
     const paciente = await prisma.paciente.create({
@@ -531,14 +550,22 @@ async function seedPatientsAndPersonas() {
         }
       });
 
-      await prisma.documento.create({
-        data: {
-          personaId: personaPadre.idPersona,
-          tipo: 'CI',
-          numero: data.docPadre!,
-          paisEmision: 'PY'
+      try {
+        await prisma.documento.create({
+          data: {
+            personaId: personaPadre.idPersona,
+            tipo: 'CI',
+            numero: data.docPadre!,
+            paisEmision: 'PY'
+          }
+        });
+      } catch (error: any) {
+        // Ignore duplicate document errors (P2002)
+        if (error.code !== 'P2002') {
+          throw error;
         }
-      });
+        console.log(`⚠️ Parent document ${data.docPadre} already exists, skipping`);
+      }
 
       await prisma.pacienteResponsable.create({
         data: {
