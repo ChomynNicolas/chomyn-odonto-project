@@ -3,12 +3,12 @@
  * GET /api/especialidades - Lista especialidades activas
  */
 
-import { type NextRequest, NextResponse } from "next/server"
+import {  NextResponse } from "next/server"
 import { listEspecialidades } from "./_service"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const especialidades = await listEspecialidades()
     return NextResponse.json({ ok: true, data: especialidades }, { status: 200 })

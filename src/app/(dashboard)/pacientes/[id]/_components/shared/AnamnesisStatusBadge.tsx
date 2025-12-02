@@ -32,8 +32,7 @@ export function AnamnesisStatusBadge({ anamnesis, isLoading }: AnamnesisStatusBa
     );
   }
 
-  // Calculate completeness (motivoConsulta removed - it's now in consulta, not anamnesis)
-  const hasMedicalHistory = anamnesis.tieneEnfermedadesCronicas || anamnesis.tieneAlergias || anamnesis.tieneMedicacionActual;
+
   // Anamnesis is considered complete if it exists (motivoConsulta is no longer required)
   const isComplete = true; // Anamnesis exists, so it's considered complete
 

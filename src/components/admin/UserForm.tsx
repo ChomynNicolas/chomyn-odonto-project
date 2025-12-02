@@ -43,7 +43,7 @@ const userFormSchema = z.object({
   estaActivo: z.boolean().default(true),
 })
 
-type UserFormValues = z.infer<typeof userFormSchema>
+type UserFormValues = z.input<typeof userFormSchema>
 
 interface UserFormProps {
   open: boolean
@@ -113,7 +113,7 @@ export default function UserForm({ open, onOpenChange, userId, onSuccess, roles 
           email: data.email,
           nombreApellido: data.nombreApellido,
           rolId: data.rolId,
-          estaActivo: data.estaActivo,
+          estaActivo: data.estaActivo ?? true,
         }
         await updateUser(userId!, updateData)
       } else {

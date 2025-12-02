@@ -86,7 +86,6 @@ export function WorkspaceSidebar({
   moduleStatus,
   isCollapsed,
   onToggleCollapse,
-  canEdit,
   isFinalized,
 }: WorkspaceSidebarProps) {
   const getStatusIcon = (status: "empty" | "complete" | "required") => {

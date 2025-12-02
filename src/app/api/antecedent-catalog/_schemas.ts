@@ -6,7 +6,7 @@
 import { z } from "zod"
 
 // AntecedentCategory enum values
-const AntecedentCategoryEnum = z.enum([
+export const AntecedentCategoryEnum = z.enum([
   "CARDIOVASCULAR",
   "ENDOCRINE",
   "RESPIRATORY",

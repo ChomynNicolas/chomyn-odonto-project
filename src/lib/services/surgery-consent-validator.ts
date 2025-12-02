@@ -139,7 +139,7 @@ export async function getResponsiblePartyForSurgery(
       ]
     },
     include: {
-      responsable: true
+      persona: true
     }
   })
   
@@ -153,7 +153,7 @@ export async function getResponsiblePartyForSurgery(
   }
   
   return {
-    responsiblePartyId: responsable.responsablePersonaId,
+    responsiblePartyId: responsable.personaId,
     isMinor: true
   }
 }

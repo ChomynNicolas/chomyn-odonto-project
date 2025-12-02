@@ -51,6 +51,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
       resultNotes: procedimiento.resultNotes,
       unitPriceCents: procedimiento.unitPriceCents,
       totalCents: procedimiento.totalCents,
+      diagnosisId: procedimiento.diagnosisId,
     }
 
     const updateData: Prisma.ConsultaProcedimientoUpdateInput = {}
@@ -58,9 +59,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     if (input.unitPriceCents !== undefined) updateData.unitPriceCents = input.unitPriceCents
     if (input.totalCents !== undefined) {
       updateData.totalCents = input.totalCents
-    } else if (input.unitPriceCents !== undefined && input.quantity !== undefined) {
+    } else if (input.unitPriceCents !== undefined && input.unitPriceCents !== null && input.quantity !== undefined) {
       updateData.totalCents = input.unitPriceCents * input.quantity
-    } else if (input.unitPriceCents !== undefined) {
+    } else if (input.unitPriceCents !== undefined && input.unitPriceCents !== null) {
       updateData.totalCents = input.unitPriceCents * procedimiento.quantity
     } else if (input.quantity !== undefined && procedimiento.unitPriceCents) {
       updateData.totalCents = procedimiento.unitPriceCents * input.quantity
@@ -83,6 +84,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
         resultNotes: updated.resultNotes,
         unitPriceCents: updated.unitPriceCents,
         totalCents: updated.totalCents,
+        diagnosisId: updated.diagnosisId,
       },
       req
     )
@@ -149,6 +151,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       serviceType: procedimiento.serviceType,
       quantity: procedimiento.quantity,
       treatmentStepId: procedimiento.treatmentStepId,
+      diagnosisId: procedimiento.diagnosisId,
       toothNumber: procedimiento.toothNumber,
       toothSurface: procedimiento.toothSurface,
     }

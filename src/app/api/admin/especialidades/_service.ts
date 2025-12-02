@@ -11,8 +11,7 @@ import type {
   EspecialidadItem,
 } from "./_schemas"
 import { safeAuditWrite } from "@/lib/audit/log"
-import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Headers } from "next/headers"
+import { AuditAction, AuditEntity, type AuditAction as AuditActionType } from "@/lib/audit/actions"
 
 /**
  * Lista especialidades con filtros, paginación y búsqueda
@@ -236,7 +235,7 @@ export async function updateEspecialidad(
     })
 
     // Determine audit action based on isActive change
-    let auditAction = AuditAction.ESPECIALIDAD_UPDATE
+    let auditAction: AuditActionType = AuditAction.ESPECIALIDAD_UPDATE
     if (changes.isActive) {
       auditAction = changes.isActive.new === true
         ? AuditAction.ESPECIALIDAD_REACTIVATE

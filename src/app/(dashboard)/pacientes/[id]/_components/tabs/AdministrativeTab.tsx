@@ -29,7 +29,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { Empty } from '@/components/ui/empty';
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import type { RolNombre } from '@/types/patient';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -245,11 +245,13 @@ export function AdministrativeTab({ patientId, currentRole }: AdministrativeTabP
         </CardHeader>
         <CardContent>
           {data.responsibles.length === 0 ? (
-            <Empty
-              icon={Users}
-              title="Sin responsables registrados"
-              description="No hay personas responsables registradas para este paciente."
-            />
+            <Empty>
+              <EmptyMedia variant="icon">
+                <Users className="h-6 w-6" />
+              </EmptyMedia>
+              <EmptyTitle>Sin responsables registrados</EmptyTitle>
+              <EmptyDescription>No hay personas responsables registradas para este paciente.</EmptyDescription>
+            </Empty>
           ) : (
             <div className="space-y-6">
               {data.responsibles.map((resp, index) => (

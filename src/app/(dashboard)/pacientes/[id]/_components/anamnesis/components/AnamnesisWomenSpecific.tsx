@@ -8,8 +8,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Heart, Calendar, Baby, Info } from "lucide-react"
 import type { WomenSpecificPayload } from "../types/anamnesis-display.types"
 import { formatPregnancyWeeks, formatLastMenstruation } from "../utils/payload-helpers"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
 
 interface AnamnesisWomenSpecificProps {
   womenSpecific: WomenSpecificPayload

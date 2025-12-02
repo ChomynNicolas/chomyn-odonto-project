@@ -36,7 +36,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   Upload,
-  Search,
   ExternalLink,
 } from "lucide-react"
 import type { CitaDetalleDTO, CurrentUser, EstadoCita, AccionCita } from "@/types/agenda"
@@ -788,17 +787,7 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                 )}
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                window.open(`/citas?q=${encodeURIComponent(dto.paciente.nombre)}`, "_blank")
-              }}
-              className="gap-1.5 font-semibold text-xs h-9 flex-1 sm:flex-none"
-            >
-              <Search className="h-3.5 w-3.5" />
-              Buscar
-            </Button>
+            
             <Button
               variant="outline"
               size="sm"

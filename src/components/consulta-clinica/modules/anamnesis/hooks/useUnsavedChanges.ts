@@ -4,7 +4,6 @@
 "use client"
 
 import { useEffect, useCallback, useState } from "react"
-import { useRouter } from "next/navigation"
 
 interface UseUnsavedChangesOptions {
   /** Whether the form has unsaved changes (typically from formState.isDirty) */
@@ -35,7 +34,7 @@ export function useUnsavedChanges({
   enabled = true,
 }: UseUnsavedChangesOptions): UseUnsavedChangesReturn {
   const [manualDirty, setManualDirty] = useState(false)
-  const router = useRouter()
+  
 
   // Combined dirty state
   const hasUnsavedChanges = enabled && (isDirty || manualDirty)

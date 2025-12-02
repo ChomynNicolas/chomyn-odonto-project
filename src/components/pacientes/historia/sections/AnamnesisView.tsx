@@ -20,8 +20,6 @@ import {
   FileText,
   Calendar,
   Phone,
-  CheckCircle2,
-  XCircle,
   AlertCircle as AlertCircleIcon,
 } from "lucide-react"
 import { formatDate } from "@/lib/utils/patient-helpers"

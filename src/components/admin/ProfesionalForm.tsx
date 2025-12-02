@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, type FieldPath } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useRouter } from "next/navigation"
@@ -44,7 +44,7 @@ const profesionalFormSchema = z.object({
   especialidadIds: z.array(z.number().int().positive()).default([]),
 })
 
-type ProfesionalFormValues = z.infer<typeof profesionalFormSchema>
+type ProfesionalFormValues = z.input<typeof profesionalFormSchema>
 
 interface ProfesionalFormProps {
   profesionalId?: number
@@ -134,9 +134,9 @@ export default function ProfesionalForm({ profesionalId, onSuccess }: Profesiona
       if (isEditing) {
         const updateData: ProfesionalUpdateInput = {
           numeroLicencia: data.numeroLicencia,
-          estaActivo: data.estaActivo,
+          estaActivo: data.estaActivo ?? true,
           disponibilidad: data.disponibilidad || null,
-          especialidadIds: data.especialidadIds,
+          especialidadIds: data.especialidadIds ?? [],
         }
         await updateProfesional(profesionalId!, updateData)
       } else {
@@ -144,9 +144,9 @@ export default function ProfesionalForm({ profesionalId, onSuccess }: Profesiona
           personaId: data.personaId,
           userId: data.userId,
           numeroLicencia: data.numeroLicencia || null,
-          estaActivo: data.estaActivo,
+          estaActivo: data.estaActivo ?? true,
           disponibilidad: data.disponibilidad || null,
-          especialidadIds: data.especialidadIds,
+          especialidadIds: data.especialidadIds ?? [],
         }
         await createProfesional(createData)
       }
@@ -179,7 +179,7 @@ export default function ProfesionalForm({ profesionalId, onSuccess }: Profesiona
     }
 
     // Validar solo los campos del paso actual sin disparar el submit
-    const isValid = await form.trigger(fieldsToValidate as any, { shouldFocus: true })
+    const isValid = await form.trigger(fieldsToValidate as FieldPath<ProfesionalFormValues>[], { shouldFocus: true })
     if (isValid) {
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps))
     } else {
@@ -403,7 +403,7 @@ export default function ProfesionalForm({ profesionalId, onSuccess }: Profesiona
                       <FormControl>
                         <EspecialidadesSelector
                           especialidades={especialidades}
-                          selectedIds={field.value}
+                          selectedIds={field.value ?? []}
                           onSelectionChange={field.onChange}
                         />
                       </FormControl>

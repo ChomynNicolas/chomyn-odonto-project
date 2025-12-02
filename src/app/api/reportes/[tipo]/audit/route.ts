@@ -7,7 +7,7 @@
  * Body: { userId, username, role, reportType, filters, format, scope, recordCount, fileSizeBytes }
  */
 
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { auth } from "@/auth"
 import { ok, errors } from "@/app/api/_http"
 import { auditReportExport } from "@/lib/services/reportes/audit"
@@ -60,7 +60,7 @@ export async function POST(
     let body: AuditRequestBody
     try {
       body = await req.json()
-    } catch (e) {
+    } catch {
       return errors.validation("Body inválido")
     }
 

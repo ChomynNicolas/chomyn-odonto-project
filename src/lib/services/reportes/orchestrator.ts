@@ -8,7 +8,6 @@ import type {
   ReportType,
   ReportUserContext,
   ReportResult,
-  ReportResponse,
 } from "@/types/reportes"
 import { canAccessReport, REPORT_CONFIGS } from "@/types/reportes"
 import { safeValidateReportFilters } from "@/lib/validation/reportes"
@@ -82,16 +81,18 @@ export async function executeReport<T extends ReportType>(
 
     // 3. Validate filters
     // For export mode (pageSize > 100), validate without pageSize to avoid schema limits
+    const rawFiltersObj = rawFilters as Record<string, unknown>
     const isExportMode = typeof rawFilters === "object" && 
                         rawFilters !== null && 
-                        "pageSize" in rawFilters &&
-                        typeof (rawFilters as Record<string, unknown>).pageSize === "number" &&
-                        (rawFilters as Record<string, unknown>).pageSize > 100
+                        "pageSize" in rawFiltersObj &&
+                        typeof rawFiltersObj.pageSize === "number" &&
+                        rawFiltersObj.pageSize > 100
     
     const filtersToValidate = isExportMode 
       ? (() => {
           // Remove pageSize for validation, will add it back after
-          const { pageSize, ...rest } = rawFilters as Record<string, unknown>
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { pageSize, ...rest } = rawFiltersObj
           return rest
         })()
       : rawFilters
@@ -127,8 +128,8 @@ export async function executeReport<T extends ReportType>(
     const finalFilters = isExportMode
       ? {
           ...validationResult.data,
-          pageSize: (rawFilters as Record<string, unknown>).pageSize,
-          page: (rawFilters as Record<string, unknown>).page ?? 1,
+          pageSize: rawFiltersObj.pageSize,
+          page: rawFiltersObj.page ?? 1,
         }
       : validationResult.data
 
@@ -142,7 +143,9 @@ export async function executeReport<T extends ReportType>(
     }
 
     // 5. Execute with typed filters (including pageSize for export mode)
-    const result = await service.execute(
+    // Type assertion is safe here because validationResult.data is already validated
+    // and matches the expected filter type for the report type T
+    const result = await (service as { execute: (filters: ReportFiltersMap[T], user: ReportUserContext) => Promise<ReportResult<ReportResponseMap[T]>> }).execute(
       finalFilters as ReportFiltersMap[T],
       user
     )

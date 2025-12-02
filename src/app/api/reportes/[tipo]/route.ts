@@ -136,7 +136,7 @@ export async function POST(
 /**
  * GET handler - returns available reports for the authenticated user.
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     // 1. Authenticate user
     const session = await auth()

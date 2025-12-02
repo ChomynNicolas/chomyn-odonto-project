@@ -34,7 +34,7 @@ export async function GET(
     const plans = await prisma.treatmentPlan.findMany({
       where: {
         pacienteId: patientId,
-        ...(includeInactive ? {} : { isActive: true }),
+        ...(includeInactive ? {} : { status: 'ACTIVE' }),
       },
       include: {
         steps: {
@@ -120,7 +120,7 @@ export async function GET(
         id: plan.idTreatmentPlan,
         titulo: plan.titulo,
         descripcion: plan.descripcion,
-        isActive: plan.isActive,
+        status: plan.status,
         createdAt: plan.createdAt.toISOString(),
         createdBy: plan.creadoPor?.nombreApellido || 'Desconocido',
         steps,

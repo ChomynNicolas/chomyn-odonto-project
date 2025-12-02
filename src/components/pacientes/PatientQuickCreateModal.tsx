@@ -250,7 +250,7 @@ export function PatientQuickCreateModal({ open, onOpenChange, onCreated }: Patie
                   }
                 },
               })}
-              aria-invalid={!!errors.telefono || (phoneValue && !phoneValidation.isValid)}
+              aria-invalid={!!errors.telefono || (phoneValue && !phoneValidation.isValid) ? true : false}
               aria-describedby={
                 errors.telefono || (phoneValue && !phoneValidation.isValid) ? "telefono-error" : undefined
               }

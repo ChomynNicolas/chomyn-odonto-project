@@ -110,7 +110,7 @@ export async function createPaciente(input: PacienteCreateDTO): Promise<ActionRe
       const paciente = await tx.paciente.create({
         data: {
           personaId: persona.idPersona,
-          notas,
+          notasAdministrativas: notas,
         }
       });
 
@@ -285,7 +285,7 @@ export async function updatePaciente(input: PacienteUpdateDTO): Promise<ActionRe
       const updated = await tx.paciente.update({
         where: { idPaciente: dto.idPaciente },
         data: {
-          notas: typeof notas !== "undefined" ? notas : undefined,
+          notasAdministrativas: typeof notas !== "undefined" ? notas : undefined,
           estaActivo: typeof dto.estaActivo === "boolean" ? dto.estaActivo : undefined,
         },
         select: { idPaciente: true },

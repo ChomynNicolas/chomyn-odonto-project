@@ -20,6 +20,7 @@ export async function auditProcedureCreate(
     serviceType?: string | null
     quantity: number
     treatmentStepId?: number | null
+    diagnosisId?: number | null
     toothNumber?: number | null
     toothSurface?: string | null
   },
@@ -38,6 +39,7 @@ export async function auditProcedureCreate(
         serviceType: metadata.serviceType ?? null,
         quantity: metadata.quantity,
         treatmentStepId: metadata.treatmentStepId ?? null,
+        diagnosisId: metadata.diagnosisId ?? null,
         toothNumber: metadata.toothNumber ?? null,
         toothSurface: metadata.toothSurface ?? null,
       },
@@ -61,12 +63,14 @@ export async function auditProcedureUpdate(
     resultNotes: string | null
     unitPriceCents: number | null
     totalCents: number | null
+    diagnosisId?: number | null
   },
   after: {
     quantity: number
     resultNotes: string | null
     unitPriceCents: number | null
     totalCents: number | null
+    diagnosisId?: number | null
   },
   req: NextRequest
 ) {
@@ -84,6 +88,9 @@ export async function auditProcedureUpdate(
     }
     if (before.totalCents !== after.totalCents) {
       changes.totalCents = { before: before.totalCents, after: after.totalCents }
+    }
+    if (before.diagnosisId !== after.diagnosisId) {
+      changes.diagnosisId = { before: before.diagnosisId ?? null, after: after.diagnosisId ?? null }
     }
 
     await logAudit({
@@ -116,6 +123,7 @@ export async function auditProcedureDelete(
     serviceType: string | null
     quantity: number
     treatmentStepId: number | null
+    diagnosisId?: number | null
     toothNumber: number | null
     toothSurface: string | null
   },
@@ -134,6 +142,7 @@ export async function auditProcedureDelete(
         serviceType: procedureData.serviceType ?? null,
         quantity: procedureData.quantity,
         treatmentStepId: procedureData.treatmentStepId ?? null,
+        diagnosisId: procedureData.diagnosisId ?? null,
         toothNumber: procedureData.toothNumber ?? null,
         toothSurface: procedureData.toothSurface ?? null,
       },

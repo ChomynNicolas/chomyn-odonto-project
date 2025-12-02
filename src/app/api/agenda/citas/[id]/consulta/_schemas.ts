@@ -179,15 +179,93 @@ export type UpdateProcedureInput = z.infer<typeof updateProcedureSchema>
 // ============================================================================
 // INDICACIONES / RECETAS (usando PatientMedication)
 // ============================================================================
-export const createMedicationSchema = z.object({
-  medicationId: z.number().int().positive().optional(),
-  label: z.string().min(1).max(200).optional(),
-  dose: z.string().max(100).optional(),
-  freq: z.string().max(100).optional(),
-  route: z.string().max(100).optional(),
-  startAt: z.string().datetime().optional(),
-  endAt: z.string().datetime().optional(),
-})
+export const createMedicationSchema = z
+  .object({
+    medicationId: z.number().int().positive().optional().nullable(),
+    label: z
+      .string()
+      .max(200)
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+    description: z
+      .string()
+      .max(1000)
+      .optional()
+      .nullable()
+      .transform((val) => (val === "" || val === null || val === undefined ? null : val.trim() || null)),
+    dose: z.string().max(100).optional().nullable(),
+    freq: z.string().max(100).optional().nullable(),
+    route: z.string().max(100).optional().nullable(),
+    startAt: z
+      .string()
+      .optional()
+      .nullable()
+      .transform((val) => {
+        if (!val || val === "" || val === null) return null
+        // If it's already a datetime string (ISO format), return as is
+        if (val.includes("T") || val.includes(" ")) {
+          // Validate it's a valid datetime
+          const date = new Date(val)
+          if (isNaN(date.getTime())) return null
+          return date.toISOString()
+        }
+        // If it's a date string (YYYY-MM-DD), convert to datetime ISO at midnight UTC
+        // This preserves the date without timezone issues
+        try {
+          const [year, month, day] = val.split("-").map(Number)
+          if (isNaN(year) || isNaN(month) || isNaN(day)) return null
+          const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+          if (isNaN(date.getTime())) return null
+          return date.toISOString()
+        } catch {
+          return null
+        }
+      }),
+    endAt: z
+      .string()
+      .optional()
+      .nullable()
+      .transform((val) => {
+        if (!val || val === "" || val === null) return null
+        // If it's already a datetime string (ISO format), return as is
+        if (val.includes("T") || val.includes(" ")) {
+          // Validate it's a valid datetime
+          const date = new Date(val)
+          if (isNaN(date.getTime())) return null
+          return date.toISOString()
+        }
+        // If it's a date string (YYYY-MM-DD), convert to datetime ISO at midnight UTC
+        // This preserves the date without timezone issues
+        try {
+          const [year, month, day] = val.split("-").map(Number)
+          if (isNaN(year) || isNaN(month) || isNaN(day)) return null
+          const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+          if (isNaN(date.getTime())) return null
+          return date.toISOString()
+        } catch {
+          return null
+        }
+      }),
+  })
+  .superRefine((data, ctx) => {
+    // Require at least one of medicationId or label (non-empty)
+    const hasMedicationId = data.medicationId !== undefined && data.medicationId !== null
+    const hasLabel = data.label !== undefined && data.label !== null && typeof data.label === "string" && data.label.trim().length > 0
+
+    if (!hasMedicationId && !hasLabel) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe proporcionar un medicamento del catálogo o un nombre de medicamento",
+        path: ["medicationId"],
+      })
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe proporcionar un medicamento del catálogo o un nombre de medicamento",
+        path: ["label"],
+      })
+    }
+  })
 
 export const updateMedicationSchema = createMedicationSchema.partial().extend({
   isActive: z.boolean().optional(),

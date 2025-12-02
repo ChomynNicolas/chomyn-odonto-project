@@ -268,7 +268,6 @@ export async function createPlanSimpleConSteps(
     data: {
       pacienteId: params.pacienteId,
       titulo: "Plan inicial",
-      isActive: true,
       createdByUserId: params.createdByUserId,
     },
   });
@@ -482,11 +481,13 @@ export async function addClinicalBasics(
         pacienteId: params.pacienteId,
         medicationId: med.idMedicationCatalog,
         label: med.name,
+        description: null,
         dose: "1 comp",
         freq: "c/8h",
         route: "VO",
         startAt: new Date(),
         isActive: true,
+        consultaId: params.consultaId ?? null,
         createdByUserId: params.createdByUserId,
       },
     });

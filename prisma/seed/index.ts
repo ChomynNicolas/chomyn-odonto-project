@@ -262,7 +262,7 @@ async function main() {
   // 6.1) Anamnesis Catalog and Config
   const admin = await prisma.usuario.findFirst({ where: { usuario: "admin" } })
   if (admin) {
-    await seedAnamnesisCatalog(prisma, admin.idUsuario)
+    await seedAnamnesisCatalog(prisma)
     await seedAnamnesisConfig(prisma, admin.idUsuario)
     log.ok("✅ Catálogo y configuración de anamnesis creados")
   }

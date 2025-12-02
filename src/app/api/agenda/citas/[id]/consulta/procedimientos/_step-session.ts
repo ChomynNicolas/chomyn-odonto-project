@@ -1,5 +1,5 @@
 // src/app/api/agenda/citas/[id]/consulta/procedimientos/_step-session.ts
-import type { PrismaClient } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import { TreatmentStepStatus } from "@prisma/client"
 
 export interface StepSessionProgressResult {
@@ -9,6 +9,7 @@ export interface StepSessionProgressResult {
   wasCompleted: boolean
   previousSession: number | null
   sessionCompleted: number | null // Which session was completed (if any)
+  treatmentPlanId: number | null // Plan ID for completion check
 }
 
 /**
@@ -22,10 +23,10 @@ export interface StepSessionProgressResult {
  * @returns Result object with update details
  */
 export async function handleStepSessionProgress(
-  tx: PrismaClient,
+  tx: Prisma.TransactionClient,
   stepId: number
 ): Promise<StepSessionProgressResult> {
-  // Fetch full step data including multi-session fields
+  // Fetch full step data including multi-session fields and plan ID
   const step = await tx.treatmentStep.findUnique({
     where: { idTreatmentStep: stepId },
     select: {
@@ -33,12 +34,15 @@ export async function handleStepSessionProgress(
       requiresMultipleSessions: true,
       totalSessions: true,
       currentSession: true,
+      treatmentPlanId: true,
     },
   })
 
   if (!step) {
     throw new Error("Treatment step not found")
   }
+  
+  const treatmentPlanId = step.treatmentPlanId
 
   // If step is already COMPLETED, CANCELLED, or DEFERRED, don't change
   if (
@@ -53,6 +57,7 @@ export async function handleStepSessionProgress(
       wasCompleted: false,
       previousSession: step.currentSession,
       sessionCompleted: null,
+      treatmentPlanId,
     }
   }
 
@@ -73,6 +78,7 @@ export async function handleStepSessionProgress(
       wasCompleted: true,
       previousSession: null,
       sessionCompleted: null,
+      treatmentPlanId,
     }
   }
 
@@ -95,6 +101,7 @@ export async function handleStepSessionProgress(
       wasCompleted: true,
       previousSession: step.currentSession,
       sessionCompleted: null,
+      treatmentPlanId,
     }
   }
 
@@ -141,6 +148,7 @@ export async function handleStepSessionProgress(
       wasCompleted: false,
       previousSession: step.currentSession,
       sessionCompleted: null,
+      treatmentPlanId,
     }
   }
 
@@ -161,6 +169,7 @@ export async function handleStepSessionProgress(
     wasCompleted,
     previousSession: currentSession,
     sessionCompleted: currentSession, // The session that was just completed
+    treatmentPlanId,
   }
 }
 

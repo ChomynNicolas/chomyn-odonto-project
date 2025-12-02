@@ -15,8 +15,46 @@ import { AnamnesisWomenSpecific } from "./components/AnamnesisWomenSpecific"
 import { AnamnesisPediatricInfo } from "./components/AnamnesisPediatricInfo"
 import { AnamnesisMetadata } from "./components/AnamnesisMetadata"
 
+// Extended type to include payload, allergies, and antecedents from API response
+type AnamnesisWithRelations = PatientAnamnesisDTO & {
+  payload?: Record<string, unknown> | null
+  allergies?: Array<{
+    idAnamnesisAllergy: number
+    allergyId: number | null
+    allergy: {
+      idPatientAllergy: number
+      label: string
+      allergyCatalog: {
+        idAllergyCatalog: number
+        name: string
+      } | null
+      severity: string
+      reaction: string | null
+      isActive: boolean
+    }
+  }>
+  antecedents?: Array<{
+    idAnamnesisAntecedent: number
+    anamnesisId: number
+    antecedentId: number | null
+    antecedentCatalog: {
+      idAntecedentCatalog: number
+      code: string
+      name: string
+      category: string
+      description: string | null
+    } | null
+    customName: string | null
+    customCategory: string | null
+    notes: string | null
+    diagnosedAt: string | null
+    isActive: boolean
+    resolvedAt: string | null
+  }>
+}
+
 interface AnamnesisDisplayViewProps {
-  anamnesis: PatientAnamnesisDTO
+  anamnesis: AnamnesisWithRelations
   canEdit: boolean
   onEdit: () => void
   patientGender?: "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
@@ -39,8 +77,7 @@ export function AnamnesisDisplayView({
     [anamnesis.payload, anamnesis.tipo, patientGender]
   )
 
-  // Calculate summary statistics
-  const activeMedicationsCount = anamnesis.medications?.filter((m) => m.medication.isActive).length || 0
+
   const activeAllergiesCount = anamnesis.allergies?.filter((a) => a.allergy.isActive).length || 0
   const activeAntecedentsCount = anamnesis.antecedents?.filter((a) => a.isActive).length || 0
 

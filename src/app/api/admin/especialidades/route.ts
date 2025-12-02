@@ -35,18 +35,21 @@ export async function GET(req: NextRequest) {
 
     // Optional: Log de visualización (solo ADMIN)
     if (auth.session?.user?.id && auth.role === "ADMIN") {
-      await safeAuditWrite({
-        actorId: parseInt(auth.session.user.id),
-        action: AuditAction.ESPECIALIDAD_LIST_VIEW,
-        entity: AuditEntity.Especialidad,
-        entityId: 0,
-        metadata: {
-          filters: parsed.data,
-          count: result.data.length,
-        },
-        headers: req.headers,
-        path: req.nextUrl.pathname,
-      })
+      const actorId = parseInt(auth.session.user.id, 10)
+      if (!isNaN(actorId)) {
+        await safeAuditWrite({
+          actorId,
+          action: AuditAction.ESPECIALIDAD_LIST_VIEW,
+          entity: AuditEntity.Especialidad,
+          entityId: 0,
+          metadata: {
+            filters: parsed.data,
+            count: result.data.length,
+          },
+          headers: req.headers,
+          path: req.nextUrl.pathname,
+        })
+      }
     }
 
     return NextResponse.json({ ok: true, ...result }, { status: 200 })
@@ -75,7 +78,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED", message: "Usuario no válido" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     const especialidad = await createEspecialidad(
       parsed.data,
       actorId,

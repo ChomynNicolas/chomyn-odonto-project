@@ -44,7 +44,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     // Check if anamnesis is mandatory for first consultation
     if (input.status === "FINAL") {
       // Note: Prisma client uses camelCase, so AnamnesisConfig becomes anamnesisConfig
-      const config = await (prisma as any).anamnesisConfig.findUnique({
+      const config = await prisma.anamnesisConfig.findUnique({
         where: { key: "MAIN" },
       })
 

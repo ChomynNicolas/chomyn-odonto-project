@@ -4,8 +4,6 @@ import type {
   AntecedentCatalogListQuery,
   AntecedentCatalogCreateBody,
   AntecedentCatalogUpdateBody,
-  AntecedentCatalogItem,
-  AntecedentCatalogListResponse,
 } from "@/app/api/antecedent-catalog/_schemas"
 import {
   fetchAntecedentCatalogs,

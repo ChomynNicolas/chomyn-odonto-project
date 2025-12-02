@@ -4,10 +4,9 @@
 
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { User, Phone, MapPin, FileText, Calendar, MoreVertical, AlertTriangle, Activity, Baby } from "lucide-react"
+import { User, Phone, MapPin, FileText, MoreVertical } from "lucide-react"
 import type { PatientIdentityDTO, ContactInfoDTO, RiskFlagsDTO, RolNombre } from "@/types/patient"
 import type { RBACPermissions } from "@/lib/utils/rbac"
 import { PatientRiskBadges } from "./shared/PatientRiskBadges"
@@ -24,7 +23,7 @@ interface PatientHeaderProps {
   patientId: number
 }
 
-export function PatientHeader({ patient, contacts, riskFlags, currentRole, permissions, patientId }: PatientHeaderProps) {
+export function PatientHeader({ patient, contacts, riskFlags, permissions, patientId }: PatientHeaderProps) {
   // const { data: anamnesis, isLoading: isLoadingAnamnesis } = usePatientAnamnesis(patientId);
   const [editSheetOpen, setEditSheetOpen] = useState(false)
   const { patient: fullPatientRecord, mutate: refetchPatient } = usePatientData(String(patientId))
@@ -102,13 +101,7 @@ export function PatientHeader({ patient, contacts, riskFlags, currentRole, permi
                     Editar Paciente
                   </DropdownMenuItem>
                 </>
-              )}
-              {permissions?.canScheduleAppointments && (
-                <DropdownMenuItem>
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Agendar Cita
-                </DropdownMenuItem>
-              )}
+              )}              
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

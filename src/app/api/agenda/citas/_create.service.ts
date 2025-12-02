@@ -7,11 +7,11 @@ import type { CreateCitaBody } from "./_create.schema";
 import {
   validateWorkingHours,
   parseProfesionalDisponibilidad,
-  type AvailabilityValidationResult,
+  
 } from "@/lib/utils/availability-validation";
 import {
   validateSpecialtyCompatibility,
-  type SpecialtyValidationResult,
+  
 } from "@/lib/utils/specialty-validation";
 import {
   validateConsultorioIsActive,
@@ -178,7 +178,7 @@ type CreateCitaResponse = {
 };
 
 export async function createCita(
-  body: CreateCitaBody & { createdByUserId: number }
+  body: CreateCitaBody & { createdByUserId: number; ip?: string | null }
 ): Promise<{ 
   ok: boolean; 
   data?: CreateCitaResponse; 
@@ -401,6 +401,7 @@ export async function createCita(
         consultorioId: body.consultorioId ?? null,
         motivo: body.motivo,
         notas: body.notas ?? null,
+        ip: body.ip ?? null,
       });
 
       return cita;

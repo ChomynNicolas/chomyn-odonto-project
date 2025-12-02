@@ -66,7 +66,7 @@ const procedimientoFormSchema = z
     }
   )
 
-type ProcedimientoFormValues = z.infer<typeof procedimientoFormSchema>
+type ProcedimientoFormValues = z.input<typeof procedimientoFormSchema>
 
 interface ProcedimientoFormProps {
   open: boolean
@@ -168,9 +168,9 @@ export default function ProcedimientoForm({
           descripcion: values.descripcion ?? null,
           defaultDurationMin: values.defaultDurationMin ?? null,
           defaultPriceCents: values.defaultPriceCents ?? null,
-          aplicaDiente: values.aplicaDiente,
-          aplicaSuperficie: values.aplicaSuperficie,
-          activo: values.activo,
+          aplicaDiente: values.aplicaDiente ?? false,
+          aplicaSuperficie: values.aplicaSuperficie ?? false,
+          activo: values.activo ?? true,
         }
         // Only include code if it can be changed
         if (canChangeCode && values.code !== form.getValues("code")) {
@@ -184,9 +184,9 @@ export default function ProcedimientoForm({
           descripcion: values.descripcion ?? null,
           defaultDurationMin: values.defaultDurationMin ?? null,
           defaultPriceCents: values.defaultPriceCents ?? null,
-          aplicaDiente: values.aplicaDiente,
-          aplicaSuperficie: values.aplicaSuperficie,
-          activo: values.activo,
+          aplicaDiente: values.aplicaDiente ?? false,
+          aplicaSuperficie: values.aplicaSuperficie ?? false,
+          activo: values.activo ?? true,
         }
         await createProcedimiento(createData)
       }
@@ -394,7 +394,7 @@ export default function ProcedimientoForm({
                       <FormLabel className="text-base">Aplica a superficie</FormLabel>
                       <FormDescription>
                         Indica si este procedimiento se aplica a una superficie específica del diente.
-                        Requiere que "Aplica a diente" esté activado.
+                        Requiere que &quot;Aplica a diente&quot; esté activado.
                       </FormDescription>
                     </div>
                     <FormControl>

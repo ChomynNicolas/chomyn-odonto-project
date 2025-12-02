@@ -161,7 +161,7 @@ function generatePeriods(
   const start = new Date(startDate)
   const end = new Date(`${endDate}T23:59:59.999Z`)
 
-  let current = new Date(start)
+  const current = new Date(start)
 
   while (current <= end) {
     let periodEnd: Date

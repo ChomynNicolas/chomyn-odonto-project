@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import type {
   AntecedentCatalogListQuery,
   AntecedentCatalogCreateBody,
@@ -12,7 +13,6 @@ import type {
 } from "./_schemas"
 import { safeAuditWrite } from "@/lib/audit/log"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Headers } from "next/headers"
 
 /**
  * Lista antecedent catalogs con filtros, paginación y búsqueda
@@ -21,11 +21,7 @@ export async function listAntecedentCatalogs(filters: AntecedentCatalogListQuery
   const { page, limit, search, category, isActive, sortBy, sortOrder } = filters
   const skip = (page - 1) * limit
 
-  const where: {
-    isActive?: boolean
-    category?: string
-    OR?: Array<{ code?: { contains: string; mode: "insensitive" }; name?: { contains: string; mode: "insensitive" } }>
-  } = {}
+  const where: Prisma.AntecedentCatalogWhereInput = {}
 
   // Filter by isActive
   if (isActive === "true") {
@@ -278,7 +274,7 @@ export async function updateAntecedentCatalog(
     })
 
     // Determine audit action based on isActive change
-    let auditAction = AuditAction.ANTECEDENT_CATALOG_UPDATE
+    let auditAction: typeof AuditAction[keyof typeof AuditAction] = AuditAction.ANTECEDENT_CATALOG_UPDATE
     if (changes.isActive) {
       auditAction = changes.isActive.new === true
         ? AuditAction.ANTECEDENT_CATALOG_REACTIVATE

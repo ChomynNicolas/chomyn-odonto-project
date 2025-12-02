@@ -59,6 +59,44 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
             },
           },
         },
+        updatedBy: {
+          select: {
+            idUsuario: true,
+            nombreApellido: true,
+            profesional: {
+              select: {
+                persona: {
+                  select: {
+                    nombres: true,
+                    apellidos: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        discontinuedBy: {
+          select: {
+            idUsuario: true,
+            nombreApellido: true,
+            profesional: {
+              select: {
+                persona: {
+                  select: {
+                    nombres: true,
+                    apellidos: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        medicationCatalog: {
+          select: {
+            name: true,
+            description: true,
+          },
+        },
       },
       orderBy: { startAt: "desc" },
     })
@@ -67,13 +105,18 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       medicaciones.map((m) => ({
         id: m.idPatientMedication,
         medicationId: m.medicationId,
-        label: m.label,
+        // Usar label si existe, si no, usar nombre del catálogo, o "Medicación desconocida"
+        label: m.label ?? m.medicationCatalog?.name ?? "Medicación desconocida",
+        description: m.description,
         dose: m.dose,
         freq: m.freq,
         route: m.route,
         startAt: m.startAt?.toISOString() ?? null,
         endAt: m.endAt?.toISOString() ?? null,
         isActive: m.isActive,
+        updatedAt: m.updatedAt?.toISOString() ?? null,
+        discontinuedAt: m.discontinuedAt?.toISOString() ?? null,
+        consultaId: m.consultaId,
         createdBy: {
           id: m.createdBy.idUsuario,
           nombre:
@@ -81,6 +124,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               ? `${m.createdBy.profesional.persona.nombres} ${m.createdBy.profesional.persona.apellidos}`.trim()
               : m.createdBy.nombreApellido ?? "Usuario",
         },
+        updatedBy: m.updatedBy
+          ? {
+              id: m.updatedBy.idUsuario,
+              nombre:
+                m.updatedBy.profesional?.persona?.nombres && m.updatedBy.profesional?.persona?.apellidos
+                  ? `${m.updatedBy.profesional.persona.nombres} ${m.updatedBy.profesional.persona.apellidos}`.trim()
+                  : m.updatedBy.nombreApellido ?? "Usuario",
+            }
+          : null,
+        discontinuedBy: m.discontinuedBy
+          ? {
+              id: m.discontinuedBy.idUsuario,
+              nombre:
+                m.discontinuedBy.profesional?.persona?.nombres && m.discontinuedBy.profesional?.persona?.apellidos
+                  ? `${m.discontinuedBy.profesional.persona.nombres} ${m.discontinuedBy.profesional.persona.apellidos}`.trim()
+                  : m.discontinuedBy.nombreApellido ?? "Usuario",
+            }
+          : null,
       }))
     )
   } catch (e: unknown) {
@@ -147,6 +208,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           pacienteId: nuevaConsulta.cita.pacienteId,
           medicationId: input.medicationId ?? null,
           label: input.label ?? null,
+          description: input.description ?? null,
           dose: input.dose ?? null,
           freq: input.freq ?? null,
           route: input.route ?? null,
@@ -154,6 +216,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           endAt: input.endAt ? new Date(input.endAt) : null,
           isActive: true,
           createdByUserId: userId,
+          consultaId: citaId,
         },
         include: {
           createdBy: {
@@ -172,13 +235,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
               },
             },
           },
+          medicationCatalog: {
+            select: {
+              name: true,
+              description: true,
+            },
+          },
         },
       })
 
       return ok({
         id: medicacion.idPatientMedication,
         medicationId: medicacion.medicationId,
-        label: medicacion.label,
+        // Usar label si existe, si no, usar nombre del catálogo, o "Medicación desconocida"
+        label: medicacion.label ?? medicacion.medicationCatalog?.name ?? "Medicación desconocida",
+        description: medicacion.description,
         dose: medicacion.dose,
         freq: medicacion.freq,
         route: medicacion.route,
@@ -200,6 +271,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         pacienteId: consulta.cita.pacienteId,
         medicationId: input.medicationId ?? null,
         label: input.label ?? null,
+        description: input.description ?? null,
         dose: input.dose ?? null,
         freq: input.freq ?? null,
         route: input.route ?? null,
@@ -207,6 +279,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         endAt: input.endAt ? new Date(input.endAt) : null,
         isActive: true,
         createdByUserId: userId,
+        consultaId: citaId,
       },
       include: {
         createdBy: {
@@ -225,13 +298,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             },
           },
         },
+        medicationCatalog: {
+          select: {
+            name: true,
+            description: true,
+          },
+        },
       },
     })
 
     return ok({
       id: medicacion.idPatientMedication,
       medicationId: medicacion.medicationId,
-      label: medicacion.label,
+      // Usar label si existe, si no, usar nombre del catálogo, o "Medicación desconocida"
+      label: medicacion.label ?? medicacion.medicationCatalog?.name ?? "Medicación desconocida",
+      description: medicacion.description,
       dose: medicacion.dose,
       freq: medicacion.freq,
       route: medicacion.route,
@@ -248,8 +329,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     })
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "ZodError") {
-      const zodError = e as { errors?: Array<{ message?: string }> }
-      return errors.validation(zodError.errors?.[0]?.message ?? "Datos inválidos")
+      const zodError = e as { errors?: Array<{ message?: string; path?: (string | number)[] }> }
+      // Collect all validation errors
+      const errorMessages = zodError.errors?.map((err) => {
+        const field = err.path?.[0] ? `${err.path[0]}: ` : ""
+        return `${field}${err.message ?? "Dato inválido"}`
+      }) ?? []
+      
+      // Return the first error message, or a generic one
+      const errorMessage = errorMessages.length > 0 
+        ? errorMessages[0] 
+        : "Datos inválidos"
+      
+      return errors.validation(errorMessage)
     }
     const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[POST /api/agenda/citas/[id]/consulta/medicaciones]", e)

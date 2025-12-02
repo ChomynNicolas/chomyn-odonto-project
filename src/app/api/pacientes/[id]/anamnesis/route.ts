@@ -4,7 +4,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { AnamnesisCreateUpdateBodySchema, AnamnesisResponseSchema } from "./_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "./_schemas"
+import type { AnamnesisMedicationLink, AnamnesisAllergyLink } from "./_schemas"
 import { z } from "zod"
 import {
   logMedicationChange,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/services/anamnesis-audit-complete.service"
 import { AuditAction as GeneralAuditAction, AuditEntity } from "@/lib/audit/actions"
 import { writeAudit } from "@/lib/audit/log"
+import type { Prisma } from "@prisma/client"
 
 /**
  * GET /api/pacientes/[id]/anamnesis
@@ -64,7 +66,7 @@ export async function GET(
             antecedentCatalog: true,
           },
           orderBy: { idAnamnesisAntecedent: "asc" },
-        } as any,
+        },
         medications: {
           include: {
             medication: {
@@ -76,7 +78,7 @@ export async function GET(
             removedBy: { select: { idUsuario: true, nombreApellido: true } },
           },
           orderBy: { idAnamnesisMedication: "asc" },
-        } as any,
+        },
         allergies: {
           include: {
             allergy: {
@@ -88,7 +90,7 @@ export async function GET(
             removedBy: { select: { idUsuario: true, nombreApellido: true } },
           },
           orderBy: { idAnamnesisAllergy: "asc" },
-        } as any,
+        },
       },
     })
 
@@ -116,7 +118,7 @@ export async function GET(
       ultimaVisitaDental: anamnesis.ultimaVisitaDental?.toISOString() || null,
       tieneHabitosSuccion: anamnesis.tieneHabitosSuccion,
       lactanciaRegistrada: anamnesis.lactanciaRegistrada,
-      payload: anamnesis.payload as Record<string, any> | null,
+      payload: anamnesis.payload as Prisma.InputJsonValue | null,
       antecedents: anamnesis.antecedents.map((ant) => ({
         idAnamnesisAntecedent: ant.idAnamnesisAntecedent,
         anamnesisId: ant.anamnesisId,
@@ -155,7 +157,7 @@ export async function GET(
           route: med.medication.route,
           isActive: med.medication.isActive,
         },
-        notes: (med as any).notes || null, // Include notes for customDescription mapping
+        notes: (med as { notes?: string | null }).notes || null, // Include notes for customDescription mapping
       })),
       allergies: anamnesis.allergies.map((all) => ({
         idAnamnesisAllergy: all.idAnamnesisAllergy,
@@ -175,13 +177,13 @@ export async function GET(
         },
       })),
       creadoPor: {
-        idUsuario: (anamnesis as any).creadoPor.idUsuario,
-        nombreApellido: (anamnesis as any).creadoPor.nombreApellido,
+        idUsuario: anamnesis.creadoPor.idUsuario,
+        nombreApellido: anamnesis.creadoPor.nombreApellido,
       },
-      actualizadoPor: (anamnesis as any).actualizadoPor
+      actualizadoPor: anamnesis.actualizadoPor
         ? {
-            idUsuario: (anamnesis as any).actualizadoPor.idUsuario,
-            nombreApellido: (anamnesis as any).actualizadoPor.nombreApellido,
+            idUsuario: anamnesis.actualizadoPor.idUsuario,
+            nombreApellido: anamnesis.actualizadoPor.nombreApellido,
           }
         : null,
       createdAt: anamnesis.createdAt.toISOString(),
@@ -210,7 +212,15 @@ function calcularEdad(fechaNacimiento: Date | null): number {
 /**
  * Helper function to convert Prisma anamnesis to AnamnesisState for audit
  */
-function convertToAnamnesisState(anamnesis: any): AnamnesisState {
+function convertToAnamnesisState(
+  anamnesis: Prisma.PatientAnamnesisGetPayload<{
+    include: {
+      antecedents: true
+      medications: true
+      allergies: true
+    }
+  }>
+): AnamnesisState {
   return {
     idPatientAnamnesis: anamnesis.idPatientAnamnesis,
     pacienteId: anamnesis.pacienteId,
@@ -307,7 +317,7 @@ export async function POST(
     }
 
     // Build complete payload JSON
-    const payload: Record<string, any> = {}
+    const payload: Record<string, Prisma.InputJsonValue> = {}
 
     // Custom notes
     if (data.customNotes?.trim()) {
@@ -381,7 +391,7 @@ export async function POST(
     // Get previous state for audit (if updating)
     const previousState: AnamnesisState | null = existing ? convertToAnamnesisState(existing) : null
     const isCreate = !existing
-    const previousVersionNumber = existing?.versionNumber || null
+    
 
     // Get user role for audit
     const user = await prisma.usuario.findUnique({
@@ -446,13 +456,13 @@ export async function POST(
       // Handle antecedents: delete existing and create new ones
       // Note: Prisma client uses camelCase for model names
       if (existing) {
-        await (tx as any).anamnesisAntecedent.deleteMany({
+        await tx.anamnesisAntecedent.deleteMany({
           where: { anamnesisId: result.idPatientAnamnesis },
         })
       }
 
       if (data.antecedents && data.antecedents.length > 0) {
-        await (tx as any).anamnesisAntecedent.createMany({
+        await tx.anamnesisAntecedent.createMany({
           data: data.antecedents.map((ant) => ({
             anamnesisId: result.idPatientAnamnesis,
             antecedentId: ant.antecedentId || undefined,
@@ -468,7 +478,7 @@ export async function POST(
 
       // Handle medications: enhanced with catalog, custom entries, and audit
       const existingMedications = existing
-        ? await (tx as any).anamnesisMedication.findMany({
+        ? await tx.anamnesisMedication.findMany({
             where: { anamnesisId: result.idPatientAnamnesis },
             include: { medication: true },
           })
@@ -476,7 +486,7 @@ export async function POST(
 
       // Process new medications
       if (data.medications && data.medications.length > 0) {
-        for (const medInput of data.medications) {
+        for (const medInput of data.medications as AnamnesisMedicationLink[]) {
           let medicationId: number
 
           if (medInput.medicationId) {
@@ -518,6 +528,7 @@ export async function POST(
                 pacienteId,
                 medicationId: null,
                 label: medInput.customLabel,
+                description: medInput.customDescription || null,
                 dose: medInput.customDose || null,
                 freq: medInput.customFreq || null,
                 route: medInput.customRoute || null,
@@ -525,7 +536,7 @@ export async function POST(
               },
             })
             medicationId = newMed.idPatientMedication
-            // Store customDescription in notes for custom medications
+            // Store customDescription in description field for custom medications
             if (medInput.customDescription) {
               medInput.notes = medInput.customDescription
             }
@@ -535,7 +546,7 @@ export async function POST(
 
           // Check if AnamnesisMedication already exists
           const existingLink = existingMedications.find(
-            (em: any) => em.medicationId === medicationId
+            (em) => em.medicationId === medicationId
           )
 
           if (existingLink) {
@@ -546,7 +557,7 @@ export async function POST(
               isActive: existingLink.isActive,
             }
 
-            await (tx as any).anamnesisMedication.update({
+            await tx.anamnesisMedication.update({
               where: { idAnamnesisMedication: existingLink.idAnamnesisMedication },
               data: {
                 isActive: medInput.isActive ?? true,
@@ -574,7 +585,7 @@ export async function POST(
             )
           } else {
             // Create new link
-            const newLink = await (tx as any).anamnesisMedication.create({
+            const newLink = await tx.anamnesisMedication.create({
               data: {
                 anamnesisId: result.idPatientAnamnesis,
                 medicationId,
@@ -604,16 +615,16 @@ export async function POST(
 
       // Soft delete medications not in the new list
       const newMedicationIds = new Set(
-        data.medications
+        (data.medications as AnamnesisMedicationLink[] | undefined)
           ?.filter((m) => m.medicationId)
           .map((m) => m.medicationId) || []
       )
       const medicationsToDeactivate = existingMedications.filter(
-        (em: any) => !newMedicationIds.has(em.medicationId) && em.isActive
+        (em) => !newMedicationIds.has(em.medicationId) && em.isActive
       )
 
       for (const medToDeactivate of medicationsToDeactivate) {
-        await (tx as any).anamnesisMedication.update({
+        await tx.anamnesisMedication.update({
           where: { idAnamnesisMedication: medToDeactivate.idAnamnesisMedication },
           data: {
             isActive: false,
@@ -644,7 +655,7 @@ export async function POST(
 
       // Handle allergies: enhanced with catalog, custom entries, and audit
       const existingAllergies = existing
-        ? await (tx as any).anamnesisAllergy.findMany({
+        ? await tx.anamnesisAllergy.findMany({
             where: { anamnesisId: result.idPatientAnamnesis },
             include: { allergy: true },
           })
@@ -652,7 +663,7 @@ export async function POST(
 
       // Process new allergies
       if (data.allergies && data.allergies.length > 0) {
-        for (const allInput of data.allergies) {
+        for (const allInput of data.allergies as AnamnesisAllergyLink[]) {
           let allergyId: number
 
           if (allInput.allergyId) {
@@ -705,7 +716,7 @@ export async function POST(
 
           // Check if AnamnesisAllergy already exists
           const existingLink = existingAllergies.find(
-            (ea: any) => ea.allergyId === allergyId
+            (ea) => ea.allergyId === allergyId
           )
 
           if (existingLink) {
@@ -716,7 +727,7 @@ export async function POST(
               isActive: existingLink.isActive,
             }
 
-            await (tx as any).anamnesisAllergy.update({
+            await tx.anamnesisAllergy.update({
               where: { idAnamnesisAllergy: existingLink.idAnamnesisAllergy },
               data: {
                 isActive: allInput.isActive ?? true,
@@ -744,7 +755,7 @@ export async function POST(
             )
           } else {
             // Create new link
-            const newLink = await (tx as any).anamnesisAllergy.create({
+            const newLink = await tx.anamnesisAllergy.create({
               data: {
                 anamnesisId: result.idPatientAnamnesis,
                 allergyId,
@@ -774,14 +785,14 @@ export async function POST(
 
       // Soft delete allergies not in the new list
       const newAllergyIds = new Set(
-        data.allergies?.filter((a) => a.allergyId).map((a) => a.allergyId) || []
+        (data.allergies as AnamnesisAllergyLink[] | undefined)?.filter((a) => a.allergyId).map((a) => a.allergyId) || []
       )
       const allergiesToDeactivate = existingAllergies.filter(
-        (ea: any) => !newAllergyIds.has(ea.allergyId) && ea.isActive
+        (ea) => !newAllergyIds.has(ea.allergyId) && ea.isActive
       )
 
       for (const allToDeactivate of allergiesToDeactivate) {
-        await (tx as any).anamnesisAllergy.update({
+        await tx.anamnesisAllergy.update({
           where: { idAnamnesisAllergy: allToDeactivate.idAnamnesisAllergy },
           data: {
             isActive: false,
@@ -820,7 +831,7 @@ export async function POST(
             include: {
               antecedentCatalog: true,
             },
-          } as any,
+          },
           medications: {
             include: {
               medication: {
@@ -832,7 +843,7 @@ export async function POST(
               removedBy: { select: { idUsuario: true, nombreApellido: true } },
             },
             orderBy: { idAnamnesisMedication: "asc" },
-          } as any,
+          },
           allergies: {
             include: {
               allergy: {
@@ -844,7 +855,7 @@ export async function POST(
               removedBy: { select: { idUsuario: true, nombreApellido: true } },
             },
             orderBy: { idAnamnesisAllergy: "asc" },
-          } as any,
+          },
         },
       })
     })
@@ -928,7 +939,7 @@ export async function POST(
       ultimaVisitaDental: anamnesis.ultimaVisitaDental?.toISOString() || null,
       tieneHabitosSuccion: anamnesis.tieneHabitosSuccion,
       lactanciaRegistrada: anamnesis.lactanciaRegistrada,
-      payload: anamnesis.payload as Record<string, any> | null,
+      payload: anamnesis.payload as Prisma.InputJsonValue | null,
       antecedents: anamnesis.antecedents.map((ant) => ({
         idAnamnesisAntecedent: ant.idAnamnesisAntecedent,
         anamnesisId: ant.anamnesisId,
@@ -967,7 +978,7 @@ export async function POST(
           route: med.medication.route,
           isActive: med.medication.isActive,
         },
-        notes: (med as any).notes || null, // Include notes for customDescription mapping
+        notes: (med as { notes?: string | null }).notes || null, // Include notes for customDescription mapping
       })),
       allergies: anamnesis.allergies.map((all) => ({
         idAnamnesisAllergy: all.idAnamnesisAllergy,
@@ -987,13 +998,13 @@ export async function POST(
         },
       })),
       creadoPor: {
-        idUsuario: (anamnesis as any).creadoPor.idUsuario,
-        nombreApellido: (anamnesis as any).creadoPor.nombreApellido,
+        idUsuario: anamnesis.creadoPor.idUsuario,
+        nombreApellido: anamnesis.creadoPor.nombreApellido,
       },
-      actualizadoPor: (anamnesis as any).actualizadoPor
+      actualizadoPor: anamnesis.actualizadoPor
         ? {
-            idUsuario: (anamnesis as any).actualizadoPor.idUsuario,
-            nombreApellido: (anamnesis as any).actualizadoPor.nombreApellido,
+            idUsuario: anamnesis.actualizadoPor.idUsuario,
+            nombreApellido: anamnesis.actualizadoPor.nombreApellido,
           }
         : null,
       createdAt: anamnesis.createdAt.toISOString(),
@@ -1014,7 +1025,7 @@ export async function POST(
 
     // Handle Prisma errors
     if (error && typeof error === "object" && "code" in error) {
-      const prismaError = error as { code: string; meta?: any }
+      const prismaError = error as { code: string; meta?: Record<string, unknown> }
       if (prismaError.code === "P2002") {
         return NextResponse.json(
           { error: "Ya existe una anamnesis para este paciente" },
@@ -1096,6 +1107,13 @@ export async function DELETE(
     if (userRole === "RECEP") {
       return NextResponse.json({ error: "No tiene permisos para eliminar anamnesis" }, { status: 403 })
     }
+
+    // Get user role for audit
+    const user = await prisma.usuario.findUnique({
+      where: { idUsuario: userId },
+      include: { rol: true },
+    })
+    const actorRole = (user?.rol?.nombreRol as "ADMIN" | "ODONT" | "RECEP") || "RECEP"
 
     // Parse body for reason
     const body = await req.json().catch(() => ({}))

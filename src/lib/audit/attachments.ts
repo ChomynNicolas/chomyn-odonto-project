@@ -53,7 +53,7 @@ export async function auditAttachmentCreate(args: {
     action: AuditAction.ADJUNTO_CREATE,
     entity: AuditEntity.Adjunto,
     entityId: args.entityId,
-    metadata: args.metadata,
+    metadata: args.metadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })
@@ -74,7 +74,7 @@ export async function auditAttachmentDelete(args: {
     action: AuditAction.ADJUNTO_DELETE,
     entity: AuditEntity.Adjunto,
     entityId: args.entityId,
-    metadata: args.metadata,
+    metadata: args.metadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })
@@ -118,7 +118,7 @@ export async function auditAttachmentView(args: {
     action,
     entity,
     entityId: args.entityId,
-    metadata: args.metadata,
+    metadata: args.metadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })
@@ -147,7 +147,7 @@ export async function auditAttachmentDownload(args: {
     action,
     entity,
     entityId: args.entityId,
-    metadata: args.metadata,
+    metadata: args.metadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })

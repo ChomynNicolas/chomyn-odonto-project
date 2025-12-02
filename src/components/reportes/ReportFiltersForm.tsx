@@ -7,7 +7,7 @@
  */
 
 import { ReactNode, useState } from "react"
-import { useForm, UseFormReturn } from "react-hook-form"
+import { useForm, UseFormReturn, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Calendar, Filter, Search, X, RefreshCw } from "lucide-react"
@@ -76,7 +76,7 @@ const DATE_PRESETS: DateRangePreset[] = [
   },
 ]
 
-interface ReportFiltersFormProps<T extends z.ZodTypeAny> {
+interface ReportFiltersFormProps<T extends z.ZodObject<z.ZodRawShape>> {
   /** Zod schema for the form */
   schema: T
   /** Default values */
@@ -91,7 +91,7 @@ interface ReportFiltersFormProps<T extends z.ZodTypeAny> {
   isLoading?: boolean
 }
 
-export function ReportFiltersForm<T extends z.ZodTypeAny>({
+export function ReportFiltersForm<T extends z.ZodObject<z.ZodRawShape>>({
   schema,
   defaultValues,
   onSubmit,
@@ -103,18 +103,18 @@ export function ReportFiltersForm<T extends z.ZodTypeAny>({
   const defaults = getDefaultDateRange()
 
   const form = useForm<z.infer<T>>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as unknown as Resolver<z.infer<T>>,
     defaultValues: {
       startDate: defaults.startDate,
       endDate: defaults.endDate,
       ...defaultValues,
-    } as z.infer<T>,
+    } as unknown as Parameters<typeof useForm<z.infer<T>>>[0] extends { defaultValues?: infer D } ? D : never,
   })
 
   const handlePresetClick = (preset: DateRangePreset) => {
     const { startDate, endDate } = preset.getValue()
-    form.setValue("startDate" as keyof z.infer<T>, startDate as z.infer<T>[keyof z.infer<T>])
-    form.setValue("endDate" as keyof z.infer<T>, endDate as z.infer<T>[keyof z.infer<T>])
+    form.setValue("startDate" as unknown as Parameters<typeof form.setValue>[0], startDate as unknown as Parameters<typeof form.setValue>[1])
+    form.setValue("endDate" as unknown as Parameters<typeof form.setValue>[0], endDate as unknown as Parameters<typeof form.setValue>[1])
   }
 
   const handleReset = () => {
@@ -127,7 +127,7 @@ export function ReportFiltersForm<T extends z.ZodTypeAny>({
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={form.handleSubmit(onSubmit as unknown as Parameters<typeof form.handleSubmit>[0])}
       className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950"
     >
       {/* Date range row */}
@@ -154,13 +154,13 @@ export function ReportFiltersForm<T extends z.ZodTypeAny>({
           <div className="flex items-center gap-2">
             <input
               type="date"
-              {...form.register("startDate" as keyof z.infer<T>)}
+              {...form.register("startDate" as unknown as Parameters<typeof form.register>[0])}
               className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             />
             <span className="text-gray-400">—</span>
             <input
               type="date"
-              {...form.register("endDate" as keyof z.infer<T>)}
+              {...form.register("endDate" as unknown as Parameters<typeof form.register>[0])}
               className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             />
           </div>
@@ -210,7 +210,7 @@ export function ReportFiltersForm<T extends z.ZodTypeAny>({
       {/* Advanced filters */}
       {showAdvanced && children && (
         <div className="border-t border-gray-200 pt-4 dark:border-gray-800">
-          {children(form)}
+          {children(form as UseFormReturn<z.infer<T>>)}
         </div>
       )}
     </form>

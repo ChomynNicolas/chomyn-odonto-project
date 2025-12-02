@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireSessionWithRoles } from "../../../../_lib/auth";
 import { paramsSchema, cancelarBodySchema } from "./_schemas";
 import { cancelarCita } from "./_service";
+import { extractClientIP } from "@/lib/utils/extract-ip";
 
 /**
  * PATCH /api/agenda/citas/[id]/cancelar
@@ -38,7 +39,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const userId = auth.session.user.id;
     if (!userId) return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
 
-    const result = await cancelarCita(parsedParams.data.id, parsedBody.data, Number(userId));
+    const ip = extractClientIP(req);
+    const result = await cancelarCita(parsedParams.data.id, parsedBody.data, Number(userId), ip);
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
     }

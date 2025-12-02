@@ -83,7 +83,7 @@ export default function AnamnesisConfigForm({
   })
 
   const config = configData?.data
-  const isHighImpact = config ? HIGH_IMPACT_KEYS.includes(config.key as any) : false
+  const isHighImpact = config ? (HIGH_IMPACT_KEYS as readonly string[]).includes(config.key) : false
   const keySchema = config ? KNOWN_KEY_SCHEMAS[config.key] : null
   const isBooleanKey = keySchema === KNOWN_KEY_SCHEMAS.MANDATORY_FIRST_CONSULTATION ||
     keySchema === KNOWN_KEY_SCHEMAS.ALLOW_EDIT_SUBSEQUENT ||
@@ -106,8 +106,6 @@ export default function AnamnesisConfigForm({
       description: null,
     },
   })
-
-  const form = isEditing ? updateForm : createForm
 
   // Load config data when editing
   useEffect(() => {
@@ -244,35 +242,11 @@ export default function AnamnesisConfigForm({
             <div className="flex items-center justify-center py-8">
               <div className="text-muted-foreground">Cargando configuración...</div>
             </div>
-          ) : (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-                {/* Key field (only when creating) */}
-                {!isEditing && (
-                  <FormField
-                    control={createForm.control}
-                    name="key"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Clave *</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Ej: MANDATORY_FIRST_CONSULTATION"
-                            {...field}
-                            className="font-mono"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Clave única en mayúsculas, números y guiones bajos (ej: MANDATORY_FIRST_CONSULTATION)
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
+          ) : isEditing ? (
+            <Form {...updateForm}>
+              <form onSubmit={updateForm.handleSubmit(handleSubmit)} className="space-y-4">
                 {/* Key display (read-only when editing) */}
-                {isEditing && config && (
+                {config && (
                   <FormItem>
                     <FormLabel>Clave</FormLabel>
                     <Input value={config.key} disabled className="font-mono bg-muted" />
@@ -281,76 +255,38 @@ export default function AnamnesisConfigForm({
                 )}
 
                 {/* Value field - typed or JSON editor */}
-                {isEditing ? (
-                  <FormField
-                    control={updateForm.control}
-                    name="value"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center justify-between">
-                          <FormLabel>Valor *</FormLabel>
-                          {isBooleanKey && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setUseJsonEditor(!useJsonEditor)}
-                            >
-                              <Code2 className="mr-2 h-4 w-4" />
-                              {useJsonEditor ? "Usar toggle" : "Editor JSON"}
-                            </Button>
-                          )}
-                        </div>
-                        {isBooleanKey && !useJsonEditor ? (
-                          <FormControl>
-                            <div className="flex items-center space-x-2 rounded-lg border p-4">
-                              <Switch
-                                checked={field.value as boolean}
-                                onCheckedChange={field.onChange}
-                              />
-                              <span className="text-sm">
-                                {field.value ? "Habilitado" : "Deshabilitado"}
-                              </span>
-                            </div>
-                          </FormControl>
-                        ) : (
-                          <FormControl>
-                            <Textarea
-                              placeholder='Ingrese el valor JSON (ej: true, "texto", {"key": "value"})'
-                              className="font-mono min-h-[120px]"
-                              value={
-                                typeof field.value === "string"
-                                  ? field.value
-                                  : JSON.stringify(field.value, null, 2)
-                              }
-                              onChange={(e) => {
-                                try {
-                                  const parsed = JSON.parse(e.target.value)
-                                  field.onChange(parsed)
-                                } catch {
-                                  // Keep raw string if not valid JSON yet
-                                  field.onChange(e.target.value)
-                                }
-                              }}
-                            />
-                          </FormControl>
-                        )}
-                        <FormDescription>
-                          {isBooleanKey && !useJsonEditor
-                            ? "Toggle para valores booleanos"
-                            : "Valor en formato JSON. Use el editor JSON para valores complejos."}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <FormField
-                    control={createForm.control}
-                    name="value"
-                    render={({ field }) => (
-                      <FormItem>
+                <FormField
+                  control={updateForm.control}
+                  name="value"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between">
                         <FormLabel>Valor *</FormLabel>
+                        {isBooleanKey && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setUseJsonEditor(!useJsonEditor)}
+                          >
+                            <Code2 className="mr-2 h-4 w-4" />
+                            {useJsonEditor ? "Usar toggle" : "Editor JSON"}
+                          </Button>
+                        )}
+                      </div>
+                      {isBooleanKey && !useJsonEditor ? (
+                        <FormControl>
+                          <div className="flex items-center space-x-2 rounded-lg border p-4">
+                            <Switch
+                              checked={field.value as boolean}
+                              onCheckedChange={field.onChange}
+                            />
+                            <span className="text-sm">
+                              {field.value ? "Habilitado" : "Deshabilitado"}
+                            </span>
+                          </div>
+                        </FormControl>
+                      ) : (
                         <FormControl>
                           <Textarea
                             placeholder='Ingrese el valor JSON (ej: true, "texto", {"key": "value"})'
@@ -371,18 +307,20 @@ export default function AnamnesisConfigForm({
                             }}
                           />
                         </FormControl>
-                        <FormDescription>
-                          Valor en formato JSON. Será validado según el tipo de clave.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+                      )}
+                      <FormDescription>
+                        {isBooleanKey && !useJsonEditor
+                          ? "Toggle para valores booleanos"
+                          : "Valor en formato JSON. Use el editor JSON para valores complejos."}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {/* Description field */}
                 <FormField
-                  control={form.control}
+                  control={updateForm.control}
                   name="description"
                   render={({ field }) => (
                     <FormItem>
@@ -432,6 +370,118 @@ export default function AnamnesisConfigForm({
                   </Button>
                   <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Guardando..." : isEditing ? "Actualizar" : "Crear"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          ) : (
+            <Form {...createForm}>
+              <form onSubmit={createForm.handleSubmit(handleSubmit)} className="space-y-4">
+                {/* Key field (only when creating) */}
+                <FormField
+                  control={createForm.control}
+                  name="key"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Clave *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Ej: MANDATORY_FIRST_CONSULTATION"
+                          {...field}
+                          className="font-mono"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Clave única en mayúsculas, números y guiones bajos (ej: MANDATORY_FIRST_CONSULTATION)
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Value field - typed or JSON editor */}
+                <FormField
+                  control={createForm.control}
+                  name="value"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor *</FormLabel>
+                      <FormControl>
+                        {useJsonEditor ? (
+                          <Textarea
+                            placeholder='{"key": "value"}'
+                            className="font-mono min-h-[120px]"
+                            {...field}
+                            value={typeof field.value === "string" ? field.value : JSON.stringify(field.value, null, 2)}
+                            onChange={(e) => {
+                              try {
+                                const parsed = JSON.parse(e.target.value)
+                                field.onChange(parsed)
+                              } catch {
+                                field.onChange(e.target.value)
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Input
+                            type="text"
+                            placeholder="Valor"
+                            {...field}
+                            value={typeof field.value === "string" ? field.value : String(field.value ?? "")}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              if (val === "true") field.onChange(true)
+                              else if (val === "false") field.onChange(false)
+                              else if (!isNaN(Number(val)) && val !== "") field.onChange(Number(val))
+                              else field.onChange(val)
+                            }}
+                          />
+                        )}
+                      </FormControl>
+                      <FormDescription>
+                        {useJsonEditor
+                          ? "Ingrese el valor en formato JSON"
+                          : "Ingrese el valor (texto, número o booleano)"}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Description field */}
+                <FormField
+                  control={createForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Descripción</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Descripción de qué hace esta configuración..."
+                          className="min-h-[80px]"
+                          {...field}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Descripción opcional de la configuración y su propósito
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                    disabled={isLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? "Guardando..." : "Crear"}
                   </Button>
                 </div>
               </form>

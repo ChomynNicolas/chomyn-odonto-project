@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileText, AlertTriangle, Activity, Heart, Tooth, Calendar } from 'lucide-react';
+import { FileText, AlertTriangle, Activity, Heart, Calendar } from 'lucide-react';
 import type { RolNombre } from '@/types/patient';
 
 interface ClinicalSummaryProps {

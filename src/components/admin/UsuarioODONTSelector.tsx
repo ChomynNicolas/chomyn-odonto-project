@@ -24,7 +24,7 @@ interface UsuarioODONTSelectorProps {
   disabled?: boolean
 }
 
-export default function UsuarioODONTSelector({ value, onSelect, disabled }: UsuarioODONTSelectorProps) {
+export default function UsuarioODONTSelector({ onSelect, disabled }: UsuarioODONTSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [results, setResults] = useState<UsuarioSearchResult[]>([])

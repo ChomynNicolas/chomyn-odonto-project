@@ -1,9 +1,9 @@
 // Service for handling anamnesis edits outside consultation
 
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import type {
   AnamnesisEditContext,
-  InformationSource,
   FieldEditMetadata,
 } from "@/types/anamnesis-outside-consultation"
 import { createAnamnesisAuditLog } from "./anamnesis-audit-complete.service"
@@ -139,8 +139,8 @@ export async function createPendingReview(params: {
       auditLogId: params.auditLogId,
       fieldPath: params.fieldPath,
       fieldLabel: params.fieldLabel,
-      oldValue: params.oldValue as any,
-      newValue: params.newValue as any,
+      oldValue: params.oldValue !== undefined ? (params.oldValue as Prisma.InputJsonValue) : Prisma.JsonNull,
+      newValue: params.newValue !== undefined ? (params.newValue as Prisma.InputJsonValue) : Prisma.JsonNull,
       reason: params.reason,
       severity: params.severity,
       createdByUserId: params.createdByUserId,

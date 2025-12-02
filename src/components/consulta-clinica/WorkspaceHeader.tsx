@@ -6,15 +6,18 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
+type Genero = "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
+
 interface Paciente {
   id: number
-  nombre: string
-  apellido: string
-  fechaNacimiento: string
-  genero: "M" | "F" | "O"
-  telefono?: string
-  email?: string
-  direccion?: string
+  nombres: string
+  apellidos: string
+  fechaNacimiento: string | null
+  genero: Genero | null
+  telefono?: string | null
+  email?: string | null
+  direccion?: string | null
+  edad?: number | null
 }
 
 interface WorkspaceHeaderProps {
@@ -24,7 +27,8 @@ interface WorkspaceHeaderProps {
   finishedAt: string | null
 }
 
-function calculateAge(birthDate: string): number {
+function calculateAge(birthDate: string | null): number | null {
+  if (!birthDate) return null
   const today = new Date()
   const birth = new Date(birthDate)
   let age = today.getFullYear() - birth.getFullYear()
@@ -35,15 +39,22 @@ function calculateAge(birthDate: string): number {
   return age
 }
 
-function getGenderLabel(gender: "M" | "F" | "O"): string {
-  const labels = { M: "Masculino", F: "Femenino", O: "Otro" }
+function getGenderLabel(gender: Genero | null): string {
+  if (!gender) return "No especificado"
+  const labels: Record<Genero, string> = {
+    MASCULINO: "Masculino",
+    FEMENINO: "Femenino",
+    OTRO: "Otro",
+    NO_ESPECIFICADO: "No especificado",
+  }
   return labels[gender] || gender
 }
 
 export function WorkspaceHeader({ paciente, status, createdAt, finishedAt }: WorkspaceHeaderProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const age = calculateAge(paciente.fechaNacimiento)
+  // Use edad from DTO if available, otherwise calculate it
+  const age = paciente.edad ?? calculateAge(paciente.fechaNacimiento)
   const hasConsulta = createdAt !== null
 
   const statusConfig = {
@@ -83,10 +94,10 @@ export function WorkspaceHeader({ paciente, status, createdAt, finishedAt }: Wor
           {/* Patient Basic Info */}
           <div>
             <h1 className="font-semibold text-lg leading-tight">
-              {paciente.nombre} {paciente.apellido}
+              {paciente.nombres} {paciente.apellidos}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {age} años · {getGenderLabel(paciente.genero)}
+              {age !== null ? `${age} años` : "Edad no disponible"} · {getGenderLabel(paciente.genero)}
             </p>
           </div>
         </div>
@@ -119,11 +130,13 @@ export function WorkspaceHeader({ paciente, status, createdAt, finishedAt }: Wor
           id="patient-details"
           className="px-4 pb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t pt-3 bg-muted/30"
         >
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Nacimiento:</span>
-            <span>{new Date(paciente.fechaNacimiento).toLocaleDateString("es-ES")}</span>
-          </div>
+          {paciente.fechaNacimiento && (
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Nacimiento:</span>
+              <span>{new Date(paciente.fechaNacimiento).toLocaleDateString("es-ES")}</span>
+            </div>
+          )}
 
           {paciente.telefono && (
             <div className="flex items-center gap-2 text-sm">

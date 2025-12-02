@@ -9,6 +9,7 @@ import type {
   AdjuntoTipo,
   AllergySeverity,
   TreatmentStepStatus,
+  TreatmentPlanStatus,
 } from "@prisma/client"
 
 // ============================================================================
@@ -142,6 +143,7 @@ export interface MedicacionDTO {
   id: number
   medicationId: number | null
   label: string | null
+  description: string | null
   dose: string | null
   freq: string | null
   route: string | null
@@ -152,6 +154,18 @@ export interface MedicacionDTO {
     id: number
     nombre: string
   }
+  // Audit fields
+  updatedAt: string | null
+  updatedBy: {
+    id: number
+    nombre: string
+  } | null
+  discontinuedAt: string | null
+  discontinuedBy: {
+    id: number
+    nombre: string
+  } | null
+  consultaId: number | null
 }
 
 // ============================================================================
@@ -260,7 +274,7 @@ export interface PlanTratamientoDTO {
   id: number
   titulo: string
   descripcion: string | null
-  isActive: boolean
+  status: TreatmentPlanStatus
   createdAt: string
   updatedAt: string
   createdBy: {

@@ -2,7 +2,7 @@
 // Audit service for tracking medication and allergy changes in anamnesis
 
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 
 export type AuditAction = "ADDED" | "UPDATED" | "DEACTIVATED" | "REACTIVATED" | "REMOVED"
 
@@ -32,6 +32,9 @@ type PrismaTransaction = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends" | "$use"
 >
 
+// Type for Prisma client that can be either transaction or regular client
+type PrismaClientLike = PrismaTransaction | typeof prisma
+
 /**
  * Log a medication change in anamnesis
  * @param params - Parameters for logging the change
@@ -48,13 +51,13 @@ export async function logMedicationChange(
   },
   tx?: PrismaTransaction
 ): Promise<void> {
-  const client = (tx as any) || prisma
+  const client: PrismaClientLike = tx || prisma
   await client.anamnesisMedicationAudit.create({
     data: {
       anamnesisMedicationId: params.anamnesisMedicationId,
       action: params.action,
-      previousValue: params.previousValue ? (params.previousValue as Prisma.JsonValue) : null,
-      newValue: params.newValue ? (params.newValue as Prisma.JsonValue) : null,
+      previousValue: params.previousValue ? (params.previousValue as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+      newValue: params.newValue ? (params.newValue as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
       performedByUserId: params.performedByUserId,
       notes: params.notes || null,
     },
@@ -77,13 +80,13 @@ export async function logAllergyChange(
   },
   tx?: PrismaTransaction
 ): Promise<void> {
-  const client = (tx as any) || prisma
+  const client: PrismaClientLike = tx || prisma
   await client.anamnesisAllergyAudit.create({
     data: {
       anamnesisAllergyId: params.anamnesisAllergyId,
       action: params.action,
-      previousValue: params.previousValue ? (params.previousValue as Prisma.JsonValue) : null,
-      newValue: params.newValue ? (params.newValue as Prisma.JsonValue) : null,
+      previousValue: params.previousValue ? (params.previousValue as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+      newValue: params.newValue ? (params.newValue as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
       performedByUserId: params.performedByUserId,
       notes: params.notes || null,
     },

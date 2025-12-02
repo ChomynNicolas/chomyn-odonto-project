@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,6 +25,8 @@ import {
   AnamnesisCreateUpdateBodySchema,
   type AnamnesisCreateUpdateBody,
   type AnamnesisResponse,
+  type AnamnesisMedicationLink,
+  type AnamnesisAllergyLink,
 } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { useAnamnesisConfig } from "@/hooks/useAnamnesisConfig"
 import { AnamnesisContext } from "@/lib/services/anamnesis-context.service"
@@ -37,6 +40,7 @@ import { PediatricSection } from "./sections/PediatricSection"
 import { ProgressTracker } from "./components/ProgressTracker"
 import { calculateAge, getAnamnesisRulesByAge, getAgeContextMessage } from "@/lib/utils/age-utils"
 import { useUnsavedChanges } from "./hooks/useUnsavedChanges"
+import type { AnamnesisPayload } from "@/app/(dashboard)/pacientes/[id]/_components/anamnesis/types/anamnesis-display.types"
 
 interface AnamnesisFormProps {
   pacienteId: number
@@ -56,7 +60,7 @@ function mapAnamnesisToFormValues(
   consultaId?: number
 ): AnamnesisCreateUpdateBody {
   // Extract payload with type safety
-  const payload = anamnesis.payload as Record<string, any> | null
+  const payload = anamnesis.payload as AnamnesisPayload | null
   const womenSpecificPayload = payload?.womenSpecific as
     | {
         embarazada?: boolean | null
@@ -90,10 +94,16 @@ function mapAnamnesisToFormValues(
     : undefined
 
   // Pediatric-specific: prioritize payload, then direct field (backward compatibility)
-  // For lactanciaRegistrada: if it comes as enum string from payload, use it; if boolean from DB, leave undefined
+  // For lactanciaRegistrada: validate it's either a valid enum string or boolean
+  const rawLactancia = pediatricPayload?.lactanciaRegistrada
   const lactanciaRegistrada =
-    pediatricPayload?.lactanciaRegistrada !== undefined && pediatricPayload?.lactanciaRegistrada !== null
-      ? pediatricPayload.lactanciaRegistrada
+    rawLactancia !== undefined && rawLactancia !== null
+      ? typeof rawLactancia === "string" &&
+        ["EXCLUSIVA", "MIXTA", "FORMULA", "NO_APLICA"].includes(rawLactancia)
+        ? (rawLactancia as "EXCLUSIVA" | "MIXTA" | "FORMULA" | "NO_APLICA")
+        : typeof rawLactancia === "boolean"
+        ? rawLactancia
+        : undefined // Invalid string value, set to undefined
       : undefined // Don't convert old boolean to enum, let user select
 
   const tieneHabitosSuccion =
@@ -202,7 +212,7 @@ export function AnamnesisForm({
     return getAgeContextMessage(ageInfo)
   }, [ageInfo])
 
-  const form = useForm<AnamnesisCreateUpdateBody>({
+  const form = useForm<z.input<typeof AnamnesisCreateUpdateBodySchema>>({
     resolver: zodResolver(AnamnesisCreateUpdateBodySchema),
     defaultValues: {
       motivoConsulta: undefined, // Optional - moved to consulta
@@ -229,7 +239,7 @@ export function AnamnesisForm({
   })
 
   // Track form dirty state and errors
-  const { isDirty, errors, isValid } = form.formState
+  const { isDirty, errors } = form.formState
   const hasErrors = Object.keys(errors).length > 0
 
   // Unsaved changes warning
@@ -244,7 +254,7 @@ export function AnamnesisForm({
     if (initialData) {
       const mappedData = mapAnamnesisToFormValues(initialData, consultaId)
       // Remove motivoConsulta from form data (it's now in consulta)
-      const { motivoConsulta, ...formData } = mappedData
+      const {  ...formData } = mappedData
       form.reset(formData)
       resetUnsavedChanges()
     }
@@ -352,26 +362,31 @@ export function AnamnesisForm({
       {
         id: "general",
         label: "Información General",
-        isComplete:
-          (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined)),
+        isComplete: Boolean(
+          !tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined)
+        ),
         ref: generalRef,
       },
       {
         id: "medical",
         label: "Antecedentes Médicos",
-        isComplete: !tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0),
+        isComplete: Boolean(
+          !tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0)
+        ),
         ref: medicalRef,
       },
       {
         id: "medications",
         label: "Medicación Actual",
-        isComplete: !tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0),
+        isComplete: Boolean(
+          !tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0)
+        ),
         ref: medicationsRef,
       },
       {
         id: "allergies",
         label: "Alergias",
-        isComplete: !tieneAlergias || (tieneAlergias && allergies && allergies.length > 0),
+        isComplete: Boolean(!tieneAlergias || (tieneAlergias && allergies && allergies.length > 0)),
         ref: allergiesRef,
       },
     ]
@@ -391,7 +406,9 @@ export function AnamnesisForm({
       baseSections.push({
         id: "women",
         label: "Información para Mujeres",
-        isComplete: womenSpecific?.embarazada !== null && womenSpecific?.embarazada !== undefined,
+        isComplete: Boolean(
+          womenSpecific?.embarazada !== null && womenSpecific?.embarazada !== undefined
+        ),
         ref: womenRef,
       })
     }
@@ -422,7 +439,7 @@ export function AnamnesisForm({
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const onSubmit = async (data: AnamnesisCreateUpdateBody) => {
+  const onSubmit = async (data: z.input<typeof AnamnesisCreateUpdateBodySchema>) => {
     if (!canEdit) {
       toast.error("No tiene permisos para editar la anamnesis")
       return
@@ -439,16 +456,28 @@ export function AnamnesisForm({
         ...data,
         // Remove motivoConsulta - it's now in consulta, not anamnesis
         motivoConsulta: undefined,
-        medications: data.medications?.map((med) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { label, dose, freq, route, ...rest } = med
-          return rest
-        }),
-        allergies: data.allergies?.map((all) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { label, ...rest } = all
-          return rest
-        }),
+        // Si tieneMedicacionActual es false, limpiar el array de medicaciones
+        medications: data.tieneMedicacionActual
+          ? data.medications?.map((med) => {
+              // Type assertion: medications are AnamnesisMedicationLink in practice
+              const medication = med as AnamnesisMedicationLink
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const { label, dose, freq, route, ...rest } = medication
+              return rest
+            })
+          : [],
+        // Si tieneAlergias es false, limpiar el array de alergias
+        allergies: data.tieneAlergias
+          ? data.allergies?.map((all) => {
+              // Type assertion: allergies are AnamnesisAllergyLink in practice
+              const allergy = all as AnamnesisAllergyLink
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const { label, ...rest } = allergy
+              return rest
+            })
+          : [],
+        // Si tieneEnfermedadesCronicas es false, limpiar el array de antecedentes
+        antecedents: data.tieneEnfermedadesCronicas ? data.antecedents : [],
         // Eliminar womenSpecific si no aplica por edad
         womenSpecific: ageRules.canShowWomenSpecific ? data.womenSpecific : undefined,
         consultaId,
@@ -487,9 +516,10 @@ export function AnamnesisForm({
   // Determine editability based on config
   const isFirstConsultation = anamnesisContext?.isFirstTime ?? !initialData
   const editMode = config?.ALLOW_EDIT_SUBSEQUENT || "FULL"
-  const canEditForm =
+  const canEditForm: boolean = Boolean(
     canEdit &&
-    (isFirstConsultation || editMode === "FULL" || (editMode === "PARTIAL" && config?.EDITABLE_SECTIONS?.length))
+    (isFirstConsultation || editMode === "FULL" || (editMode === "PARTIAL" && Boolean(config?.EDITABLE_SECTIONS?.length)))
+  )
 
   // Show skeleton loader if data is still loading
   if (isLoadingAnamnesis) {
@@ -574,8 +604,6 @@ export function AnamnesisForm({
                       <GeneralInformationSection
                         form={form}
                         canEdit={canEditForm}
-                        ageRules={ageRules}
-                        simplifiedLanguage={ageRules.simplifiedLanguage}
                       />
                     </div>
 
@@ -584,7 +612,6 @@ export function AnamnesisForm({
                         form={form}
                         canEdit={canEditForm}
                         pacienteId={pacienteId}
-                        ageRules={ageRules}
                       />
                     </div>
 
@@ -593,7 +620,6 @@ export function AnamnesisForm({
                         form={form}
                         canEdit={canEditForm}
                         pacienteId={pacienteId}
-                        ageRules={ageRules}
                       />
                     </div>
 

@@ -41,7 +41,7 @@ export async function auditConsentCreate(args: {
     action: AuditAction.CONSENTIMIENTO_CREATE,
     entity: AuditEntity.Consentimiento,
     entityId: args.entityId,
-    metadata: args.metadata,
+    metadata: args.metadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })
@@ -62,7 +62,7 @@ export async function auditConsentRevoke(args: {
     action: AuditAction.CONSENTIMIENTO_REVOKE,
     entity: AuditEntity.Consentimiento,
     entityId: args.entityId,
-    metadata: args.metadata,
+    metadata: args.metadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })

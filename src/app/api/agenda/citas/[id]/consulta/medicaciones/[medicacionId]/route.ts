@@ -26,6 +26,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
     const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden editar medicaciones")
@@ -56,14 +57,19 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     })
     if (!medicacion) return errors.notFound("Medicación no encontrada")
 
-    const updateData: Prisma.PatientMedicationUpdateInput = {}
+    const updateData: Prisma.PatientMedicationUncheckedUpdateInput = {}
     if (input.label !== undefined) updateData.label = input.label
+    if (input.description !== undefined) updateData.description = input.description
     if (input.dose !== undefined) updateData.dose = input.dose
     if (input.freq !== undefined) updateData.freq = input.freq
     if (input.route !== undefined) updateData.route = input.route
     if (input.startAt !== undefined) updateData.startAt = input.startAt ? new Date(input.startAt) : null
     if (input.endAt !== undefined) updateData.endAt = input.endAt ? new Date(input.endAt) : null
     if (input.isActive !== undefined) updateData.isActive = input.isActive
+    
+    // Set audit fields
+    updateData.updatedByUserId = userId
+    updateData.consultaId = citaId
 
     const updated = await prisma.patientMedication.update({
       where: { idPatientMedication: medicacionId },
@@ -85,19 +91,44 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
             },
           },
         },
+        updatedBy: {
+          select: {
+            idUsuario: true,
+            nombreApellido: true,
+            profesional: {
+              select: {
+                persona: {
+                  select: {
+                    nombres: true,
+                    apellidos: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        medicationCatalog: {
+          select: {
+            name: true,
+            description: true,
+          },
+        },
       },
     })
 
     return ok({
       id: updated.idPatientMedication,
       medicationId: updated.medicationId,
-      label: updated.label,
+      label: updated.label ?? updated.medicationCatalog?.name ?? "Medicación desconocida",
+      description: updated.description,
       dose: updated.dose,
       freq: updated.freq,
       route: updated.route,
       startAt: updated.startAt?.toISOString() ?? null,
       endAt: updated.endAt?.toISOString() ?? null,
       isActive: updated.isActive,
+      updatedAt: updated.updatedAt?.toISOString() ?? null,
+      consultaId: updated.consultaId,
       createdBy: {
         id: updated.createdBy.idUsuario,
         nombre:
@@ -105,6 +136,15 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
             ? `${updated.createdBy.profesional.persona.nombres} ${updated.createdBy.profesional.persona.apellidos}`.trim()
             : updated.createdBy.nombreApellido ?? "Usuario",
       },
+      updatedBy: updated.updatedBy
+        ? {
+            id: updated.updatedBy.idUsuario,
+            nombre:
+              updated.updatedBy.profesional?.persona?.nombres && updated.updatedBy.profesional?.persona?.apellidos
+                ? `${updated.updatedBy.profesional.persona.nombres} ${updated.updatedBy.profesional.persona.apellidos}`.trim()
+                : updated.updatedBy.nombreApellido ?? "Usuario",
+          }
+        : null,
     })
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "ZodError") {
@@ -130,6 +170,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     const session = await auth()
     if (!session?.user?.id) return errors.forbidden("No autenticado")
     const rol = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
+    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
 
     if (!CONSULTA_RBAC.canEditClinicalData(rol)) {
       return errors.forbidden("Solo ODONT y ADMIN pueden desactivar medicaciones")
@@ -159,7 +200,12 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
     await prisma.patientMedication.update({
       where: { idPatientMedication: medicacionId },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        discontinuedAt: new Date(),
+        discontinuedByUserId: userId,
+        consultaId: citaId,
+      },
     })
 
     return ok({ deleted: true })

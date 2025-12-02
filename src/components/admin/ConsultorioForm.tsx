@@ -42,7 +42,7 @@ const consultorioFormSchema = z.object({
   activo: z.boolean().default(true),
 })
 
-type ConsultorioFormValues = z.infer<typeof consultorioFormSchema>
+type ConsultorioFormValues = z.input<typeof consultorioFormSchema>
 
 interface ConsultorioFormProps {
   open: boolean
@@ -105,14 +105,14 @@ export default function ConsultorioForm({
         const updateData: ConsultorioUpdateInput = {
           nombre: values.nombre,
           colorHex: values.colorHex ?? null,
-          activo: values.activo,
+          activo: values.activo ?? true,
         }
         await updateConsultorio(consultorioId, updateData)
       } else {
         const createData: ConsultorioCreateInput = {
           nombre: values.nombre,
           colorHex: values.colorHex ?? null,
-          activo: values.activo,
+          activo: values.activo ?? true,
         }
         await createConsultorio(createData)
       }

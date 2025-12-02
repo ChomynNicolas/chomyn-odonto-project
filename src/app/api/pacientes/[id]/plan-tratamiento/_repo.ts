@@ -1,13 +1,12 @@
 // src/app/api/pacientes/[id]/plan-tratamiento/_repo.ts
 import { prisma as db } from "@/lib/prisma"
-import type { DienteSuperficie, TreatmentStepStatus } from "@prisma/client"
-import type { CreatePlanInput, UpdatePlanInput } from "./_schemas"
+import type { DienteSuperficie, TreatmentStepStatus, TreatmentPlanStatus } from "@prisma/client"
 
 export async function repoGetActivePlan(pacienteId: number) {
   return db.treatmentPlan.findFirst({
     where: {
       pacienteId,
-      isActive: true,
+      status: "ACTIVE",
     },
     include: {
       creadoPor: {
@@ -64,24 +63,14 @@ export async function repoCreatePlan(data: {
   }>
 }) {
   return db.$transaction(async (tx) => {
-    // Deactivate any existing active plan
-    await tx.treatmentPlan.updateMany({
-      where: {
-        pacienteId: data.pacienteId,
-        isActive: true,
-      },
-      data: {
-        isActive: false,
-      },
-    })
-
-    // Create new plan
+    // Create new plan with ACTIVE status
+    // Note: Validation for existing active plan should be done in service layer
     const plan = await tx.treatmentPlan.create({
       data: {
         pacienteId: data.pacienteId,
         titulo: data.titulo,
         descripcion: data.descripcion ?? null,
-        isActive: true,
+        status: "ACTIVE",
         createdByUserId: data.createdByUserId,
       },
     })
@@ -341,6 +330,7 @@ export async function repoGetStepWithPlan(stepId: number) {
         select: {
           idTreatmentPlan: true,
           pacienteId: true,
+          status: true,
         },
       },
       procedimientoCatalogo: {
@@ -352,5 +342,34 @@ export async function repoGetStepWithPlan(stepId: number) {
       },
     },
   })
+}
+
+/**
+ * Updates the status of a treatment plan
+ */
+export async function repoUpdatePlanStatus(
+  planId: number,
+  status: TreatmentPlanStatus
+) {
+  return db.treatmentPlan.update({
+    where: { idTreatmentPlan: planId },
+    data: { status },
+  })
+}
+
+/**
+ * Checks if a patient has an active treatment plan
+ */
+export async function repoHasActivePlan(pacienteId: number): Promise<boolean> {
+  const activePlan = await db.treatmentPlan.findFirst({
+    where: {
+      pacienteId,
+      status: "ACTIVE",
+    },
+    select: {
+      idTreatmentPlan: true,
+    },
+  })
+  return activePlan !== null
 }
 

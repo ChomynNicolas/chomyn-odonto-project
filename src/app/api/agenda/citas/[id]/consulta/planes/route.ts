@@ -67,11 +67,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     })
     if (!cita) return errors.notFound("Cita no encontrada")
 
-    // Obtener plan de tratamiento activo del paciente
-    const planTratamiento = await prisma.treatmentPlan.findFirst({
+    // Obtener plan de tratamiento: primero intentar plan activo, luego el más reciente completado/cancelado
+    let planTratamiento = await prisma.treatmentPlan.findFirst({
       where: {
         pacienteId: cita.pacienteId,
-        isActive: true,
+        status: "ACTIVE",
       },
       include: {
         creadoPor: {
@@ -92,6 +92,34 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       },
     })
 
+    // Si no hay plan activo, obtener el más reciente plan completado o cancelado (para contexto)
+    if (!planTratamiento) {
+      planTratamiento = await prisma.treatmentPlan.findFirst({
+        where: {
+          pacienteId: cita.pacienteId,
+          status: { in: ["COMPLETED", "CANCELLED"] },
+        },
+        include: {
+          creadoPor: {
+            select: userMiniSelect,
+          },
+          steps: {
+            include: {
+              procedimientoCatalogo: {
+                select: {
+                  idProcedimiento: true,
+                  code: true,
+                  nombre: true,
+                },
+              },
+            },
+            orderBy: { order: "asc" },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+      })
+    }
+
     if (!planTratamiento) {
       return ok(null)
     }
@@ -100,7 +128,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       id: planTratamiento.idTreatmentPlan,
       titulo: planTratamiento.titulo,
       descripcion: planTratamiento.descripcion,
-      isActive: planTratamiento.isActive,
+      status: planTratamiento.status,
       createdAt: planTratamiento.createdAt.toISOString(),
       updatedAt: planTratamiento.updatedAt.toISOString(),
       createdBy: {

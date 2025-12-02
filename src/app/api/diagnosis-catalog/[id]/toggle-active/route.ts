@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const actorId = parseInt(auth.session.user.id as string)
     const diagnosisCatalog = await toggleDiagnosisCatalogActive(
       parsed.data.id,
       actorId,

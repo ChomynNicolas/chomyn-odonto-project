@@ -40,7 +40,7 @@ async function AllergyCatalogContent({ searchParams }: AllergyCatalogPageProps) 
   const result = await listAllergyCatalogs(validatedFilters)
 
   // Envolver en formato esperado por AllergyCatalogTable
-  const allergyCatalogResponse: { ok: boolean; data: typeof result.data; meta: typeof result.meta } = {
+  const allergyCatalogResponse: { ok: true; data: typeof result.data; meta: typeof result.meta } = {
     ok: true,
     data: result.data,
     meta: result.meta,

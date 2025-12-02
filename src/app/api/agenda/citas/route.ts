@@ -6,6 +6,7 @@ import { toPageLimit } from "../../_lib/pagination"
 import { listCitas } from "./_service"
 import { createCitaBodySchema } from "./_create.schema"
 import { createCita } from "./_create.service"
+import { extractClientIP } from "@/lib/utils/extract-ip"
 
 export async function GET(req: NextRequest) {
   // RBAC: RECEP, ODONT, ADMIN
@@ -60,7 +61,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
     }
 
-    const result = await createCita({ ...parsed.data, createdByUserId: Number(userId) })
+    const ip = extractClientIP(req)
+    const result = await createCita({ ...parsed.data, createdByUserId: Number(userId), ip })
     if (!result.ok) {
       // Manejar error 409 OVERLAP con detalles de conflictos
       if (result.status === 409 && result.code === "OVERLAP" && result.conflicts) {

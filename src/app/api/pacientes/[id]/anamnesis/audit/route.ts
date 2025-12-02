@@ -6,6 +6,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { canViewAnamnesisAudit } from "@/lib/audit/anamnesis-rbac"
 import { z } from "zod"
+import type { Prisma } from "@prisma/client"
 
 const auditFiltersSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -55,9 +56,8 @@ export async function GET(
 
     // Check permissions
     const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
-    const userId = parseInt(session.user.id, 10)
 
-    if (!canViewAnamnesisAudit(userRole, pacienteId, userId, userId)) {
+    if (!canViewAnamnesisAudit(userRole)) {
       return NextResponse.json({ error: "No tiene permisos para ver esta auditoría" }, { status: 403 })
     }
 
@@ -66,7 +66,7 @@ export async function GET(
     const filters = auditFiltersSchema.parse(searchParams)
 
     // Build where clause
-    const where: any = {
+    const where: Prisma.AnamnesisAuditLogWhereInput = {
       anamnesisId: anamnesis.idPatientAnamnesis,
     }
 

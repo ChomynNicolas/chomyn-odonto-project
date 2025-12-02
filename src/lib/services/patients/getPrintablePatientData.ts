@@ -141,14 +141,14 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
         },
       },
       TreatmentPlan: {
-        where: { isActive: true },
+        where: { status: "ACTIVE" },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: {
           idTreatmentPlan: true,
           titulo: true,
           descripcion: true,
-          isActive: true,
+          status: true,
           steps: {
             orderBy: { order: "asc" },
             select: {
@@ -332,7 +332,7 @@ export async function getPrintablePatientData(patientId: number, opts: Options =
           id: plan.idTreatmentPlan,
           title: plan.titulo,
           description: plan.descripcion ?? null,
-          isActive: plan.isActive,
+          isActive: plan.status === "ACTIVE",
           steps: plan.steps.map(s => ({
             id: s.idTreatmentStep,
             order: s.order,

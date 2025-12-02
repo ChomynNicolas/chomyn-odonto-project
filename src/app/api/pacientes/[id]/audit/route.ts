@@ -10,7 +10,7 @@ import { auth } from "@/auth"
 import { ok, errors } from "@/app/api/_http"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { getAuditPermissions, canViewOtherUsers } from "@/lib/audit/rbac"
+import { getAuditPermissions } from "@/lib/audit/rbac"
 import { filterAuditEntries, shouldShowEntry } from "@/lib/audit/filters"
 import type { AuditLogEntry } from "@/lib/types/audit"
 
@@ -32,10 +32,9 @@ export async function GET(
     if (!parsed.success) {
       return errors.validation("ID de paciente inválido")
     }
-    const pacienteId = parsed.data
+    const pacienteId = parsed.data.id
 
     const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
-    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
     const permissions = getAuditPermissions(userRole)
 
     // Verificar que el usuario puede ver historial contextual

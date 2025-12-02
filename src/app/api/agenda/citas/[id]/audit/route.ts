@@ -32,10 +32,9 @@ export async function GET(
     if (!parsed.success) {
       return errors.validation("ID de cita inválido")
     }
-    const citaId = parsed.data
+    const citaId = parsed.data.id
 
     const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
-    const userId = session.user.id ? Number.parseInt(session.user.id, 10) : 0
     const permissions = getAuditPermissions(userRole)
 
     // Verificar que el usuario puede ver historial contextual

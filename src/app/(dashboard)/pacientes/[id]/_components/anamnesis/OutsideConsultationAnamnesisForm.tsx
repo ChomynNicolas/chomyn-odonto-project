@@ -6,6 +6,7 @@
 import { useState, useMemo, useCallback } from "react"
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -64,7 +65,7 @@ interface OutsideConsultationAnamnesisFormProps {
 // Helper function to map anamnesis response to form values
 function mapAnamnesisToFormValues(
   anamnesis: AnamnesisResponse | null
-): AnamnesisCreateUpdateBody {
+): z.input<typeof AnamnesisCreateUpdateBodySchema> {
   if (!anamnesis) {
     return {
       // motivoConsulta removed - it's now in consulta, not anamnesis
@@ -112,7 +113,7 @@ function mapAnamnesisToFormValues(
       customCategory: ant.customCategory ?? undefined,
       notes: ant.notes ?? undefined,
       diagnosedAt: ant.diagnosedAt ?? undefined,
-      isActive: ant.isActive,
+      isActive: ant.isActive ?? true,
       resolvedAt: ant.resolvedAt ?? undefined,
     })),
         medications: (anamnesis.medications || []).map((m) => {
@@ -166,7 +167,8 @@ export function OutsideConsultationAnamnesisForm({
   const ageRules = useMemo(() => getAnamnesisRulesByAge(ageInfo, patientGender), [ageInfo, patientGender])
 
   // Initialize form with initial data
-  const form = useForm<AnamnesisCreateUpdateBody>({
+  // The resolver accepts input type but form components expect output type
+  const form = useForm<z.input<typeof AnamnesisCreateUpdateBodySchema>>({
     resolver: zodResolver(AnamnesisCreateUpdateBodySchema),
     defaultValues: mapAnamnesisToFormValues(initialData),
   })
@@ -177,7 +179,7 @@ export function OutsideConsultationAnamnesisForm({
   // Track changes between initial and current values
   const { changes, hasChanges, hasCriticalChanges, changeCounts } = useChangeTracking({
     initialData,
-    currentValues,
+    currentValues: currentValues as Partial<z.input<typeof AnamnesisCreateUpdateBodySchema>>,
   })
 
   // Unsaved changes warning
@@ -210,13 +212,15 @@ export function OutsideConsultationAnamnesisForm({
       const cleanedData = {
         ...data,
         medications: data.medications?.map((med) => {
+          if (typeof med !== "object" || med === null) return med
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { label, dose, freq, route, ...rest } = med
+          const { label, dose, freq, route, ...rest } = med as Record<string, unknown>
           return rest
         }),
         allergies: data.allergies?.map((all) => {
+          if (typeof all !== "object" || all === null) return all
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { label, ...rest } = all
+          const { label, ...rest } = all as Record<string, unknown>
           return rest
         }),
         womenSpecific: ageRules.canShowWomenSpecific ? data.womenSpecific : undefined,
@@ -396,8 +400,6 @@ export function OutsideConsultationAnamnesisForm({
                   <GeneralInformationSection
                     form={form}
                     canEdit={true}
-                    ageRules={ageRules}
-                    simplifiedLanguage={ageRules.simplifiedLanguage}
                   />
                 </TabsContent>
 
@@ -414,7 +416,6 @@ export function OutsideConsultationAnamnesisForm({
                     form={form}
                     canEdit={true}
                     pacienteId={patientId}
-                    ageRules={ageRules}
                   />
                 </TabsContent>
 
@@ -423,7 +424,6 @@ export function OutsideConsultationAnamnesisForm({
                     form={form}
                     canEdit={true}
                     pacienteId={patientId}
-                    ageRules={ageRules}
                   />
                 </TabsContent>
 

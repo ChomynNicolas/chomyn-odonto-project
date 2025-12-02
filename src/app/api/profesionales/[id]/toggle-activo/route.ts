@@ -38,7 +38,16 @@ export async function PATCH(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "ID de usuario inválido" }, { status: 500 })
+    }
+
+    const actorId = parseInt(userId)
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "ID de usuario no numérico" }, { status: 500 })
+    }
+
     const profesional = await toggleActivo(id, parsed.data, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true, data: profesional }, { status: 200 })

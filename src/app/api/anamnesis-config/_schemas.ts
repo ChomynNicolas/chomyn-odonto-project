@@ -12,7 +12,7 @@ export const KNOWN_KEY_SCHEMAS: Record<string, z.ZodTypeAny> = {
   ALERT_IF_SEVERE_ALLERGY: z.boolean(),
   PEDIATRIC_EXTRA_SECTIONS: z.union([
     z.array(z.string()),
-    z.record(z.unknown()),
+    z.record(z.string(), z.unknown()),
   ]),
 }
 

@@ -1,7 +1,7 @@
 // src/app/(dashboard)/pacientes/[id]/_components/anamnesis/types/anamnesis-display.types.ts
 // Type definitions for anamnesis display components
 
-import type { PatientAnamnesisDTO } from "@/types/patient"
+
 
 /**
  * Women-specific data from payload

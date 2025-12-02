@@ -1,6 +1,6 @@
 // Hook for smart auto-population from previous anamnesis
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import type { AnamnesisCreateUpdateBody } from '@/app/api/pacientes/[id]/anamnesis/_schemas';
 import type { AnamnesisResponse } from '@/app/api/pacientes/[id]/anamnesis/_schemas';
@@ -17,7 +17,7 @@ export function useAnamnesisAutoPopulate({
   onConfirm,
 }: UseAnamnesisAutoPopulateOptions) {
   // Identify stable vs variable fields
-  const stableFields = [
+  const stableFields = useMemo(() => [
     'tieneEnfermedadesCronicas',
     'antecedents',
     'tieneAlergias',
@@ -30,15 +30,15 @@ export function useAnamnesisAutoPopulate({
     'usaHiloDental',
     'tieneHabitosSuccion',
     'lactanciaRegistrada',
-  ];
+  ], []);
 
-  const variableFields = [
+  const variableFields = useMemo(() => [
     // motivoConsulta removed - it's now in consulta, not anamnesis
     'tieneDolorActual',
     'dolorIntensidad',
     'urgenciaPercibida',
     'ultimaVisitaDental',
-  ];
+  ], []);
 
   const autoPopulateStable = useCallback(async () => {
     if (!previousAnamnesis) return;
@@ -164,7 +164,7 @@ export function useAnamnesisAutoPopulate({
     }
 
     return confirmedFields;
-  }, [form, previousAnamnesis, onConfirm]);
+  }, [form, previousAnamnesis, onConfirm, variableFields]);
 
   const autoPopulateAll = useCallback(async () => {
     const stable = await autoPopulateStable();

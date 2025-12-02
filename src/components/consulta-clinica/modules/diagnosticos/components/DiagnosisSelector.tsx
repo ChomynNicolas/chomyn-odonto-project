@@ -8,7 +8,7 @@
 
 "use client"
 
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -43,7 +43,7 @@ export function DiagnosisSelector({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  const { items, isLoading, error, search, searchQuery } = useDiagnosisCatalog({
+  const { items, isLoading, error, search } = useDiagnosisCatalog({
     autoLoad: true,
     debounceMs: 300,
   })
@@ -79,11 +79,11 @@ export function DiagnosisSelector({
   }
 
   // Handle selection
-  const handleSelect = (diagnosis: DiagnosisCatalogItem) => {
+  const handleSelect = useCallback((diagnosis: DiagnosisCatalogItem) => {
     onSelect(diagnosis)
     setLocalSearch("")
     setSelectedIndex(-1)
-  }
+  }, [onSelect])
 
   // Keyboard navigation
   useEffect(() => {
@@ -104,7 +104,7 @@ export function DiagnosisSelector({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedIndex, displayItems, onCancel])
+  }, [selectedIndex, displayItems, onCancel, handleSelect])
 
   // Scroll selected item into view
   useEffect(() => {

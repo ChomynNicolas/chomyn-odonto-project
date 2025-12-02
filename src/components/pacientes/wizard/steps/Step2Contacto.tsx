@@ -84,7 +84,7 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
     if (nextArray.sort().join("|") !== Array.from(current).sort().join("|")) {
       form.setValue("preferenciasContacto", nextArray, { shouldDirty: true, shouldValidate: true })
       // Derivar recordatorio/cobranza (sin llamada)
-      const channelsNoCall = nextArray.filter((c) => c !== "LLAMADA")
+      const channelsNoCall = nextArray.filter((c) => c !== "LLAMADA") as ("WHATSAPP" | "EMAIL" | "SMS")[]
       form.setValue("preferenciasRecordatorio", channelsNoCall, { shouldDirty: true, shouldValidate: true })
       form.setValue("preferenciasCobranza", channelsNoCall, { shouldDirty: true, shouldValidate: true })
     }
@@ -243,7 +243,7 @@ export function Step2Contacto({ form }: Step2ContactoProps) {
                               field.onChange(next)
 
                               // Mantener sincronía derivada (sin llamada) para recordatorio/cobranza
-                              const noCall = next.filter((c) => c !== "LLAMADA")
+                              const noCall = next.filter((c) => c !== "LLAMADA") as ("WHATSAPP" | "EMAIL" | "SMS")[]
                               form.setValue("preferenciasRecordatorio", noCall, { shouldDirty: true, shouldValidate: true })
                               form.setValue("preferenciasCobranza", noCall, { shouldDirty: true, shouldValidate: true })
                             }}

@@ -2,6 +2,8 @@
 
 export type TreatmentStepStatus = 'PENDING' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'DEFERRED'
 
+export type TreatmentPlanStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+
 export interface TreatmentStepSessionInfo {
   completedSessions: number
   totalSessions: number
@@ -42,7 +44,7 @@ export interface TreatmentPlan {
   id: number
   titulo: string
   descripcion: string | null
-  isActive: boolean
+  status: TreatmentPlanStatus
   createdAt: string
   createdBy: string
   steps: TreatmentPlanStep[]

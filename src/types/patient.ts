@@ -133,13 +133,14 @@ export interface ResponsiblePersonDTO {
     id: number;
     fullName: string;
     document: { type: string; number: string } | null;
-    contacts: Array<{ tipo: string; valor: string }>;
+    contacts: Array<{ tipo: string; valor: string; esPrincipal: boolean }>;
   };
   relacion: string;
   esPrincipal: boolean;
   autoridadLegal: boolean;
   vigenteDesde: string;
   vigenteHasta: string | null;
+  notas: string | null;
 }
 
 export interface AdministrativeDTO {

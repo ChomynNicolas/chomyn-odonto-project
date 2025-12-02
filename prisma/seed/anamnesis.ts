@@ -5,28 +5,77 @@ import {
   AnamnesisStatus,
   AnamnesisAuditAction,
   AnamnesisChangeSeverity,
-  FieldChangeType,
   InformationSource,
+  AntecedentCategory,
+  RolNombre,
+  Prisma,
+  FieldChangeType,
 } from "@prisma/client";
 import { faker } from "@faker-js/faker";
 import { fakeAnamnesisPayload } from "./factories";
-import { calculateAge } from "./utils";
 import { ANTECEDENT_CATALOG, ANAMNESIS_CONFIG_SAMPLES } from "./data";
 
-export async function seedAnamnesisCatalog(prisma: PrismaClient, updatedByUserId: number) {
+// Type definition for anamnesis payload structure
+interface AnamnesisPayloadStructure {
+  antecedentesPersonales?: {
+    enfermedadesCronicas?: string[];
+    alergias?: string[];
+    medicacionActual?: string[];
+  };
+  antecedentesFamiliares?: {
+    enfermedadesRelevantes?: string[];
+  };
+  historiaDental?: {
+    ultimaVisita?: string;
+    tratamientosPrevios?: string[];
+  };
+  habitos?: {
+    fumador?: boolean;
+    consumeAlcohol?: boolean;
+    bruxismo?: boolean;
+    cepilladosDiarios?: number;
+    usaHiloDental?: boolean;
+  };
+  womenSpecific?: {
+    embarazada?: boolean;
+    lactando?: boolean;
+  };
+  antecedentesPerinatales?: {
+    embarazoNormal?: boolean;
+    partoNormal?: boolean;
+    semanasGestacion?: number;
+    pesoNacimiento?: number;
+  };
+  desarrolloPsicomotor?: {
+    normal?: boolean;
+    observaciones?: string;
+  };
+  habitosInfantiles?: {
+    usaChupete?: boolean;
+    seChupaDedo?: boolean;
+    biberon?: boolean;
+  };
+  lactancia?: {
+    maternaExclusiva?: boolean;
+    duracionMeses?: number;
+  };
+  exposicionHumoTabaco?: boolean;
+}
+
+export async function seedAnamnesisCatalog(prisma: PrismaClient) {
   for (const item of ANTECEDENT_CATALOG) {
     await prisma.antecedentCatalog.upsert({
       where: { code: item.code },
       update: {
         name: item.name,
-        category: item.category as any,
+        category: item.category as AntecedentCategory,
         description: item.description ?? null,
         isActive: true,
       },
       create: {
         code: item.code,
         name: item.name,
-        category: item.category as any,
+        category: item.category as AntecedentCategory,
         description: item.description ?? null,
         isActive: true,
       },
@@ -39,13 +88,13 @@ export async function seedAnamnesisConfig(prisma: PrismaClient, updatedByUserId:
     await prisma.anamnesisConfig.upsert({
       where: { key: config.key },
       update: {
-        value: config.value as any,
+        value: config.value as Prisma.InputJsonValue,
         description: config.description ?? null,
         updatedByUserId,
       },
       create: {
         key: config.key,
-        value: config.value as any,
+        value: config.value as Prisma.InputJsonValue,
         description: config.description ?? null,
         updatedByUserId,
       },
@@ -71,12 +120,8 @@ export async function seedPatientAnamnesis(
     throw new Error(`Paciente ${params.pacienteId} no encontrado`);
   }
 
-  const edad = paciente.persona.fechaNacimiento
-    ? calculateAge(paciente.persona.fechaNacimiento)
-    : null;
-
   const tipo = params.tipo;
-  const payload = fakeAnamnesisPayload(tipo);
+  const payload = fakeAnamnesisPayload(tipo) as AnamnesisPayloadStructure;
 
   // Determinar valores booleanos basados en payload
   const tieneEnfermedadesCronicas =
@@ -157,7 +202,7 @@ export async function seedPatientAnamnesis(
       ultimaVisitaDental,
       tieneHabitosSuccion,
       lactanciaRegistrada,
-      payload: payload as any,
+      payload: payload as Prisma.InputJsonValue,
       actualizadoPorUserId: params.createdByUserId,
       status: AnamnesisStatus.VALID,
     },
@@ -179,7 +224,7 @@ export async function seedPatientAnamnesis(
       ultimaVisitaDental,
       tieneHabitosSuccion,
       lactanciaRegistrada,
-      payload: payload as any,
+      payload: payload as Prisma.InputJsonValue,
       creadoPorUserId: params.createdByUserId,
       status: AnamnesisStatus.VALID,
       versionNumber: 1,
@@ -212,11 +257,13 @@ export async function seedAnamnesisAntecedents(
           diagnosedAt: faker.date.past({ years: 5 }),
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Ignore duplicate errors (P2002) - can happen if anamnesis already has this antecedent
-      if (error.code !== "P2002") {
-        throw error;
+      if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+        // Ignore duplicate errors
+        continue;
       }
+      throw error;
     }
   }
 }
@@ -253,11 +300,13 @@ export async function seedAnamnesisJunctions(
           notes: "Medicación vinculada desde anamnesis",
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Ignore duplicate errors (P2002) - can happen if already linked
-      if (error.code !== "P2002") {
-        throw error;
+      if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+        // Ignore duplicate errors
+        continue;
       }
+      throw error;
     }
   }
 
@@ -285,11 +334,13 @@ export async function seedAnamnesisJunctions(
           notes: "Alergia vinculada desde anamnesis",
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Ignore duplicate errors (P2002) - can happen if already linked
-      if (error.code !== "P2002") {
-        throw error;
+      if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+        // Ignore duplicate errors
+        continue;
       }
+      throw error;
     }
   }
 }
@@ -330,7 +381,7 @@ export async function seedAnamnesisVersions(
       ultimaVisitaDental: anamnesis.ultimaVisitaDental,
       tieneHabitosSuccion: anamnesis.tieneHabitosSuccion,
       lactanciaRegistrada: anamnesis.lactanciaRegistrada,
-      payload: anamnesis.payload as any,
+      payload: anamnesis.payload !== null ? (anamnesis.payload as Prisma.InputJsonValue) : Prisma.JsonNull,
       versionNumber: anamnesis.versionNumber,
       motivoCambio: faker.helpers.arrayElement([
         "Control anual",
@@ -372,11 +423,11 @@ export async function seedAnamnesisAuditLogs(
       pacienteId: params.pacienteId,
       action: AnamnesisAuditAction.CREATE,
       actorId: params.actorId,
-      actorRole: (actor?.rol.nombreRol ?? "RECEP") as any,
+      actorRole: (actor?.rol.nombreRol ?? RolNombre.RECEP) as RolNombre,
       ipAddress: faker.internet.ip(),
       userAgent: faker.internet.userAgent(),
-      previousState: null,
-      newState: anamnesis as any,
+      previousState: Prisma.JsonNull,
+      newState: anamnesis as Prisma.InputJsonValue,
       fieldDiffs: [],
       changesSummary: {
         action: "CREATE",
@@ -416,14 +467,14 @@ export async function seedAnamnesisMedicationAudits(
     await prisma.anamnesisMedicationAudit.create({
       data: {
         anamnesisMedicationId: params.anamnesisMedicationId,
-        action: "ADDED" as any,
-        previousValue: null,
-        newValue: medication as any,
+        action: "ADDED",
+        previousValue: Prisma.JsonNull,
+        newValue: medication as Prisma.InputJsonValue,
         performedByUserId: params.performedByUserId,
         notes: "Medicación agregada a anamnesis",
       },
     });
-  } catch (error: any) {
+  } catch {
     // Ignore errors
   }
 }
@@ -446,14 +497,14 @@ export async function seedAnamnesisAllergyAudits(
     await prisma.anamnesisAllergyAudit.create({
       data: {
         anamnesisAllergyId: params.anamnesisAllergyId,
-        action: "ADDED" as any,
-        previousValue: null,
-        newValue: allergy as any,
+        action: "ADDED",
+        previousValue: Prisma.JsonNull,
+        newValue: allergy as Prisma.InputJsonValue,
         performedByUserId: params.performedByUserId,
         notes: "Alergia agregada a anamnesis",
       },
     });
-  } catch (error: any) {
+  } catch {
     // Ignore errors
   }
 }
@@ -473,7 +524,19 @@ export async function seedAnamnesisFieldDiffs(
 
     // Create field diff for motivoConsulta if it changed
     if (auditLog.fieldDiffs && Array.isArray(auditLog.fieldDiffs) && auditLog.fieldDiffs.length > 0) {
-      for (const diff of auditLog.fieldDiffs as any[]) {
+      interface FieldDiff {
+        fieldPath?: string;
+        fieldLabel?: string;
+        fieldType?: string;
+        oldValue?: unknown;
+        newValue?: unknown;
+        oldValueDisplay?: string;
+        newValueDisplay?: string;
+        isCritical?: boolean;
+        changeType?: FieldChangeType;
+        requiresReview?: boolean;
+      }
+      for (const diff of auditLog.fieldDiffs as FieldDiff[]) {
         try {
           await prisma.anamnesisFieldDiff.create({
             data: {
@@ -481,21 +544,21 @@ export async function seedAnamnesisFieldDiffs(
               fieldPath: diff.fieldPath || "motivoConsulta",
               fieldLabel: diff.fieldLabel || "Motivo de consulta",
               fieldType: diff.fieldType || "string",
-              oldValue: diff.oldValue,
-              newValue: diff.newValue,
-              oldValueDisplay: diff.oldValueDisplay,
-              newValueDisplay: diff.newValueDisplay,
+              oldValue: diff.oldValue !== undefined && diff.oldValue !== null ? (diff.oldValue as Prisma.InputJsonValue) : Prisma.JsonNull,
+              newValue: diff.newValue !== undefined && diff.newValue !== null ? (diff.newValue as Prisma.InputJsonValue) : Prisma.JsonNull,
+              oldValueDisplay: diff.oldValueDisplay || null,
+              newValueDisplay: diff.newValueDisplay || null,
               isCritical: diff.isCritical || false,
-              changeType: (diff.changeType || "MODIFIED") as any,
+              changeType: (diff.changeType || FieldChangeType.MODIFIED) as FieldChangeType,
               requiresReview: diff.requiresReview || false,
             },
           });
-        } catch (error: any) {
+        } catch {
           // Ignore duplicate errors
         }
       }
     }
-  } catch (error: any) {
+  } catch {
     // Ignore errors
   }
 }
@@ -526,8 +589,8 @@ export async function seedAnamnesisPendingReviews(
         auditLogId: params.auditLogId,
         fieldPath: "motivoConsulta",
         fieldLabel: "Motivo de consulta",
-        oldValue: null,
-        newValue: { motivoConsulta: "Actualización fuera de consulta" },
+        oldValue: Prisma.JsonNull,
+        newValue: { motivoConsulta: "Actualización fuera de consulta" } as Prisma.InputJsonValue,
         reason: "Cambio realizado fuera de consulta presencial",
         severity: AnamnesisChangeSeverity.MEDIUM,
         createdByUserId: params.createdByUserId,
@@ -535,7 +598,7 @@ export async function seedAnamnesisPendingReviews(
     });
 
     return pendingReview;
-  } catch (error: any) {
+  } catch {
     // Ignore duplicate errors
     return null;
   }

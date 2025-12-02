@@ -20,7 +20,7 @@ interface AnamnesisMVPFormProps {
   consultaId?: number
   initialData?: {
     motivoConsulta?: string | null
-    payload?: Record<string, any>
+    payload?: Record<string, unknown>
   } | null
   onSave?: () => void
   canEdit?: boolean
@@ -65,12 +65,12 @@ export function AnamnesisMVPForm({
       // Use provided initial data
       setFormData({
         motivoConsulta: initialData.motivoConsulta || "",
-        historyOfPresentIllness: initialData.payload?.historyOfPresentIllness || "",
-        pastMedicalHistory: initialData.payload?.pastMedicalHistory || "",
-        currentMedications: initialData.payload?.currentMedications || "",
-        allergies: initialData.payload?.allergies || "",
-        noKnownAllergies: initialData.payload?.noKnownAllergies || false,
-        doctorNotes: initialData.payload?.doctorNotes || "",
+        historyOfPresentIllness: typeof initialData.payload?.historyOfPresentIllness === "string" ? initialData.payload.historyOfPresentIllness : "",
+        pastMedicalHistory: typeof initialData.payload?.pastMedicalHistory === "string" ? initialData.payload.pastMedicalHistory : "",
+        currentMedications: typeof initialData.payload?.currentMedications === "string" ? initialData.payload.currentMedications : "",
+        allergies: typeof initialData.payload?.allergies === "string" ? initialData.payload.allergies : "",
+        noKnownAllergies: typeof initialData.payload?.noKnownAllergies === "boolean" ? initialData.payload.noKnownAllergies : false,
+        doctorNotes: typeof initialData.payload?.doctorNotes === "string" ? initialData.payload.doctorNotes : "",
       })
     } else {
       // Fetch existing anamnesis from API
@@ -134,7 +134,7 @@ export function AnamnesisMVPForm({
         throw new Error(error.error || "Error al guardar anamnesis")
       }
 
-      const result = await res.json()
+      
       toast.success("Anamnesis guardada correctamente")
       onSave?.()
     } catch (error) {

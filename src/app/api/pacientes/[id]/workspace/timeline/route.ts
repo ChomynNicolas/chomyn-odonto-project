@@ -6,7 +6,6 @@ import { requireSessionWithRoles } from '@/app/api/_lib/auth';
 import { patientIdSchema } from '@/lib/api/patients/validators';
 import { prisma } from '@/lib/prisma';
 import type { TimelineEntryDTO } from '@/types/patient';
-import { formatShortDate } from '@/lib/utils/date-formatters';
 
 export async function GET(
   req: NextRequest,
@@ -42,6 +41,11 @@ export async function GET(
         profesional: {
           include: {
             persona: { select: { nombres: true, apellidos: true } },
+          },
+        },
+        consultorio: {
+          select: {
+            nombre: true,
           },
         },
       },

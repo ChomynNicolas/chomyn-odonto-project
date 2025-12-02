@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Plus, Activity, Calendar } from "lucide-react"
 import { toast } from "sonner"
-import type { ConsultaClinicaDTO, VitalesDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
+import type { ConsultaClinicaDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
 import { formatDate } from "@/lib/utils/patient-helpers"
 
 interface VitalesModuleProps {

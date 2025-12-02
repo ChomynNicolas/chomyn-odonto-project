@@ -7,8 +7,30 @@ import { Pill } from "lucide-react"
 import type { PatientAnamnesisDTO } from "@/types/patient"
 import { memo } from "react"
 
+// Extended type to include medications from API response
+type AnamnesisWithMedications = PatientAnamnesisDTO & {
+  medications?: Array<{
+    idAnamnesisMedication: number
+    medicationId: number | null
+    medication: {
+      idPatientMedication: number
+      label: string
+      medicationCatalog: {
+        idMedicationCatalog: number
+        name: string
+        description: string | null
+      } | null
+      dose: string | null
+      freq: string | null
+      route: string | null
+      isActive: boolean
+    }
+    notes: string | null
+  }>
+}
+
 interface AnamnesisMedicationsListProps {
-  anamnesis: PatientAnamnesisDTO
+  anamnesis: AnamnesisWithMedications
 }
 
 export const AnamnesisMedicationsList = memo(function AnamnesisMedicationsList({

@@ -12,12 +12,12 @@ export const paginationQuerySchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : 1))
-    .pipe(z.number().int().positive().default(1)),
+    .pipe(z.number().int().positive()),
   limit: z
     .string()
     .optional()
     .transform((val) => (val ? Number(val) : 10))
-    .pipe(z.number().int().min(1).max(100).default(10)),
+    .pipe(z.number().int().min(1).max(100)),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
 });

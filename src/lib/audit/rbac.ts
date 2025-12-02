@@ -126,6 +126,6 @@ export const SENSITIVE_ACTIONS = [
  * Verifica si una acción es sensible
  */
 export function isSensitiveAction(action: string): boolean {
-  return SENSITIVE_ACTIONS.includes(action as any)
+  return (SENSITIVE_ACTIONS as readonly string[]).includes(action)
 }
 

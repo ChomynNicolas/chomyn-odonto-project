@@ -26,8 +26,6 @@ import {
 import { auditReportExport, auditReportPrint } from "@/lib/services/reportes/audit"
 import type {
   ReportType,
-  ReportKpi,
-  ReportMetadata,
   ReportFilters,
   ReportResponse,
 } from "@/types/reportes"
@@ -124,7 +122,7 @@ export function useReportExport<TFilters extends ReportFilters, TResponse extend
   const extractTableData = useCallback((data: TResponse): Array<Record<string, unknown>> => {
     // Each report response has a `data` field with the table rows
     if ("data" in data && Array.isArray(data.data)) {
-      return data.data as Array<Record<string, unknown>>
+      return data.data as unknown as Array<Record<string, unknown>>
     }
     return []
   }, [])

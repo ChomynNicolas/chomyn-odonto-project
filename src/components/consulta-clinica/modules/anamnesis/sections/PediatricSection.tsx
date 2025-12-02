@@ -7,11 +7,12 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/comp
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Baby, Milk } from "lucide-react"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import type { AnamnesisAgeRules } from "@/lib/utils/age-utils"
 
 interface PediatricSectionProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   canEdit: boolean
   ageRules: AnamnesisAgeRules
 }

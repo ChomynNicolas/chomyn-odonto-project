@@ -3,7 +3,7 @@
 'use client';
 
 import { usePatientTimeline } from '@/lib/hooks/use-patient-timeline';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -85,7 +85,7 @@ export function PatientTimeline({ patientId, limit = 20 }: PatientTimelineProps)
       <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border" />
       
       <div className="space-y-6">
-        {timeline.map((entry, index) => (
+        {timeline.map((entry) => (
           <div key={entry.id} className="relative flex items-start gap-4">
             {/* Timeline dot */}
             <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-background border-2 border-primary">

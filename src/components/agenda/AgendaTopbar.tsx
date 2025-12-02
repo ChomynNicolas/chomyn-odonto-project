@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Search, Filter, Plus, X, CalendarSearch } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Search, Filter, Plus, X } from "lucide-react"
 import { AgendaFilters, CurrentUser, EstadoCita, TipoCita } from "@/types/agenda"
+import { ProfesionalAsyncSelect } from "@/components/selectors/ProfesionalAsyncSelect"
+import { ConsultorioAsyncSelect } from "@/components/selectors/ConsultorioAsyncSelect"
 
 interface AgendaTopbarProps {
   filters: AgendaFilters
@@ -19,7 +20,6 @@ interface AgendaTopbarProps {
 }
 
 export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUser }: AgendaTopbarProps) {
-  const router = useRouter()
   const [busqueda, setBusqueda] = React.useState(filters.busquedaPaciente ?? "")
   const [filtersOpen, setFiltersOpen] = React.useState(false)
 
@@ -32,18 +32,29 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busqueda])
 
+  const isDentistView = currentUser?.role === "ODONT" && currentUser.profesionalId
+  
+  // For ODONT users, don't count profesionalId as an active filter (it's locked)
   const activeFiltersCount = [
-    filters.profesionalId,
+    !isDentistView && filters.profesionalId, // Only count if not dentist view
     filters.consultorioId,
     filters.estado?.length,
     filters.tipo?.length,
-    filters.soloUrgencias,
-    filters.soloPrimeraVez,
-    filters.soloPlanActivo,
+    filters.hideCompleted,
+    filters.hideCancelled,
   ].filter(Boolean).length
 
   return (
     <div className="flex flex-col gap-3 p-3 sm:p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* Indicador de "Mi Agenda" para odontólogos */}
+      {isDentistView && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+          <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+            📅 Mi Agenda
+          </span>
+        </div>
+      )}
+
       {/* Fila principal: búsqueda + acciones */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         {/* Búsqueda de paciente */}
@@ -62,15 +73,6 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
         {/* Botones de acción */}
         <div className="flex items-center gap-2">
           {/* Búsqueda avanzada */}
-          <Button
-            variant="outline"
-            size="default"
-            onClick={() => router.push("/citas")}
-            className="bg-transparent"
-          >
-            <CalendarSearch className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Búsqueda</span>
-          </Button>
 
           {/* Filtros avanzados (sheet en mobile/tablet) */}
           <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -113,16 +115,28 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
       {activeFiltersCount > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">Filtros activos:</span>
-          {filters.profesionalId && (
+          {!isDentistView && filters.profesionalId && (
             <FilterChip
-              label={`Profesional #${filters.profesionalId}`}
+              label={`Profesional`}
               onRemove={() => onFiltersChange({ ...filters, profesionalId: undefined })}
             />
           )}
           {filters.consultorioId && (
             <FilterChip
-              label={`Consultorio #${filters.consultorioId}`}
+              label={`Consultorio`}
               onRemove={() => onFiltersChange({ ...filters, consultorioId: undefined })}
+            />
+          )}
+          {filters.hideCompleted && (
+            <FilterChip
+              label="Ocultar completadas"
+              onRemove={() => onFiltersChange({ ...filters, hideCompleted: false })}
+            />
+          )}
+          {filters.hideCancelled && (
+            <FilterChip
+              label="Ocultar canceladas"
+              onRemove={() => onFiltersChange({ ...filters, hideCancelled: false })}
             />
           )}
           {filters.estado && filters.estado.length > 0 && (
@@ -136,15 +150,6 @@ export function AgendaTopbar({ filters, onFiltersChange, onNuevaCita, currentUse
               label={`Tipos (${filters.tipo.length})`}
               onRemove={() => onFiltersChange({ ...filters, tipo: undefined })}
             />
-          )}
-          {filters.soloUrgencias && (
-            <FilterChip label="Solo urgencias" onRemove={() => onFiltersChange({ ...filters, soloUrgencias: false })} />
-          )}
-          {filters.soloPrimeraVez && (
-            <FilterChip label="Primera vez" onRemove={() => onFiltersChange({ ...filters, soloPrimeraVez: false })} />
-          )}
-          {filters.soloPlanActivo && (
-            <FilterChip label="Plan activo" onRemove={() => onFiltersChange({ ...filters, soloPlanActivo: false })} />
           )}
           <Button variant="ghost" size="sm" onClick={() => onFiltersChange({})} className="h-7 text-xs">
             Limpiar todo
@@ -181,7 +186,31 @@ function FiltersForm({
   currentUser?: CurrentUser
   onClose?: () => void
 }) {
-  const [localFilters, setLocalFilters] = React.useState(filters)
+  const isDentistView = currentUser?.role === "ODONT" && currentUser.profesionalId
+  
+  // Initialize localFilters, ensuring ODONT users always have their professional ID
+  const [localFilters, setLocalFilters] = React.useState<AgendaFilters>(() => {
+    if (isDentistView && currentUser?.profesionalId) {
+      return {
+        ...filters,
+        profesionalId: currentUser.profesionalId,
+      }
+    }
+    return filters
+  })
+
+  // Sincronizar localFilters cuando filters cambia externamente
+  // Para ODONT users, siempre preservar su professional ID
+  React.useEffect(() => {
+    if (isDentistView && currentUser?.profesionalId) {
+      setLocalFilters({
+        ...filters,
+        profesionalId: currentUser.profesionalId,
+      })
+    } else {
+      setLocalFilters(filters)
+    }
+  }, [filters, isDentistView, currentUser?.profesionalId])
 
   const handleApply = () => {
     onFiltersChange(localFilters)
@@ -190,60 +219,89 @@ function FiltersForm({
   }
 
   const handleReset = () => {
-    setLocalFilters({})
-    onFiltersChange({})
+    // For ODONT users, preserve their professional ID when resetting
+    const resetFilters: AgendaFilters = isDentistView && currentUser?.profesionalId
+      ? { profesionalId: currentUser.profesionalId }
+      : {}
+    setLocalFilters(resetFilters)
+    onFiltersChange(resetFilters)
     // Cerrar el Sheet después de limpiar los filtros
     onClose?.()
   }
 
   return (
     <div className="space-y-6 py-6">
-      {/* Profesional */}
-      <div className="space-y-2">
-        <Label htmlFor="filter-profesional">Profesional</Label>
-        <Input
-          id="filter-profesional"
-          type="number"
-          placeholder="ID del profesional"
-          value={localFilters.profesionalId ?? ""}
-          onChange={(e) =>
-            setLocalFilters({
-              ...localFilters,
-              profesionalId: e.target.value ? Number(e.target.value) : undefined,
-            })
-          }
-        />
-        {currentUser?.role === "ODONT" && currentUser.profesionalId && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setLocalFilters({ ...localFilters, profesionalId: currentUser.profesionalId! })}
-          >
-            Mis citas
-          </Button>
-        )}
-      </div>
+      {/* Profesional - Oculto/deshabilitado para odontólogos */}
+      {!isDentistView && (
+        <div className="space-y-2">
+          <Label htmlFor="filter-profesional">Profesional</Label>
+          <ProfesionalAsyncSelect
+            value={localFilters.profesionalId}
+            onChange={(id) => setLocalFilters({ ...localFilters, profesionalId: id })}
+            placeholder="Seleccionar profesional"
+          />
+        </div>
+      )}
+      
+      {/* Información para odontólogos */}
+      {isDentistView && (
+        <div className="space-y-2">
+          <Label>Profesional</Label>
+          <div className="rounded-lg border bg-muted/50 p-3 text-sm">
+            <p className="font-semibold text-foreground">Mi Agenda</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Solo puedes ver tus propias citas
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Consultorio */}
       <div className="space-y-2">
         <Label htmlFor="filter-consultorio">Consultorio</Label>
-        <Input
-          id="filter-consultorio"
-          type="number"
-          placeholder="ID del consultorio"
-          value={localFilters.consultorioId ?? ""}
-          onChange={(e) =>
-            setLocalFilters({
-              ...localFilters,
-              consultorioId: e.target.value ? Number(e.target.value) : undefined,
-            })
-          }
+        <ConsultorioAsyncSelect
+          value={localFilters.consultorioId}
+          onChange={(id) => setLocalFilters({ ...localFilters, consultorioId: id })}
+          placeholder="Seleccionar consultorio"
         />
+      </div>
+
+      {/* Visibilidad de estados */}
+      <div className="space-y-3">
+        <Label>Visibilidad de estados</Label>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="hide-completed"
+              checked={localFilters.hideCompleted ?? false}
+              onCheckedChange={(checked) => setLocalFilters({ ...localFilters, hideCompleted: checked as boolean })}
+            />
+            <label htmlFor="hide-completed" className="text-sm font-medium leading-none cursor-pointer">
+              Ocultar citas completadas
+            </label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="hide-cancelled"
+              checked={localFilters.hideCancelled ?? false}
+              onCheckedChange={(checked) => setLocalFilters({ ...localFilters, hideCancelled: checked as boolean })}
+            />
+            <label htmlFor="hide-cancelled" className="text-sm font-medium leading-none cursor-pointer">
+              Ocultar citas canceladas
+            </label>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Estas opciones ocultan automáticamente los estados seleccionados, independientemente de los filtros de estado.
+        </p>
       </div>
 
       {/* Estados (multi-select simulado con checkboxes) */}
       <div className="space-y-2">
-        <Label>Estados</Label>
+        <Label>Estados específicos</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Seleccione los estados que desea ver. Las opciones de visibilidad arriba tienen prioridad.
+        </p>
         <div className="space-y-2">
           {ESTADOS_OPTIONS.map((opt) => (
             <div key={opt.value} className="flex items-center space-x-2">
@@ -301,42 +359,7 @@ function FiltersForm({
         </div>
       </div>
 
-      {/* Flags especiales */}
-      <div className="space-y-3">
-        <Label>Filtros especiales</Label>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="solo-urgencias"
-              checked={localFilters.soloUrgencias ?? false}
-              onCheckedChange={(checked) => setLocalFilters({ ...localFilters, soloUrgencias: checked as boolean })}
-            />
-            <label htmlFor="solo-urgencias" className="text-sm font-medium leading-none cursor-pointer">
-              Solo urgencias
-            </label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="solo-primera-vez"
-              checked={localFilters.soloPrimeraVez ?? false}
-              onCheckedChange={(checked) => setLocalFilters({ ...localFilters, soloPrimeraVez: checked as boolean })}
-            />
-            <label htmlFor="solo-primera-vez" className="text-sm font-medium leading-none cursor-pointer">
-              Primera vez
-            </label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="solo-plan-activo"
-              checked={localFilters.soloPlanActivo ?? false}
-              onCheckedChange={(checked) => setLocalFilters({ ...localFilters, soloPlanActivo: checked as boolean })}
-            />
-            <label htmlFor="solo-plan-activo" className="text-sm font-medium leading-none cursor-pointer">
-              Con plan de tratamiento activo
-            </label>
-          </div>
-        </div>
-      </div>
+
 
       {/* Botones */}
       <div className="flex gap-2 pt-4">

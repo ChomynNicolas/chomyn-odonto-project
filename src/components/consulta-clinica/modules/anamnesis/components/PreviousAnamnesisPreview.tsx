@@ -14,7 +14,7 @@ import { useState } from 'react';
 
 interface PreviousAnamnesisPreviewProps {
   previousAnamnesis: AnamnesisResponse | null;
-  onCopyToForm?: (field: string, value: any) => void;
+  onCopyToForm?: (field: string, value: unknown) => void;
   onCopyAll?: () => void;
 }
 

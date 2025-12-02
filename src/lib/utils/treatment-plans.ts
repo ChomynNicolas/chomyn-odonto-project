@@ -5,7 +5,6 @@ import type {
   TreatmentStepSessionInfo,
   TreatmentPlanProgress,
   TreatmentPlan,
-  TreatmentStepStatus,
 } from '@/types/treatment-plans'
 
 export type SessionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'

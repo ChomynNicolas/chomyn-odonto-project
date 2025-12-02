@@ -114,6 +114,19 @@ export const AuditAction = {
   REPORT_EXPORT_PDF: "REPORT_EXPORT_PDF",
   REPORT_EXPORT_CSV: "REPORT_EXPORT_CSV",
   REPORT_PRINT: "REPORT_PRINT",
+  // Treatment Plan Operations
+  TREATMENT_PLAN_CREATE: "TREATMENT_PLAN_CREATE",
+  TREATMENT_PLAN_UPDATE: "TREATMENT_PLAN_UPDATE",
+  TREATMENT_PLAN_STATUS_CHANGE: "TREATMENT_PLAN_STATUS_CHANGE",
+  TREATMENT_PLAN_COMPLETE: "TREATMENT_PLAN_COMPLETE",
+  TREATMENT_PLAN_CANCEL: "TREATMENT_PLAN_CANCEL",
+  TREATMENT_PLAN_REACTIVATE: "TREATMENT_PLAN_REACTIVATE",
+  // Treatment Step Operations
+  TREATMENT_STEP_CREATE: "TREATMENT_STEP_CREATE",
+  TREATMENT_STEP_UPDATE: "TREATMENT_STEP_UPDATE",
+  TREATMENT_STEP_DELETE: "TREATMENT_STEP_DELETE",
+  TREATMENT_STEP_STATUS_CHANGE: "TREATMENT_STEP_STATUS_CHANGE",
+  TREATMENT_STEP_SESSION_COMPLETE: "TREATMENT_STEP_SESSION_COMPLETE",
   // — futuras acciones comunes —
   // PATIENT_VIEW: "PATIENT_VIEW",
   // USER_LOGIN: "USER_LOGIN",
@@ -147,6 +160,9 @@ export const AuditEntity = {
   Anamnesis: "Anamnesis", // Alias en español
   // Report Entity
   Report: "Report",
+  // Treatment Plan Entities
+  TreatmentPlan: "TreatmentPlan",
+  TreatmentStep: "TreatmentStep",
   // agrega las que necesites
 } as const
 export type AuditEntity = typeof AuditEntity[keyof typeof AuditEntity]

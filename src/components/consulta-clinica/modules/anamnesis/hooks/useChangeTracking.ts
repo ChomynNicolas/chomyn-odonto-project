@@ -4,7 +4,9 @@
 "use client"
 
 import { useMemo, useCallback } from "react"
-import type { AnamnesisCreateUpdateBody, AnamnesisResponse } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import type {  AnamnesisResponse } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 
 export type ChangeSeverity = "critical" | "medium" | "low"
 export type ChangeType = "added" | "removed" | "modified"
@@ -143,7 +145,7 @@ function mapResponseToComparable(response: AnamnesisResponse | null): Record<str
 
 interface UseChangeTrackingOptions {
   initialData: AnamnesisResponse | null
-  currentValues: Partial<AnamnesisCreateUpdateBody>
+  currentValues: Partial<z.input<typeof AnamnesisCreateUpdateBodySchema>>
 }
 
 interface UseChangeTrackingResult {

@@ -10,7 +10,6 @@ import { ok, errors, generateETag, checkETag, checkRateLimit, safeLog } from "..
 import type { PatientUpdatePayload } from "@/types/patient-edit.types"
 import { hasCriticalChanges } from "@/lib/audit/diff-utils"
 import { patientEditBaseSchema, patientEditWithCriticalSchema } from "@/lib/validation/patient-edit.schema"
-import { AuditAction } from "@/lib/audit/actions"
 import { createPatientAuditLog } from "@/lib/audit/patient-audit.service"
 
 

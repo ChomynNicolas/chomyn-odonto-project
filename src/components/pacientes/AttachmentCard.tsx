@@ -177,32 +177,26 @@ export function AttachmentCard({ attachment, onPreview, canDelete, pacienteId }:
       <CardContent className="pt-6">
         <div className="relative">
           {/* Thumbnail/Preview */}
-          {isImageType(attachment.type, attachment.mimeType) && !imageError && getImageUrl() ? (
-            <div className="relative w-full h-48 rounded-lg overflow-hidden bg-muted">
-              {getImageUrl().includes("/api/adjuntos/") ? (
-                // Use regular img tag for proxy URLs
-                <img
-                  src={getImageUrl()}
-                  alt={attachment.description || attachment.fileName}
-                  className="w-full h-full object-cover"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
+          {(() => {
+            const imageUrl = getImageUrl()
+            return isImageType(attachment.type, attachment.mimeType) && !imageError && imageUrl ? (
+              <div className="relative w-full h-48 rounded-lg overflow-hidden bg-muted">
                 <Image
-                  src={getImageUrl()}
+                  src={imageUrl}
                   alt={attachment.description || attachment.fileName}
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  unoptimized={imageUrl.includes("/api/adjuntos/")}
                   onError={() => setImageError(true)}
                 />
-              )}
-            </div>
-          ) : (
-            <div className="w-full h-48 bg-muted flex items-center justify-center rounded-lg">
-              <Icon className="h-12 w-12 text-muted-foreground" />
-            </div>
-          )}
+              </div>
+            ) : (
+              <div className="w-full h-48 bg-muted flex items-center justify-center rounded-lg">
+                <Icon className="h-12 w-12 text-muted-foreground" />
+              </div>
+            )
+          })()}
 
           {/* Action buttons on hover */}
           <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

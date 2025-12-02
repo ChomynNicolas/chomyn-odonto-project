@@ -9,13 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import type { AnamnesisAgeRules } from "@/lib/utils/age-utils"
 import { AlertCircle, Heart, Info } from "lucide-react"
 import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface WomenSpecificSectionProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   canEdit: boolean
   ageRules: AnamnesisAgeRules
 }

@@ -81,7 +81,8 @@ function toDTO(c: CitaWithRelations | null): CitaEstadoDTO {
 export async function changeCitaEstado(
   idCita: number,
   body: EstadoBody,
-  userId: number
+  userId: number,
+  ip?: string | null
 ): Promise<
   | { ok: true; data: CitaEstadoDTO }
   | { ok: false; status: number; error: string; details?: unknown }
@@ -160,6 +161,7 @@ export async function changeCitaEstado(
       estadoPrevio: previo,
       estadoNuevo: nuevo,
       nota: body.nota ?? null,
+      ip: ip ?? null,
     });
 
     // 6) Recuperar cita para DTO final

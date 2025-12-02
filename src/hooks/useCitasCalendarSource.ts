@@ -36,8 +36,44 @@ export function useCitasCalendarSource(filters?: AgendaFilters) {
 
           if (filters?.profesionalId) sp.set("profesionalId", String(filters.profesionalId))
           if (filters?.consultorioId) sp.set("consultorioId", String(filters.consultorioId))
-          if (filters?.estado && filters.estado.length > 0) {
-            sp.set("estado", filters.estado.join(","))
+          
+          // Procesar filtros de estado considerando exclusiones
+          // hideCompleted y hideCancelled tienen prioridad y excluyen esos estados
+          const allEstados: Array<"SCHEDULED" | "CONFIRMED" | "CHECKED_IN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "NO_SHOW"> = [
+            "SCHEDULED",
+            "CONFIRMED",
+            "CHECKED_IN",
+            "IN_PROGRESS",
+            "COMPLETED",
+            "CANCELLED",
+            "NO_SHOW",
+          ]
+          
+          // Si hay selección explícita de estados, usar esa; si no, usar todos
+          let estadoArray = filters?.estado && filters.estado.length > 0 
+            ? [...filters.estado] 
+            : allEstados
+          
+          // Aplicar exclusiones: remover estados excluidos incluso si están explícitamente seleccionados
+          if (filters?.hideCompleted) {
+            estadoArray = estadoArray.filter((e) => e !== "COMPLETED")
+          }
+          if (filters?.hideCancelled) {
+            estadoArray = estadoArray.filter((e) => e !== "CANCELLED")
+          }
+          
+          // Enviar parámetro estado si:
+          // 1. Hay selección explícita de estados (aunque después de exclusiones quede vacío)
+          // 2. Hay exclusiones activas (para excluir estados específicos)
+          const hasExplicitSelection = filters?.estado && filters.estado.length > 0
+          const hasExclusions = filters?.hideCompleted || filters?.hideCancelled
+          
+          if (hasExplicitSelection || hasExclusions) {
+            // Si después de exclusiones no quedan estados, no enviar (mostrará nada)
+            // Si quedan estados, enviar la lista filtrada
+            if (estadoArray.length > 0) {
+              sp.set("estado", estadoArray.join(","))
+            }
           }
           if (filters?.tipo && filters.tipo.length > 0) {
             sp.set("tipo", filters.tipo.join(","))

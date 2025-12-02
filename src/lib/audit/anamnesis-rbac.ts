@@ -8,9 +8,6 @@ export type UserRole = "ADMIN" | "ODONT" | "RECEP"
  */
 export function canViewAnamnesisAudit(
   role: UserRole,
-  pacienteId: number,
-  actorId?: number,
-  currentUserId?: number
 ): boolean {
   if (role === "ADMIN") return true
   if (role === "RECEP") return false
@@ -29,7 +26,7 @@ export function canViewAnamnesisAudit(
 /**
  * Verifica si un usuario puede restaurar versiones de anamnesis
  */
-export function canRestoreAnamnesisVersion(role: UserRole, pacienteId: number): boolean {
+export function canRestoreAnamnesisVersion(role: UserRole): boolean {
   if (role === "ADMIN") return true
   if (role === "ODONT") return true // ODONT puede restaurar versiones de sus pacientes
   return false

@@ -75,7 +75,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session?.user?.id) {
+      return NextResponse.json(
+        { ok: false, error: "UNAUTHORIZED", message: "User ID missing from session" },
+        { status: 401 }
+      )
+    }
+
+    const actorId = parseInt(auth.session.user.id as string)
     const allergyCatalog = await createAllergyCatalog(
       parsed.data,
       actorId,

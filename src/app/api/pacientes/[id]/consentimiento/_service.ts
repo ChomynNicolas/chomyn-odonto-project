@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { consentimientoRepo } from "./_repo"
-import { calcularVigenteHasta, esVigente, nombreCompleto, type ConsentimientoDTO } from "./_dto"
+import {  esVigente, nombreCompleto, type ConsentimientoDTO } from "./_dto"
 import type { ConsentimientoCreateBody, ConsentimientoListQuery } from "./_schemas"
 import type { Prisma } from "@prisma/client"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"

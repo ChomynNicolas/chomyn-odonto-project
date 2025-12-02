@@ -7,8 +7,27 @@ import type { PatientAnamnesisDTO } from "@/types/patient"
 import { getAllergySevertiyLabel } from "@/lib/translations/allergy"
 import { memo } from "react"
 
+// Extended type to include allergies from API response
+type AnamnesisWithAllergies = PatientAnamnesisDTO & {
+  allergies?: Array<{
+    idAnamnesisAllergy: number
+    allergyId: number | null
+    allergy: {
+      idPatientAllergy: number
+      label: string
+      allergyCatalog: {
+        idAllergyCatalog: number
+        name: string
+      } | null
+      severity: string
+      reaction: string | null
+      isActive: boolean
+    }
+  }>
+}
+
 interface AnamnesisAllergiesListProps {
-  anamnesis: PatientAnamnesisDTO
+  anamnesis: AnamnesisWithAllergies
   activeAllergiesCount: number
 }
 
@@ -16,7 +35,10 @@ export const AnamnesisAllergiesList = memo(function AnamnesisAllergiesList({
   anamnesis,
   activeAllergiesCount,
 }: AnamnesisAllergiesListProps) {
-  const activeAllergies = anamnesis.allergies?.filter((a) => a.allergy.isActive) || []
+  const activeAllergies =
+    anamnesis.allergies?.filter(
+      (a) => a.allergy.isActive
+    ) || []
 
   return (
     <Card

@@ -4,14 +4,12 @@
 import { Phone, Mail, Star, MessageCircle } from "lucide-react"
 import { formatPhoneNumber } from "@/lib/utils/patient-helpers"
 import type { PatientContact } from "@/lib/types/patient"
-import { TimestampDisplay } from "./TimestampDisplay"
 
 interface ContactMethodCardProps {
   contact: PatientContact
-  showTimestamps?: boolean
 }
 
-export function ContactMethodCard({ contact, showTimestamps = false }: ContactMethodCardProps) {
+export function ContactMethodCard({ contact }: ContactMethodCardProps) {
   const isPhone = contact.type === "PHONE"
   const displayValue = isPhone ? formatPhoneNumber(contact.value) : contact.value
 
@@ -33,9 +31,6 @@ export function ContactMethodCard({ contact, showTimestamps = false }: ContactMe
           )}
         </div>
         {contact.notes && <p className="text-xs text-muted-foreground">{contact.notes}</p>}
-        {showTimestamps && contact.createdAt && (
-          <TimestampDisplay timestamp={contact.createdAt} showRelative />
-        )}
       </div>
     </div>
   )

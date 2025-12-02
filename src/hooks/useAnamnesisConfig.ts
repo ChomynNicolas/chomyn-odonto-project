@@ -2,7 +2,6 @@
 // Hook to load and manage anamnesis configuration
 
 import { useState, useEffect } from "react"
-import { AnamnesisConfigValue } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 
 interface AnamnesisConfig {
   MANDATORY_FIRST_CONSULTATION: boolean

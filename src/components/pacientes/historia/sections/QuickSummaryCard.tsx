@@ -3,7 +3,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, Pill, Activity, FileText, Calendar } from "lucide-react"
+import { AlertTriangle, Pill, Activity, FileText } from "lucide-react"
 import type { PatientRecord } from "@/lib/types/patient"
 import { formatDate } from "@/lib/utils/patient-helpers"
 
@@ -14,7 +14,7 @@ interface QuickSummaryCardProps {
 export function QuickSummaryCard({ patient }: QuickSummaryCardProps) {
   const activeAllergies = patient.allergies?.filter((a) => a.isActive !== false) || []
   const activeMedications = patient.medications?.filter(
-    (m) => m.status === "ACTIVE" || m.status === "active"
+    (m): m is typeof m & { status: "ACTIVE" } => m.status === "ACTIVE"
   ) || []
   const latestVitals = patient.vitalSigns?.[0] || null
   const activeDiagnoses = patient.diagnoses?.filter((d) => d.status === "ACTIVE") || []

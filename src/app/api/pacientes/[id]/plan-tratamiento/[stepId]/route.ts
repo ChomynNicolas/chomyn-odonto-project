@@ -1,10 +1,9 @@
 // src/app/api/pacientes/[id]/plan-tratamiento/[stepId]/route.ts
 import type { NextRequest } from "next/server"
-import { auth } from "@/auth"
 import { ok, errors } from "@/app/api/_http"
 import { UpdateStepStatusSchema } from "../_schemas"
 import { updateStepStatus } from "../_service"
-import { requireRole } from "../../_rbac"
+import { requireRole } from "../../../_rbac";
 
 /**
  * PATCH /api/pacientes/[id]/plan-tratamiento/[stepId]

@@ -1,7 +1,7 @@
 // src/components/consulta-clinica/modules/PlanesTratamientoModule.tsx
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +35,7 @@ import {
   Save,
 } from "lucide-react"
 import type { ConsultaClinicaDTO, TreatmentStepDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
-import { TreatmentStepStatus, DienteSuperficie } from "@prisma/client"
+import { TreatmentStepStatus, TreatmentPlanStatus, DienteSuperficie } from "@prisma/client"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -112,6 +112,35 @@ export function PlanesTratamientoModule({
   // Session completion dialog state
   const [selectedStepForCompletion, setSelectedStepForCompletion] = useState<TreatmentStepDTO | null>(null)
   const [isCompletionDialogOpen, setIsCompletionDialogOpen] = useState(false)
+
+  // Función para obtener el badge de estado del plan
+  const getPlanStatusBadge = (status: TreatmentPlanStatus) => {
+    switch (status) {
+      case TreatmentPlanStatus.ACTIVE:
+        return (
+          <Badge variant="default" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Activo
+          </Badge>
+        )
+      case TreatmentPlanStatus.COMPLETED:
+        return (
+          <Badge variant="secondary" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Completado
+          </Badge>
+        )
+      case TreatmentPlanStatus.CANCELLED:
+        return (
+          <Badge variant="destructive" className="bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border-red-200">
+            <XCircle className="h-3 w-3 mr-1" />
+            Cancelado
+          </Badge>
+        )
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
 
   // Función para obtener el badge de estado del step
   const getStatusBadge = (status: TreatmentStepStatus) => {
@@ -210,12 +239,29 @@ export function PlanesTratamientoModule({
     return `Prioridad ${priority}`
   }
 
+  const loadCatalog = useCallback(async () => {
+    try {
+      setIsLoadingCatalog(true)
+      const res = await fetch("/api/procedimientos/catalogo?activo=true")
+      if (!res.ok) throw new Error("Error al cargar catálogo")
+      const data = await res.json()
+      if (data.ok) {
+        setCatalogOptions(data.data)
+      }
+    } catch (error) {
+      console.error("Error loading catalog:", error)
+      toast.error("Error al cargar catálogo de procedimientos")
+    } finally {
+      setIsLoadingCatalog(false)
+    }
+  }, [])
+
   // Load catalog when dialog opens
   useEffect(() => {
     if (isDialogOpen && catalogOptions.length === 0 && !isLoadingCatalog) {
       loadCatalog()
     }
-  }, [isDialogOpen])
+  }, [isDialogOpen, catalogOptions.length, isLoadingCatalog, loadCatalog])
 
   // Initialize form when editing
   useEffect(() => {
@@ -246,23 +292,6 @@ export function PlanesTratamientoModule({
       setSteps([])
     }
   }, [isDialogOpen, plan, isEditing])
-
-  const loadCatalog = async () => {
-    try {
-      setIsLoadingCatalog(true)
-      const res = await fetch("/api/procedimientos/catalogo?activo=true")
-      if (!res.ok) throw new Error("Error al cargar catálogo")
-      const data = await res.json()
-      if (data.ok) {
-        setCatalogOptions(data.data)
-      }
-    } catch (error) {
-      console.error("Error loading catalog:", error)
-      toast.error("Error al cargar catálogo de procedimientos")
-    } finally {
-      setIsLoadingCatalog(false)
-    }
-  }
 
   const handleOpenCreateDialog = () => {
     setIsEditing(false)
@@ -508,16 +537,21 @@ export function PlanesTratamientoModule({
     )
   }
 
+  const isPlanInactive = plan.status === TreatmentPlanStatus.COMPLETED || plan.status === TreatmentPlanStatus.CANCELLED
+
   return (
     <>
-    <Card>
+    <Card className={isPlanInactive ? "opacity-75 border-dashed" : ""}>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Plan de Tratamiento
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                Plan de Tratamiento
+              </CardTitle>
+              {getPlanStatusBadge(plan.status)}
+            </div>
             <p className="text-sm text-muted-foreground mt-1">
               {plan.titulo}
               {plan.descripcion && ` • ${plan.descripcion}`}
@@ -531,7 +565,7 @@ export function PlanesTratamientoModule({
             </div>
           </div>
           <div className="flex gap-2">
-            {canEdit && !isFinalized && consulta.pacienteId && (
+            {canEdit && !isFinalized && consulta.pacienteId && plan.status === TreatmentPlanStatus.ACTIVE && (
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={handleOpenEditDialog} variant="outline" size="sm">
@@ -544,6 +578,25 @@ export function PlanesTratamientoModule({
                     <DialogTitle>Editar Plan de Tratamiento</DialogTitle>
                     <DialogDescription>
                       Modifique el plan de tratamiento activo del paciente.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {renderPlanForm()}
+                </DialogContent>
+              </Dialog>
+            )}
+            {canEdit && !isFinalized && consulta.pacienteId && (plan.status === TreatmentPlanStatus.COMPLETED || plan.status === TreatmentPlanStatus.CANCELLED) && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleOpenCreateDialog} variant="default" size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Nuevo Plan
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Crear Nuevo Plan de Tratamiento</DialogTitle>
+                    <DialogDescription>
+                      Cree un nuevo plan de tratamiento para el paciente. El plan anterior está {plan.status === TreatmentPlanStatus.COMPLETED ? "completado" : "cancelado"}.
                     </DialogDescription>
                   </DialogHeader>
                   {renderPlanForm()}
@@ -569,6 +622,14 @@ export function PlanesTratamientoModule({
             <Info className="h-4 w-4" />
             <AlertDescription>
               Esta consulta está finalizada. No se pueden realizar modificaciones.
+            </AlertDescription>
+          </Alert>
+        )}
+        {(plan.status === TreatmentPlanStatus.COMPLETED || plan.status === TreatmentPlanStatus.CANCELLED) && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Este plan está {plan.status === TreatmentPlanStatus.COMPLETED ? "completado" : "cancelado"}. Puede crear un nuevo plan de tratamiento.
             </AlertDescription>
           </Alert>
         )}

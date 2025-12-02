@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { updateDiagnosisSchema } from "../../_schemas"
 import type { Prisma } from "@prisma/client"
 import { DiagnosisStatus } from "@prisma/client"
-import { auditDiagnosisUpdate, computeDiagnosisChanges } from "@/lib/audit/diagnosis"
+import { auditDiagnosisUpdate, auditDiagnosisDelete, computeDiagnosisChanges } from "@/lib/audit/diagnosis"
 
 const paramsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -165,6 +165,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
         diagnosisId: diagnosticoId,
         pacienteId: diagnostico.pacienteId,
         consultaId: citaId,
+        label: diagnostico.label,
         changes,
         currentStatus: (input.status ?? diagnostico.status) as DiagnosisStatus,
         previousStatus: diagnostico.status,

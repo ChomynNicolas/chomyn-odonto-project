@@ -39,7 +39,7 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
     medicacion?: string | null
     obraSocial?: string | null
   }>(
-    typeof base.notas === "string" ? base.notas : base.notas === null ? null : JSON.stringify(base.notas),
+    typeof base.notasAdministrativas === "string" ? base.notasAdministrativas : base.notasAdministrativas === null ? null : JSON.stringify(base.notasAdministrativas),
     {}
   )
 
@@ -88,11 +88,11 @@ export async function getPacienteFicha(idPaciente: number): Promise<PacienteFich
   const ultimas = citasPasadas.slice(0, 5).map(toCitaLite)
 
   // Active treatment plan
-  const planActivo = plans.find((p) => p.isActive)
+  const planActivo = plans.find((p) => p.status === "ACTIVE")
   const planesHistorial = plans.map((p) => ({
     id: p.idTreatmentPlan,
     titulo: p.titulo,
-    isActive: p.isActive,
+    isActive: p.status === "ACTIVE",
     createdAt: p.createdAt.toISOString(),
     pasosCompletados: p.steps.filter((s) => s.status === "COMPLETED").length,
     pasosTotal: p.steps.length,

@@ -14,7 +14,7 @@ import { validateConfigValue } from "./_schemas"
 import { mapAnamnesisConfigToDTO } from "./_dto"
 import { safeAuditWrite } from "@/lib/audit/log"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Headers } from "next/headers"
+import type { Prisma } from "@prisma/client"
 
 /**
  * Lista configuraciones con filtros, paginación y búsqueda
@@ -131,7 +131,7 @@ export async function createAnamnesisConfig(
   const config = await prisma.anamnesisConfig.create({
     data: {
       key: body.key,
-      value: validatedValue as any,
+      value: validatedValue as Prisma.InputJsonValue,
       description: body.description ?? null,
       updatedByUserId: userId,
     },
@@ -202,7 +202,7 @@ export async function updateAnamnesisConfig(
   const config = await prisma.anamnesisConfig.update({
     where: { idAnamnesisConfig: id },
     data: {
-      value: validatedValue as any,
+      value: validatedValue as Prisma.InputJsonValue,
       description: body.description !== undefined ? body.description : existing.description,
       updatedByUserId: userId,
     },

@@ -18,7 +18,7 @@ export function hasPermission(
   role: RolNombre,
   permission: keyof typeof PERMISSIONS
 ): boolean {
-  return PERMISSIONS[permission].includes(role);
+  return (PERMISSIONS[permission] as readonly RolNombre[]).includes(role);
 }
 
 export function canViewClinical(role: RolNombre): boolean {

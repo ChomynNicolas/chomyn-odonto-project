@@ -183,28 +183,21 @@ export function AttachmentPreviewModal({
 
         {/* Content */}
         <div className="flex-1 relative overflow-hidden">
-          {isImage && !imageError ? (
-            <div className="w-full h-full flex items-center justify-center bg-muted">
-              {getImageUrl().includes("/api/adjuntos/") ? (
-                // Use regular img tag for proxy URLs
-                <img
-                  src={getImageUrl()}
-                  alt={attachment.description || attachment.fileName}
-                  className="max-w-full max-h-full object-contain"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
+          {(() => {
+            const imageUrl = getImageUrl()
+            return isImage && !imageError && imageUrl ? (
+              <div className="w-full h-full flex items-center justify-center bg-muted relative">
                 <Image
-                  src={getImageUrl()}
+                  src={imageUrl}
                   alt={attachment.description || attachment.fileName}
-                  width={attachment.width || 1200}
-                  height={attachment.height || 800}
-                  className="max-w-full max-h-full object-contain"
+                  fill
+                  className="object-contain"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 90vw, 80vw"
+                  unoptimized={imageUrl.includes("/api/adjuntos/")}
                   onError={() => setImageError(true)}
                 />
-              )}
-            </div>
-          ) : isPDF ? (
+              </div>
+            ) : isPDF ? (
             <div className="w-full h-full">
               <iframe
                 src={getPDFUrl()}
@@ -239,7 +232,8 @@ export function AttachmentPreviewModal({
                 )}
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {/* Navigation arrows */}
           {(onPrevious || onNext) && (

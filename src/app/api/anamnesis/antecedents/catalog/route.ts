@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { AntecedentCatalogResponseSchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import type { Prisma, AntecedentCategory } from "@prisma/client"
 
 /**
  * GET /api/anamnesis/antecedents/catalog
@@ -31,12 +31,12 @@ export async function GET(req: NextRequest) {
     const activeOnly = searchParams.get("activeOnly") !== "false"
 
     // Build where clause
-    const where: any = {}
+    const where: Prisma.AntecedentCatalogWhereInput = {}
     if (activeOnly) {
       where.isActive = true
     }
     if (category) {
-      where.category = category
+      where.category = category as AntecedentCategory
     }
     if (search) {
       where.name = {

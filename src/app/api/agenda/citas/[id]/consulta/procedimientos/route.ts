@@ -6,10 +6,10 @@ import { paramsSchema, createProcedureSchema } from "../_schemas"
 import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
-import { TreatmentStepStatus } from "@prisma/client"
 import { auditProcedureCreate } from "./_audit"
 import { sanitizeProcedimientoForRole } from "../_utils"
 import { handleStepSessionProgress } from "./_step-session"
+import { checkPlanCompletion } from "@/app/api/pacientes/[id]/plan-tratamiento/_service"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/procedimientos
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      consulta = await ensureConsulta(citaId, cita.profesionalId, userId)
+      await ensureConsulta(citaId, cita.profesionalId, userId)
       // Re-fetch to get pacienteId
       const consultaWithPaciente = await prisma.consulta.findUnique({
         where: { citaId },
@@ -144,9 +144,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         },
       })
-      if (consultaWithPaciente) {
-        consulta = consultaWithPaciente
+      if (!consultaWithPaciente) {
+        return errors.internal("Error al crear consulta")
       }
+      consulta = consultaWithPaciente
     }
 
     // Validate diagnosisId if provided
@@ -213,6 +214,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const { procedimiento, stepProgressResult } = result
 
+    // Check if plan should be auto-completed after step completion
+    if (stepProgressResult?.treatmentPlanId && stepProgressResult.wasCompleted) {
+      try {
+        await checkPlanCompletion(stepProgressResult.treatmentPlanId)
+      } catch (error) {
+        // Log error but don't fail the procedure creation
+        console.error(
+          "[POST /api/agenda/citas/[id]/consulta/procedimientos] Error checking plan completion:",
+          error
+        )
+      }
+    }
+
     // Audit logging (after transaction succeeds)
     await auditProcedureCreate(
       procedimiento.idConsultaProcedimiento,
@@ -224,6 +238,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         serviceType: procedimiento.serviceType,
         quantity: procedimiento.quantity,
         treatmentStepId: procedimiento.treatmentStepId,
+        diagnosisId: procedimiento.diagnosisId,
         toothNumber: procedimiento.toothNumber,
         toothSurface: procedimiento.toothSurface,
       },

@@ -7,8 +7,44 @@ import type {
   RolNombre 
 } from '@/types/patient';
 import { formatAge } from '@/lib/utils/date-formatters';
+import type { Prisma } from '@prisma/client';
 
-export function mapPatientIdentity(data: any): PatientIdentityDTO {
+// Type for patient data with persona, documento, and contactos
+type PatientWithPersona = Prisma.PacienteGetPayload<{
+  include: {
+    persona: {
+      include: {
+        documento: true;
+        contactos: true;
+      };
+    };
+  };
+}>;
+
+// Type for persona with contactos
+type PersonaWithContactos = Prisma.PersonaGetPayload<{
+  include: {
+    contactos: true;
+  };
+}>;
+
+// Type for contact item
+type Contacto = Prisma.PersonaContactoGetPayload<Record<string, never>>;
+
+// Type for allergy with severity
+type AllergyWithSeverity = {
+  severity: 'MILD' | 'MODERATE' | 'SEVERE' | 'HIGH';
+};
+
+// Type for anamnesis with risk flags
+type AnamnesisWithRiskFlags = {
+  tieneEnfermedadesCronicas?: boolean | null;
+  urgenciaPercibida?: 'RUTINA' | 'PRIORITARIO' | 'URGENCIA' | null;
+  embarazada?: boolean | null;
+  tieneDolorActual?: boolean | null;
+} | null;
+
+export function mapPatientIdentity(data: PatientWithPersona): PatientIdentityDTO {
   const persona = data.persona;
   
   return {
@@ -29,14 +65,14 @@ export function mapPatientIdentity(data: any): PatientIdentityDTO {
   };
 }
 
-export function mapContactInfo(persona: any): ContactInfoDTO {
+export function mapContactInfo(persona: PersonaWithContactos): ContactInfoDTO {
   const primaryPhone = persona.contactos.find(
-    (c: any) => c.tipo === 'PHONE' && c.esPrincipal
-  ) || persona.contactos.find((c: any) => c.tipo === 'PHONE');
+    (c: Contacto) => c.tipo === 'PHONE' && c.esPrincipal
+  ) || persona.contactos.find((c: Contacto) => c.tipo === 'PHONE');
   
   const primaryEmail = persona.contactos.find(
-    (c: any) => c.tipo === 'EMAIL' && c.esPrincipal
-  ) || persona.contactos.find((c: any) => c.tipo === 'EMAIL');
+    (c: Contacto) => c.tipo === 'EMAIL' && c.esPrincipal
+  ) || persona.contactos.find((c: Contacto) => c.tipo === 'EMAIL');
   
   return {
     primaryPhone: primaryPhone?.valorNorm || null,
@@ -50,9 +86,9 @@ export function mapContactInfo(persona: any): ContactInfoDTO {
 }
 
 export function mapRiskFlags(data: {
-  allergies: any[];
-  medications: any[];
-  anamnesis: any | null;
+  allergies: AllergyWithSeverity[];
+  medications: unknown[];
+  anamnesis: AnamnesisWithRiskFlags;
 }, role: RolNombre): RiskFlagsDTO {
   // For RECEP, return limited info
   if (role === 'RECEP') {

@@ -4,8 +4,7 @@
 // Shared module for validating consultorio availability and status
 // Used by both createCita and reprogramarCita services
 
-import { PrismaClient } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { PrismaClient, EstadoCita } from "@prisma/client";
 
 export interface ConsultorioValidationResult {
   isValid: boolean;
@@ -140,7 +139,7 @@ export async function findConsultorioConflicts(
   consultorio: { id: number; nombre: string };
 }>> {
   const client = prisma || new PrismaClient();
-  const ACTIVE_STATES = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"];
+  const ACTIVE_STATES: EstadoCita[] = ["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"];
 
   const conflicts = await client.cita.findMany({
     where: {

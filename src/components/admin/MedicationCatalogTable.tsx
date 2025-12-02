@@ -355,7 +355,7 @@ export default function MedicationCatalogTable({ initialData }: MedicationCatalo
                   <p className="font-medium">No se puede eliminar</p>
                   <p className="text-sm">
                     Este medicamento está siendo utilizado en {deletingMedication.patientMedicationCount} medicación(es) de paciente(s).
-                    Use "Desactivar" en su lugar para ocultarlo sin eliminar los registros asociados.
+                    Use &quot;Desactivar&quot; en su lugar para ocultarlo sin eliminar los registros asociados.
                   </p>
                 </div>
               ) : (

@@ -4,8 +4,6 @@ import type {
   AllergyCatalogListQuery,
   AllergyCatalogCreateBody,
   AllergyCatalogUpdateBody,
-  AllergyCatalogItem,
-  AllergyCatalogListResponse,
 } from "@/app/api/allergies/_schemas"
 import {
   fetchAllergyCatalogs,

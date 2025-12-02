@@ -9,8 +9,30 @@ import { es } from "date-fns/locale"
 import type { PatientAnamnesisDTO } from "@/types/patient"
 import { memo } from "react"
 
+// Extended type to include antecedents from API response
+type AnamnesisWithAntecedents = PatientAnamnesisDTO & {
+  antecedents?: Array<{
+    idAnamnesisAntecedent: number
+    anamnesisId: number
+    antecedentId: number | null
+    antecedentCatalog: {
+      idAntecedentCatalog: number
+      code: string
+      name: string
+      category: string
+      description: string | null
+    } | null
+    customName: string | null
+    customCategory: string | null
+    notes: string | null
+    diagnosedAt: string | null
+    isActive: boolean
+    resolvedAt: string | null
+  }>
+}
+
 interface AnamnesisMedicalHistoryProps {
-  anamnesis: PatientAnamnesisDTO
+  anamnesis: AnamnesisWithAntecedents
 }
 
 export const AnamnesisMedicalHistory = memo(function AnamnesisMedicalHistory({

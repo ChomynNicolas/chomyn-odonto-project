@@ -27,6 +27,55 @@ interface DiagnosticosModuleProps {
   onUpdate: () => void
 }
 
+interface DiagnosisHistoryResponse {
+  diagnosis: {
+    id: number
+    label: string
+    code: string | null
+    status: string
+    notedAt: string
+    resolvedAt: string | null
+    notes: string | null
+  }
+  statusHistory: Array<{
+    id: number
+    previousStatus: string | null
+    newStatus: string
+    reason: string | null
+    changedAt: string
+    changedBy: {
+      id: number
+      nombre: string
+    }
+    encounter: {
+      citaId: number
+      fecha: string
+      profesional: string | null
+    } | null
+  }>
+  encounters: Array<{
+    citaId: number
+    fecha: string
+    profesional: string | null
+    encounterNotes: string | null
+    wasEvaluated: boolean
+    wasManaged: boolean
+    createdAt: string
+  }>
+  linkedProcedures: Array<{
+    id: number
+    citaId: number
+    fecha: string
+    profesional: string | null
+    procedure: string
+    toothNumber: number | null
+    toothSurface: string | null
+    quantity: number
+    resultNotes: string | null
+    createdAt: string
+  }>
+}
+
 /**
  * Módulo de Diagnósticos Clínicos
  * 
@@ -52,7 +101,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
   const [diagnosisToChangeStatus, setDiagnosisToChangeStatus] = useState<DiagnosticoDTO | null>(null)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [selectedDiagnosisForHistory, setSelectedDiagnosisForHistory] = useState<DiagnosticoDTO | null>(null)
-  const [diagnosisHistory, setDiagnosisHistory] = useState<any>(null)
+  const [diagnosisHistory, setDiagnosisHistory] = useState<DiagnosisHistoryResponse | null>(null)
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -69,21 +118,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
     diagnosticosCount: consulta.diagnosticos?.length || 0,
   })
 
-  // Filtrar diagnósticos por búsqueda
-  const filteredDiagnosticos = useMemo(() => {
-    const diagnosticosList = consulta.diagnosticos || []
-    if (diagnosticosList.length === 0) return []
-    if (!searchQuery.trim()) return diagnosticosList
-
-    const query = searchQuery.toLowerCase().trim()
-    return diagnosticosList.filter(
-      (d) =>
-        d.label.toLowerCase().includes(query) ||
-        d.code?.toLowerCase().includes(query) ||
-        d.notes?.toLowerCase().includes(query) ||
-        d.createdBy.nombre.toLowerCase().includes(query)
-    )
-  }, [consulta.diagnosticos, searchQuery])
+  
 
   const resetForm = () => {
     setEditing(null)
@@ -254,7 +289,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
         let errorData: { error?: string; message?: string } = {}
         try {
           errorData = responseText ? JSON.parse(responseText) : {}
-        } catch (parseError) {
+        } catch {
           errorData = { error: responseText || `Error ${res.status}: ${res.statusText}` }
         }
         throw new Error(errorData.error || errorData.message || "Error al actualizar diagnóstico")
@@ -385,7 +420,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
         d.code?.toLowerCase().includes(query) ||
         d.notes?.toLowerCase().includes(query)
     )
-  }, [diagnosesBySection.previous, searchQuery])
+  }, [diagnosesBySection, searchQuery])
 
   const filteredCurrent = useMemo(() => {
     if (!searchQuery.trim()) return diagnosesBySection.current
@@ -396,7 +431,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
         d.code?.toLowerCase().includes(query) ||
         d.notes?.toLowerCase().includes(query)
     )
-  }, [diagnosesBySection.current, searchQuery])
+  }, [diagnosesBySection, searchQuery])
 
   const filteredHistory = useMemo(() => {
     if (!searchQuery.trim()) return diagnosesBySection.history
@@ -407,7 +442,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
         d.code?.toLowerCase().includes(query) ||
         d.notes?.toLowerCase().includes(query)
     )
-  }, [diagnosesBySection.history, searchQuery])
+  }, [diagnosesBySection, searchQuery])
 
   const diagnosticosList = consulta.diagnosticos || []
   const hasDiagnosticos = diagnosticosList.length > 0
@@ -996,7 +1031,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
                 <div>
                   <h4 className="font-semibold mb-2">Historial de Cambios de Estado</h4>
                   <div className="space-y-2">
-                    {diagnosisHistory.statusHistory.map((entry: any) => (
+                    {diagnosisHistory.statusHistory.map((entry) => (
                       <Card key={entry.id}>
                         <CardContent className="pt-4">
                           <div className="flex items-start justify-between">
@@ -1035,7 +1070,7 @@ export function DiagnosticosModule({ citaId, consulta, canEdit, onUpdate }: Diag
                 <div>
                   <h4 className="font-semibold mb-2">Procedimientos Vinculados</h4>
                   <div className="space-y-2">
-                    {diagnosisHistory.linkedProcedures.map((proc: any) => (
+                    {diagnosisHistory.linkedProcedures.map((proc) => (
                       <Card key={proc.id}>
                         <CardContent className="pt-4">
                           <p className="font-medium">{proc.procedure}</p>

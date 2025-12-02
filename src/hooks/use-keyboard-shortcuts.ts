@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useCallback } from "react"
-import type { ModuleId } from "@/components/consulta/consulta-clinica-workspace"
+import type { ModuleId } from "@/components/consulta-clinica/ConsultaClinicaWorkspace"
 
 interface UseKeyboardShortcutsProps {
   onModuleChange: (moduleId: ModuleId) => void

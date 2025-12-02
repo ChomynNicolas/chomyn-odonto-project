@@ -5,9 +5,7 @@ import { auth } from "@/auth"
 import type { AdjuntoTipo, AccessMode, Prisma } from "@prisma/client"
 import {
   MAX_FILE_SIZE_BYTES,
-  validateFileSize,
   validateFileExtension,
-  ALLOWED_MIME_TYPES,
 } from "@/lib/validation/file-validation"
 import { auditAttachmentCreate, auditAttachmentDelete } from "@/lib/audit/attachments"
 
@@ -680,7 +678,7 @@ export async function DELETE(
 
     // Store metadata BEFORE deletion for audit
     const auditMetadata = {
-      pacienteId: adjunto.pacienteId,
+      pacienteId: pacienteId, // Use pacienteId from route params (guaranteed to be a number)
       consultaId: adjunto.consultaId ?? null,
       procedimientoId: adjunto.procedimientoId ?? null,
       tipo: adjunto.tipo,

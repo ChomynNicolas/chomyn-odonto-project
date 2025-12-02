@@ -132,7 +132,7 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
   const esMenor = isMinorAt(fechaNacimiento, cita.inicio)
 
   // 1. Verificar consentimiento de menor (si aplica)
-  let minorConsentStatus = {
+  const minorConsentStatus = {
     esMenorAlInicio: esMenor === true,
     requiereConsentimiento: esMenor === true,
     consentimientoVigente: esMenor !== true, // Si no es menor, no requiere consentimiento
@@ -168,7 +168,7 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
   // 2. Verificar consentimiento de cirugía
   const surgeryValidation = await validateSurgeryConsent(citaId, cita.pacienteId, cita.inicio)
   
-  let surgeryConsentStatus = {
+  const surgeryConsentStatus = {
     requiereCirugia: surgeryValidation.requiresConsent,
     cirugiaConsentimientoVigente: surgeryValidation.isValid,
     cirugiaConsentimientoResumen: undefined as ConsentimientoResumen | undefined,

@@ -15,18 +15,38 @@ export interface CreateOdontogramInput {
   consultaId?: number | null
 }
 
+export interface OdontogramEntry {
+  id: number
+  toothNumber: number
+  surface: DienteSuperficie | null
+  condition: ToothCondition
+  notes: string | null
+}
+
+export interface OdontogramSnapshot {
+  id: number
+  takenAt: string
+  notes: string | null
+  consultaId: number | null
+  createdBy: {
+    id: number
+    nombre: string
+  }
+  entries: OdontogramEntry[]
+}
+
 export interface PatientOdontogramService {
-  getLatestOdontogram(pacienteId: number): Promise<any | null>
+  getLatestOdontogram(pacienteId: number): Promise<OdontogramSnapshot | null>
   createOrUpdateOdontogram(
     pacienteId: number, 
     input: CreateOdontogramInput, 
     createdByUserId: number
-  ): Promise<any>
+  ): Promise<OdontogramSnapshot>
   getOdontogramHistory(
     pacienteId: number, 
     limit?: number, 
     offset?: number
-  ): Promise<{ snapshots: any[], total: number }>
+  ): Promise<{ snapshots: OdontogramSnapshot[], total: number }>
 }
 
 /**

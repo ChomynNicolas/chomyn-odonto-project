@@ -13,8 +13,15 @@ interface PlanCardProps {
 }
 
 export function PlanCard({ plan }: PlanCardProps) {
+  const isActive = plan.status === 'ACTIVE'
+  const statusLabel = 
+    plan.status === 'ACTIVE' ? 'Activo' :
+    plan.status === 'COMPLETED' ? 'Completado' :
+    plan.status === 'CANCELLED' ? 'Cancelado' :
+    'Desconocido'
+
   return (
-    <Card className={plan.isActive ? '' : 'opacity-75'}>
+    <Card className={isActive ? '' : 'opacity-75'}>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="space-y-1 flex-1">
@@ -26,8 +33,14 @@ export function PlanCard({ plan }: PlanCardProps) {
               Creado por {plan.createdBy} el {new Date(plan.createdAt).toLocaleDateString('es-PY')}
             </p>
           </div>
-          <Badge variant={plan.isActive ? 'default' : 'secondary'}>
-            {plan.isActive ? 'Activo' : 'Inactivo'}
+          <Badge 
+            variant={
+              plan.status === 'ACTIVE' ? 'default' :
+              plan.status === 'COMPLETED' ? 'default' :
+              'secondary'
+            }
+          >
+            {statusLabel}
           </Badge>
         </div>
 

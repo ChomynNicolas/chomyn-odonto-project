@@ -201,6 +201,8 @@ export interface AgendaFilters {
   soloPrimeraVez?: boolean
   soloPlanActivo?: boolean
   busquedaPaciente?: string // nombre o documento
+  hideCompleted?: boolean // Ocultar citas completadas
+  hideCancelled?: boolean // Ocultar citas canceladas
 }
 
 // ============================================================================
@@ -261,4 +263,20 @@ export interface FollowUpContext {
   nextSessions: NextSessionInfo[]
   recommendedFollowUpDate: string | null // ISO
   isMultiSessionFollowUp: boolean
+}
+
+// ============================================================================
+// ACTIVE PLANS CONTEXT FOR APPOINTMENT CREATION
+// ============================================================================
+
+export interface ActivePlanContext {
+  hasActivePlans: boolean
+  plans: Array<{
+    planId: number
+    planTitle: string
+    nextSessions: NextSessionInfo[]
+    recommendedMotivo: string
+    recommendedTipo: TipoCita
+    recommendedDuracion: number
+  }>
 }

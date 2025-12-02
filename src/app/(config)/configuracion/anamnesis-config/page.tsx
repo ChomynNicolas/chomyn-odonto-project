@@ -47,9 +47,13 @@ async function AnamnesisConfigContent({ searchParams }: AnamnesisConfigPageProps
   const result = await listAnamnesisConfigs(validatedFilters, page, limit, skip)
 
   // Envolver en formato esperado por AnamnesisConfigTable
-  const configsResponse: { ok: boolean; data: typeof result.data; meta: typeof result.meta } = {
-    ok: true,
-    data: result.data,
+  // Convertir Date a string ISO para compatibilidad con el tipo del cliente
+  const configsResponse = {
+    ok: true as const,
+    data: result.data.map((item) => ({
+      ...item,
+      updatedAt: item.updatedAt.toISOString(),
+    })),
     meta: result.meta,
   }
 

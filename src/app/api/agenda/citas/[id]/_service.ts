@@ -126,6 +126,72 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
 
   const canceladoPorNombre = cita.canceladoPor ? displayUser(cita.canceladoPor) : null
 
+  // Fetch active treatment plan for patient (if exists)
+  const activePlan = await prisma.treatmentPlan.findFirst({
+    where: {
+      pacienteId: cita.paciente.idPaciente,
+      status: "ACTIVE",
+    },
+    include: {
+      steps: {
+        where: {
+          status: { in: ["PENDING", "IN_PROGRESS"] },
+        },
+        include: {
+          procedimientoCatalogo: {
+            select: {
+              nombre: true,
+            },
+          },
+        },
+        orderBy: { order: "asc" },
+        take: 3, // Limit to first 3 pending steps for display
+      },
+    },
+  })
+
+  // Build planActivo context
+  const planActivo = activePlan
+    ? {
+        titulo: activePlan.titulo,
+        proximasEtapas: activePlan.steps.map((step) => {
+          const stepName =
+            step.procedimientoCatalogo?.nombre || step.serviceType || `Paso ${step.order}`
+          if (step.requiresMultipleSessions && step.totalSessions && step.totalSessions > 1) {
+            const currentSession = step.currentSession ?? 1
+            return `${stepName} (Sesión ${currentSession} de ${step.totalSessions})`
+          }
+          return stepName
+        }),
+      }
+    : null
+
+  // Get last consultation and next appointment for context
+  const ultimaConsulta = await prisma.consulta
+    .findFirst({
+      where: {
+        cita: {
+          pacienteId: cita.paciente.idPaciente,
+          estado: { in: ["COMPLETED", "IN_PROGRESS"] },
+        },
+      },
+      orderBy: { startedAt: "desc" },
+      select: { startedAt: true },
+    })
+    .then((c) => c?.startedAt?.toISOString() ?? null)
+
+  const proximoTurno = await prisma.cita
+    .findFirst({
+      where: {
+        pacienteId: cita.paciente.idPaciente,
+        estado: { in: ["SCHEDULED", "CONFIRMED", "CHECKED_IN"] },
+        inicio: { gt: cita.inicio }, // Future appointments only
+      },
+      orderBy: { inicio: "asc" },
+      select: { inicio: true },
+    })
+    .then((c) => c?.inicio.toISOString() ?? null)
+
   const dto: CitaDetalleDTO = {
     idCita: cita.idCita,
     inicio: cita.inicio.toISOString(),
@@ -166,7 +232,7 @@ export async function getCitaDetail(idCita: number, rol?: RolUsuario): Promise<C
       noShowCount,
     },
 
-    contexto: { planActivo: null, ultimaConsulta: null, proximoTurno: null },
+    contexto: { planActivo, ultimaConsulta, proximoTurno },
 
     adjuntos: [],
 

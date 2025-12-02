@@ -39,7 +39,7 @@ import {
   type AntecedentCatalogUpdateBody,
 } from "@/lib/api/antecedent-catalog"
 import { toast } from "sonner"
-import type { AntecedentCategory } from "@/app/api/antecedent-catalog/_schemas"
+import { AntecedentCategoryEnum, type AntecedentCategory } from "@/app/api/antecedent-catalog/_schemas"
 
 const CATEGORY_LABELS: Record<AntecedentCategory, string> = {
   CARDIOVASCULAR: "Cardiovascular",
@@ -56,22 +56,12 @@ const CATEGORY_LABELS: Record<AntecedentCategory, string> = {
 const antecedentCatalogFormSchema = z.object({
   code: z.string().min(1, "El código es requerido").max(50, "El código no puede exceder 50 caracteres"),
   name: z.string().min(1, "El nombre es requerido").max(255, "El nombre no puede exceder 255 caracteres"),
-  category: z.enum([
-    "CARDIOVASCULAR",
-    "ENDOCRINE",
-    "RESPIRATORY",
-    "GASTROINTESTINAL",
-    "NEUROLOGICAL",
-    "SURGICAL_HISTORY",
-    "SMOKING",
-    "ALCOHOL",
-    "OTHER",
-  ]),
+  category: AntecedentCategoryEnum,
   description: z.string().max(1000, "La descripción no puede exceder 1000 caracteres").optional().nullable(),
   isActive: z.boolean().default(true),
 })
 
-type AntecedentCatalogFormValues = z.infer<typeof antecedentCatalogFormSchema>
+type AntecedentCatalogFormValues = z.input<typeof antecedentCatalogFormSchema>
 
 interface AntecedentCatalogFormProps {
   open: boolean
@@ -161,7 +151,7 @@ export default function AntecedentCatalogForm({
           name: values.name,
           category: values.category,
           description: values.description ?? null,
-          isActive: values.isActive,
+          isActive: values.isActive ?? true,
         }
         await createAntecedentCatalog(createData)
       }

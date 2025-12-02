@@ -115,7 +115,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           performedById: profesional.idProfesional,
           createdByUserId: Number.parseInt(session.user!.id!),
           status: data.status,
-          reason: data.reason,
           diagnosis: data.diagnosis,
           clinicalNotes: data.clinicalNotes,
           startedAt: new Date(),

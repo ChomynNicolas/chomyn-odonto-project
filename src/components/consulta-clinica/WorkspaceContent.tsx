@@ -127,7 +127,7 @@ export function WorkspaceContent({
             onSave={onAnamnesisUpdate}
             anamnesisContext={anamnesisContext}
             canEdit={canEdit}
-            patientGender={consulta.paciente?.genero}
+            patientGender={consulta.paciente?.genero ?? undefined}
             patientBirthDate={consulta.paciente?.fechaNacimiento}
             isLoadingAnamnesis={isLoadingAnamnesis}
           />

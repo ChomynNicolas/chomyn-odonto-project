@@ -23,6 +23,7 @@ import { useDisponibilidadValidator, roundToMinutes } from "@/hooks/useDisponibi
 import { SlotRecommendations } from "./SlotRecommendations";
 import { handleApiError, showErrorToast, showSuccessToast } from "@/lib/messages/agenda-toast-helpers";
 import { getErrorMessage } from "@/lib/messages/agenda-messages";
+import { useActivePlansContext } from "@/hooks/useActivePlansContext";
 // Surgery consent validation removed - now handled during check-in
 
 
@@ -168,6 +169,56 @@ export function NuevaCitaSheet({
   const primaryNextSession = React.useMemo(() => {
     return followUpContext ? getPrimaryNextSession(followUpContext) : null
   }, [followUpContext])
+
+  // Fetch active plans context when in create mode and patient is selected
+  const pacienteIdValue = watch("pacienteId")
+  const { data: activePlansContext, isLoading: isLoadingActivePlans } = useActivePlansContext(
+    pacienteIdValue ?? null,
+    mode === "create"
+  )
+
+  // Track if we've auto-filled from active plan to avoid overwriting user changes
+  const hasAutoFilledRef = React.useRef(false)
+
+  // Auto-fill form fields when active plan is detected (only in create mode)
+  React.useEffect(() => {
+    if (
+      mode === "create" &&
+      activePlansContext?.hasActivePlans &&
+      activePlansContext.plans.length > 0 &&
+      !hasAutoFilledRef.current
+    ) {
+      const plan = activePlansContext.plans[0] // Use most recent plan
+      hasAutoFilledRef.current = true
+      
+      // Only auto-fill if fields are still at default values (don't overwrite user input)
+      const currentValues = getValues()
+      if (
+        currentValues.motivo === "Cita" ||
+        currentValues.motivo === prefill?.motivo ||
+        !currentValues.motivo
+      ) {
+        setValue("motivo", plan.recommendedMotivo, { shouldValidate: false })
+      }
+      if (currentValues.tipo === "CONSULTA" || currentValues.tipo === prefill?.tipo) {
+        setValue("tipo", plan.recommendedTipo, { shouldValidate: false })
+      }
+      if (currentValues.duracionMinutos === 30 || currentValues.duracionMinutos === prefill?.duracionMinutos) {
+        setValue("duracionMinutos", plan.recommendedDuracion, { shouldValidate: false })
+      }
+    }
+  }, [activePlansContext, mode, setValue, getValues, prefill])
+
+  // Reset auto-fill flag when sheet closes or patient changes
+  React.useEffect(() => {
+    if (!open) {
+      hasAutoFilledRef.current = false
+    }
+  }, [open])
+
+  React.useEffect(() => {
+    hasAutoFilledRef.current = false
+  }, [pacienteIdValue])
 
   // Validación de disponibilidad usando hook (después de declarar watch)
   const fechaValue = watch("fecha")
@@ -522,6 +573,43 @@ export function NuevaCitaSheet({
                 </p>
               )}
             </div>
+          )}
+
+          {/* Show active plan indicator in create mode */}
+          {mode === "create" && (
+            <>
+              {isLoadingActivePlans && pacienteIdValue && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Verificando planes de tratamiento...</span>
+                  </div>
+                </div>
+              )}
+              {activePlansContext?.hasActivePlans && activePlansContext.plans.length > 0 && (
+                <div className="pt-2 space-y-1">
+                  <Alert className="border-blue-500/30 bg-blue-500/10 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <AlertDescription className="text-blue-900 dark:text-blue-100">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="secondary" className="text-xs">
+                          Plan activo detectado
+                        </Badge>
+                        <span className="text-xs font-semibold">
+                          {activePlansContext.plans[0].planTitle}
+                        </span>
+                      </div>
+                      {activePlansContext.plans[0].nextSessions.length > 0 && (
+                        <p className="text-xs mt-1.5">
+                          Próxima sesión: {activePlansContext.plans[0].nextSessions[0].stepName} 
+                          {" "}(Sesión {activePlansContext.plans[0].nextSessions[0].nextSessionNumber} de {activePlansContext.plans[0].nextSessions[0].totalSessions})
+                        </p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
+            </>
           )}
         </SheetHeader>
 

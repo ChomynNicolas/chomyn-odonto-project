@@ -27,7 +27,16 @@ export async function PATCH(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID de usuario inválido" }, { status: 400 })
+    }
+
+    const actorId = parseInt(userId)
+    if (Number.isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID de usuario inválido" }, { status: 400 })
+    }
+
     const medicationCatalog = await deactivateMedicationCatalog(
       parsed.data.id,
       actorId,

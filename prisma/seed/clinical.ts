@@ -30,7 +30,6 @@ export async function createPlanConSteps(
     data: {
       pacienteId: params.pacienteId,
       titulo: "Plan inicial",
-      isActive: true,
       createdByUserId: params.createdByUserId,
     },
   })
@@ -408,12 +407,14 @@ export async function addClinicalBasics(
           pacienteId: params.pacienteId,
           medicationId: med.idMedicationCatalog,
           label: med.name,
+          description: faker.helpers.maybe(() => faker.lorem.sentence({ min: 5, max: 15 }), { probability: 0.3 }) ?? null,
           dose: faker.helpers.arrayElement(["1 comp", "500mg", "1 tableta", "2 comp"]),
           freq: faker.helpers.arrayElement(["c/8h", "c/12h", "1x día", "2x día"]),
           route: faker.helpers.arrayElement(["VO", "IM", "IV"]),
           startAt: faker.date.past({ years: 1 }),
           endAt: faker.helpers.maybe(() => faker.date.future({ years: 1 }), { probability: 0.5 }),
           isActive: true,
+          consultaId: params.consultaId ?? null,
           createdByUserId: params.createdByUserId,
         },
       })
@@ -469,7 +470,15 @@ export async function addOdontoAndPerio(
   const conditions = ["INTACT", "CARIES", "FILLED", "ROOT_CANAL", "CROWN", "MISSING", "FRACTURED"] as const
   const surfaces = ["O", "M", "D", "V", "L", "MO", "DO", "MOD"] as const
 
-  const entries = teethToRecord.flatMap((tooth) => {
+  type EntryType = {
+    snapshotId: number
+    toothNumber: number
+    surface: DienteSuperficie | null
+    condition: typeof conditions[number]
+    notes?: string | null
+  }
+
+  const entries: EntryType[] = teethToRecord.flatMap((tooth): EntryType[] => {
     const condition = faker.helpers.arrayElement(conditions)
     const hasSurface = faker.datatype.boolean({ probability: 0.6 })
     if (hasSurface) {
@@ -477,9 +486,9 @@ export async function addOdontoAndPerio(
         {
           snapshotId: od.idOdontogramSnapshot,
           toothNumber: tooth,
-          surface: faker.helpers.arrayElement(surfaces),
+          surface: faker.helpers.arrayElement(surfaces) as DienteSuperficie,
           condition,
-          notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }),
+          notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }) ?? null,
         },
       ]
     }
@@ -489,7 +498,7 @@ export async function addOdontoAndPerio(
         toothNumber: tooth,
         surface: null,
         condition,
-        notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }),
+        notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }) ?? null,
       },
     ]
   })

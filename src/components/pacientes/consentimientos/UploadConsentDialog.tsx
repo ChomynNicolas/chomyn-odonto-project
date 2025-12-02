@@ -136,7 +136,6 @@ export function UploadConsentDialog({
   });
 
   const responsableId = watch("responsablePersonaId");
-  const firmadoEn = watch("firmadoEn");
 
   // Load patient info if not provided
   useEffect(() => {
@@ -162,7 +161,7 @@ export function UploadConsentDialog({
             }
           }
         })
-        .catch((error) => {
+        .catch(() => {
           toast.error("Error al cargar el paciente");
         })
         .finally(() => {

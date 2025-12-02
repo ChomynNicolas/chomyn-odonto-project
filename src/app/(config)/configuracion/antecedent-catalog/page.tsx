@@ -42,7 +42,7 @@ async function AntecedentCatalogContent({ searchParams }: AntecedentCatalogPageP
   const result = await listAntecedentCatalogs(validatedFilters)
 
   // Envolver en formato esperado por AntecedentCatalogTable
-  const antecedentCatalogResponse: { ok: boolean; data: typeof result.data; meta: typeof result.meta } = {
+  const antecedentCatalogResponse: { ok: true; data: typeof result.data; meta: typeof result.meta } = {
     ok: true,
     data: result.data,
     meta: result.meta,

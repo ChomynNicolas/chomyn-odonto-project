@@ -40,7 +40,7 @@ async function MedicationsContent({ searchParams }: MedicationsPageProps) {
   const result = await listMedicationCatalogs(validatedFilters)
 
   // Envolver en formato esperado por MedicationCatalogTable
-  const medicationsResponse: { ok: boolean; data: typeof result.data; meta: typeof result.meta } = {
+  const medicationsResponse: { ok: true; data: typeof result.data; meta: typeof result.meta } = {
     ok: true,
     data: result.data,
     meta: result.meta,

@@ -65,7 +65,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session?.user?.id) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "Missing user id in session" }, { status: 500 })
+    }
+
+    const actorId = parseInt(auth.session.user.id as string)
     const profesional = await createProfesional(parsed.data, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true, data: profesional }, { status: 201 })

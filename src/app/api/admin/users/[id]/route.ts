@@ -69,7 +69,10 @@ export async function PATCH(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const actorId = parseInt(auth.session.user.id ?? "")
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "ID de usuario de sesión inválido" }, { status: 500 })
+    }
     const user = await updateUser(userId, parsed.data, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true, data: user }, { status: 200 })

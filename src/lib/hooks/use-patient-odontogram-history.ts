@@ -1,7 +1,7 @@
 // Hook for fetching patient odontogram history with audit info
 
 import { useQuery } from '@tanstack/react-query';
-import type { OdontogramHistoryResponse, OdontogramSnapshotAPI } from '@/lib/types/patient';
+import type { OdontogramHistoryResponse } from '@/lib/types/patient';
 
 interface UsePatientOdontogramHistoryOptions {
   limit?: number;

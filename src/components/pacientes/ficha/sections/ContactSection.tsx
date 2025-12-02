@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Edit, Check, X, Loader2, Phone, Mail, Plus } from "lucide-react"
+import { Edit, Check, X, Loader2, Phone, Mail } from "lucide-react"
 import { ContactMethodCard } from "../components/ContactMethodCard"
 import type { PatientRecord } from "@/lib/types/patient"
 import { getPermissions } from "@/lib/utils/rbac"
@@ -131,7 +131,7 @@ export function ContactSection({ patient, userRole, onUpdate }: ContactSectionPr
                   <p className="text-sm font-semibold text-muted-foreground">Teléfonos</p>
                 </div>
                 {phoneContacts.map((contact) => (
-                  <ContactMethodCard key={contact.id} contact={contact} showTimestamps />
+                  <ContactMethodCard key={contact.id} contact={contact} />
                 ))}
               </div>
             )}
@@ -143,7 +143,7 @@ export function ContactSection({ patient, userRole, onUpdate }: ContactSectionPr
                   <p className="text-sm font-semibold text-muted-foreground">Emails</p>
                 </div>
                 {emailContacts.map((contact) => (
-                  <ContactMethodCard key={contact.id} contact={contact} showTimestamps />
+                  <ContactMethodCard key={contact.id} contact={contact} />
                 ))}
               </div>
             )}

@@ -121,6 +121,19 @@ export const ACTION_LABELS: Record<string, string> = {
   LOGOUT: "Cierre de Sesión",
   PERMISSION_CHANGE: "Cambio de Permisos",
   EXPORT: "Exportar Datos",
+  // Treatment Plan Actions
+  TREATMENT_PLAN_CREATE: "Crear Plan de Tratamiento",
+  TREATMENT_PLAN_UPDATE: "Actualizar Plan de Tratamiento",
+  TREATMENT_PLAN_STATUS_CHANGE: "Cambiar Estado de Plan",
+  TREATMENT_PLAN_COMPLETE: "Completar Plan de Tratamiento",
+  TREATMENT_PLAN_CANCEL: "Cancelar Plan de Tratamiento",
+  TREATMENT_PLAN_REACTIVATE: "Reactivar Plan de Tratamiento",
+  // Treatment Step Actions
+  TREATMENT_STEP_CREATE: "Agregar Paso al Plan",
+  TREATMENT_STEP_UPDATE: "Actualizar Paso del Plan",
+  TREATMENT_STEP_DELETE: "Eliminar Paso del Plan",
+  TREATMENT_STEP_STATUS_CHANGE: "Cambiar Estado de Paso",
+  TREATMENT_STEP_SESSION_COMPLETE: "Completar Sesión de Paso",
 }
 
 // Labels para entidades
@@ -131,6 +144,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   OdontogramSnapshot: "Odontograma",
   Consulta: "Consulta",
   TreatmentPlan: "Plan de Tratamiento",
+  TreatmentStep: "Paso de Tratamiento",
   Diagnosis: "Diagnóstico",
   Medication: "Medicación",
   Allergy: "Alergia",

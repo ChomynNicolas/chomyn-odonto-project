@@ -75,8 +75,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
-    const user = await createUser(parsed.data, actorId, req.headers, req.nextUrl.pathname)
+    const userId = auth.session?.user?.id;
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "Missing user id in session." }, { status: 500 });
+    }
+
+    const actorId = parseInt(userId);
+    const user = await createUser(parsed.data, actorId, req.headers, req.nextUrl.pathname);
 
     return NextResponse.json({ ok: true, data: user }, { status: 201 })
   } catch (e: unknown) {

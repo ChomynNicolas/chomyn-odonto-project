@@ -31,7 +31,10 @@ export async function GET(
     }
 
     // Validar acceso según rol
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     const accessCheck = await validateProfesionalAccess(id, actorId, auth.role)
     if (!accessCheck.ok) {
       return NextResponse.json({ ok: false, error: accessCheck.error }, { status: 403 })
@@ -81,7 +84,10 @@ export async function PUT(
     }
 
     // Validar permisos de actualización
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     const permissionCheck = await validateUpdatePermissions(id, actorId, auth.role, parsed.data)
     if (!permissionCheck.ok) {
       return NextResponse.json({ ok: false, error: permissionCheck.error }, { status: 403 })

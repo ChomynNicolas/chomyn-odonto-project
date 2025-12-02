@@ -56,7 +56,7 @@ export async function POST(
     // Check permissions
     const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
 
-    if (!canRestoreAnamnesisVersion(userRole, pacienteId)) {
+    if (!canRestoreAnamnesisVersion(userRole)) {
       return NextResponse.json({ error: "No tiene permisos para restaurar versiones" }, { status: 403 })
     }
 

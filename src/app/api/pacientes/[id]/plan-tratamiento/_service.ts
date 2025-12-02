@@ -1,6 +1,7 @@
 // src/app/api/pacientes/[id]/plan-tratamiento/_service.ts
 import { BadRequestError, NotFoundError } from "@/app/api/_lib/errors"
 import { prisma } from "@/lib/prisma"
+import { TreatmentPlanStatus, TreatmentStepStatus } from "@prisma/client"
 import type { CreatePlanInput, UpdatePlanInput } from "./_schemas"
 import {
   repoCreatePlan,
@@ -8,8 +9,11 @@ import {
   repoGetPlan,
   repoUpdatePlan,
   repoUpdateStepStatus,
+  repoUpdatePlanStatus,
 } from "./_repo"
 import type { PlanTratamientoDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
+import { validateNoActivePlanExists, validateStatusTransition } from "./_validations"
+import { checkAndCompletePlan } from "./_plan-status.service"
 
 function displayUser(user: {
   idUsuario: number
@@ -34,7 +38,7 @@ function mapPlanToDTO(plan: NonNullable<Awaited<ReturnType<typeof repoGetActiveP
     id: plan.idTreatmentPlan,
     titulo: plan.titulo,
     descripcion: plan.descripcion,
-    isActive: plan.isActive,
+    status: plan.status,
     createdAt: plan.createdAt.toISOString(),
     updatedAt: plan.updatedAt.toISOString(),
     createdBy: {
@@ -90,6 +94,9 @@ export async function createTreatmentPlan(
     throw new NotFoundError("Paciente no encontrado")
   }
 
+  // Validate no active plan exists
+  await validateNoActivePlanExists(pacienteId)
+
   // Validate steps
   await validatePlanSteps(body.steps)
 
@@ -112,7 +119,6 @@ export async function createTreatmentPlan(
 export async function updateTreatmentPlan(
   planId: number,
   body: UpdatePlanInput,
-  userId: number
 ): Promise<PlanTratamientoDTO> {
   // Verify plan exists and belongs to patient
   const plan = await repoGetPlan(planId)
@@ -141,7 +147,7 @@ export async function updateTreatmentPlan(
 
 export async function updateStepStatus(
   stepId: number,
-  status: string
+  status: TreatmentStepStatus
 ): Promise<void> {
   const step = await prisma.treatmentStep.findUnique({
     where: { idTreatmentStep: stepId },
@@ -152,7 +158,63 @@ export async function updateStepStatus(
     throw new NotFoundError("Paso del plan no encontrado")
   }
 
-  await repoUpdateStepStatus(stepId, status as any)
+  await repoUpdateStepStatus(stepId, status)
+}
+
+/**
+ * Manually completes a treatment plan
+ */
+export async function completePlan(planId: number): Promise<PlanTratamientoDTO> {
+  await validateStatusTransition(planId, TreatmentPlanStatus.COMPLETED)
+  
+  await repoUpdatePlanStatus(planId, TreatmentPlanStatus.COMPLETED)
+  
+  const plan = await repoGetPlan(planId)
+  if (!plan) {
+    throw new NotFoundError("Plan de tratamiento no encontrado")
+  }
+  
+  return mapPlanToDTO(plan)
+}
+
+/**
+ * Cancels a treatment plan
+ */
+export async function cancelPlan(planId: number): Promise<PlanTratamientoDTO> {
+  await validateStatusTransition(planId, TreatmentPlanStatus.CANCELLED)
+  
+  await repoUpdatePlanStatus(planId, TreatmentPlanStatus.CANCELLED)
+  
+  const plan = await repoGetPlan(planId)
+  if (!plan) {
+    throw new NotFoundError("Plan de tratamiento no encontrado")
+  }
+  
+  return mapPlanToDTO(plan)
+}
+
+/**
+ * Reactivates a treatment plan from COMPLETED or CANCELLED status
+ */
+export async function reactivatePlan(planId: number): Promise<PlanTratamientoDTO> {
+  await validateStatusTransition(planId, TreatmentPlanStatus.ACTIVE)
+  
+  await repoUpdatePlanStatus(planId, TreatmentPlanStatus.ACTIVE)
+  
+  const plan = await repoGetPlan(planId)
+  if (!plan) {
+    throw new NotFoundError("Plan de tratamiento no encontrado")
+  }
+  
+  return mapPlanToDTO(plan)
+}
+
+/**
+ * Checks if a plan should be completed and updates it if needed
+ * This is called automatically when steps/sessions are completed
+ */
+export async function checkPlanCompletion(planId: number): Promise<void> {
+  await checkAndCompletePlan(planId)
 }
 
 async function validatePlanSteps(

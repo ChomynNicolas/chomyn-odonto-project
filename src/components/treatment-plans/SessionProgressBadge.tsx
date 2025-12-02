@@ -20,7 +20,7 @@ export function SessionProgressBadge({ step, className }: SessionProgressBadgePr
     return null
   }
 
-  const { isCompleted, completedSessions, totalSessions } = sessionProgress
+  const { isCompleted, completedSessions } = sessionProgress
 
   const variant = isCompleted
     ? 'default' // Green

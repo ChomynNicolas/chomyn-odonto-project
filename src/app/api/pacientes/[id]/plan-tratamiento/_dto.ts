@@ -1,6 +1,6 @@
 // src/app/api/pacientes/[id]/plan-tratamiento/_dto.ts
 import type { DienteSuperficie, TreatmentStepStatus } from "@prisma/client"
-import type { PlanTratamientoDTO, TreatmentStepDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
+import type { PlanTratamientoDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
 
 export interface CreatePlanBody {
   titulo: string

@@ -6,12 +6,22 @@ import { Calendar, Clock, User, Info } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { PatientAnamnesisDTO } from "@/types/patient"
-import type { AnamnesisMetadata } from "../types/anamnesis-display.types"
+import type { AnamnesisMetadata as AnamnesisMetadataType } from "../types/anamnesis-display.types"
 import { memo } from "react"
 
+// Extended type to include creadoPor, createdAt, and updatedAt from API response
+type AnamnesisWithMetadata = PatientAnamnesisDTO & {
+  creadoPor?: {
+    idUsuario: number
+    nombreApellido: string
+  }
+  createdAt?: string
+  updatedAt?: string
+}
+
 interface AnamnesisMetadataProps {
-  anamnesis: PatientAnamnesisDTO
-  metadata: AnamnesisMetadata | null
+  anamnesis: AnamnesisWithMetadata
+  metadata: AnamnesisMetadataType | null
 }
 
 export const AnamnesisMetadata = memo(function AnamnesisMetadata({ anamnesis, metadata }: AnamnesisMetadataProps) {
@@ -19,14 +29,18 @@ export const AnamnesisMetadata = memo(function AnamnesisMetadata({ anamnesis, me
     <Card className="bg-muted/30 animate-in fade-in duration-300">
       <CardContent className="pt-6">
         <div className="flex flex-wrap gap-6 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            <span>Creado por: {anamnesis.creadoPor.nombreApellido}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span>Creado: {format(new Date(anamnesis.createdAt), "d 'de' MMMM, yyyy", { locale: es })}</span>
-          </div>
+          {anamnesis.creadoPor && (
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              <span>Creado por: {anamnesis.creadoPor.nombreApellido}</span>
+            </div>
+          )}
+          {anamnesis.createdAt && (
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <span>Creado: {format(new Date(anamnesis.createdAt), "d 'de' MMMM, yyyy", { locale: es })}</span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
             <span>Tipo: {anamnesis.tipo}</span>

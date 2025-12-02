@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { getPendingReviews, getPatientPendingReviews } from "@/lib/services/anamnesis-review.service"
+import { getPendingReviews } from "@/lib/services/anamnesis-review.service"
 import { prisma } from "@/lib/prisma"
 
 /**

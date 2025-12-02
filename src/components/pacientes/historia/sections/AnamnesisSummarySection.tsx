@@ -16,9 +16,7 @@ import {
   Pill, 
   Activity, 
   FileText, 
-  Calendar,
-  Plus,
-  Edit
+  Plus
 } from "lucide-react"
 import type { PatientRecord } from "@/lib/types/patient"
 import { formatDate } from "@/lib/utils/patient-helpers"
@@ -36,11 +34,10 @@ export function AnamnesisSummarySection({
   onAddAllergy,
   onAddMedication,
   onAddVitalSigns,
-  onAddNote,
 }: AnamnesisSummarySectionProps) {
   const activeAllergies = patient.allergies?.filter((a) => a.isActive !== false) || []
   const activeMedications = patient.medications?.filter(
-    (m) => m.status === "ACTIVE" || m.status === "active"
+    (m): m is typeof m & { status: "ACTIVE" } => m.status === "ACTIVE"
   ) || []
   const latestVitals = patient.vitalSigns?.[0] || null
   const activeDiagnoses = patient.diagnoses?.filter((d) => d.status === "ACTIVE") || []

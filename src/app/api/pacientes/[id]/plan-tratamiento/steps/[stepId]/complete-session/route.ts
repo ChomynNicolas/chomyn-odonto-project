@@ -1,14 +1,14 @@
 // src/app/api/pacientes/[id]/plan-tratamiento/steps/[stepId]/complete-session/route.ts
 import type { NextRequest } from "next/server"
-import { NextResponse } from "next/server"
-import { requireRole } from "@/app/api/pacientes/[id]/_rbac"
 import { errors, ok } from "@/app/api/_http"
-import { CompleteSessionSchema } from "../../_schemas"
 import { prisma } from "@/lib/prisma"
 import { TreatmentStepStatus, TipoCita } from "@prisma/client"
-import { repoGetStepWithPlan } from "../../_repo"
-import { safeAuditWrite } from "@/lib/audit/log"
 import type { TreatmentStepDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
+import { requireRole } from "@/app/api/pacientes/_rbac"
+import { auditStepSessionComplete } from "../../../_audit"
+import { repoGetStepWithPlan } from "../../../_repo"
+import { CompleteSessionSchema } from "../../../_schemas"
+import { checkPlanCompletion } from "../../../_service"
 
 /**
  * PUT /api/pacientes/[patientId]/plan-tratamiento/steps/[stepId]/complete-session
@@ -176,27 +176,23 @@ export async function PUT(
         appointmentId = newAppointment.idCita
       }
 
-      // Audit log
-      await safeAuditWrite({
-        actorId: userId,
-        action: "UPDATE",
-        entity: "TREATMENT_STEP",
-        entityId: stepId,
-        metadata: {
-          previousSession: currentSession,
-          newSession: newCurrentSession,
+      // Audit log - session completion
+      await auditStepSessionComplete(
+        stepId,
+        step.plan.idTreatmentPlan,
+        userId,
+        {
+          pacienteId: step.plan.pacienteId,
+          order: step.order,
+          currentSession: currentSession,
           totalSessions: totalSessions,
           isLastSession: isLastSession,
-          newStatus: newStatus,
-          appointmentCreated: appointmentId ? true : false,
+          sessionNotes: input.sessionNotes?.trim() || null,
           appointmentId: appointmentId || null,
-          summary: isLastSession
-            ? `Completada sesión final ${currentSession} de ${totalSessions}. Procedimiento finalizado.`
-            : `Completada sesión ${currentSession} de ${totalSessions}. ${totalSessions - newCurrentSession} sesión(es) restante(s).`,
+          citaId: null,
         },
-        headers: req.headers,
-        path: req.nextUrl.pathname,
-      })
+        req
+      )
 
       // Map to DTO
       const stepDTO: TreatmentStepDTO = {
@@ -236,8 +232,23 @@ export async function PUT(
         step: stepDTO,
         appointmentId,
         message,
+        planId: step.plan.idTreatmentPlan,
+        wasStepCompleted: isLastSession,
       }
     })
+
+    // Check if plan should be auto-completed after session completion
+    if (result.wasStepCompleted && result.planId) {
+      try {
+        await checkPlanCompletion(result.planId)
+      } catch (error) {
+        // Log error but don't fail the session completion
+        console.error(
+          "[PUT /api/pacientes/[id]/plan-tratamiento/steps/[stepId]/complete-session] Error checking plan completion:",
+          error
+        )
+      }
+    }
 
     return ok({
       success: true,

@@ -29,6 +29,7 @@ export type AntecedentCategory = z.infer<typeof AntecedentCategoryEnum>
 // ============================================================================
 
 // Antecedent input schema (for creating/updating antecedents)
+// Note: Individual validation is handled conditionally in AnamnesisCreateUpdateBodySchema.superRefine
 export const AnamnesisAntecedentInputSchema = z.object({
   antecedentId: z.number().int().positive().optional(), // If using catalog
   customName: z.string().min(1).max(200).optional(), // If custom antecedent
@@ -37,19 +38,12 @@ export const AnamnesisAntecedentInputSchema = z.object({
   diagnosedAt: z.string().datetime().optional().nullable(),
   isActive: z.boolean().default(true),
   resolvedAt: z.string().datetime().optional().nullable(),
-}).refine(
-  (data) => {
-    // Either antecedentId OR (customName + customCategory) must be provided
-    return data.antecedentId !== undefined || (data.customName !== undefined && data.customCategory !== undefined)
-  },
-  {
-    message: "Either antecedentId or both customName and customCategory must be provided",
-  }
-)
+})
 
 export type AnamnesisAntecedentInput = z.infer<typeof AnamnesisAntecedentInputSchema>
 
 // Medication link schema (enhanced with catalog and custom support)
+// Note: Individual validation is handled conditionally in AnamnesisCreateUpdateBodySchema.superRefine
 export const AnamnesisMedicationLinkSchema = z.object({
   id: z.number().int().positive().optional(), // For existing AnamnesisMedication updates
   medicationId: z.number().int().positive().optional(), // For existing PatientMedication
@@ -67,14 +61,12 @@ export const AnamnesisMedicationLinkSchema = z.object({
   dose: z.string().nullable().optional(), // From PatientMedication.dose
   freq: z.string().nullable().optional(), // From PatientMedication.freq
   route: z.string().nullable().optional(), // From PatientMedication.route
-}).refine(
-  (data) => data.medicationId || data.catalogId || data.customLabel,
-  { message: "Must provide medicationId, catalogId, or customLabel" }
-)
+})
 
 export type AnamnesisMedicationLink = z.infer<typeof AnamnesisMedicationLinkSchema>
 
 // Allergy link schema (enhanced with catalog and custom support)
+// Note: Individual validation is handled conditionally in AnamnesisCreateUpdateBodySchema.superRefine
 export const AnamnesisAllergyLinkSchema = z.object({
   id: z.number().int().positive().optional(), // For existing AnamnesisAllergy updates
   allergyId: z.number().int().positive().optional(), // For existing PatientAllergy
@@ -86,10 +78,7 @@ export const AnamnesisAllergyLinkSchema = z.object({
   isActive: z.boolean().default(true),
   // Display field (from allergy relation - for UI only, not sent to server)
   label: z.string().nullable().optional(), // From PatientAllergy.label or AllergyCatalog.name
-}).refine(
-  (data) => data.allergyId || data.catalogId || data.customLabel,
-  { message: "Must provide allergyId, catalogId, or customLabel" }
-)
+})
 
 export type AnamnesisAllergyLink = z.infer<typeof AnamnesisAllergyLinkSchema>
 
@@ -135,8 +124,12 @@ export const AnamnesisCreateUpdateBodySchema = z.object({
   
   // Normalized data arrays
   antecedents: z.array(AnamnesisAntecedentInputSchema).default([]),
-  medications: z.array(AnamnesisMedicationLinkSchema).default([]), // Enhanced medication entries
-  allergies: z.array(AnamnesisAllergyLinkSchema).default([]), // Enhanced allergy entries
+  // Medications: use a permissive schema that allows partial validation
+  // Full validation happens conditionally in superRefine based on tieneMedicacionActual
+  medications: z.array(z.unknown()).default([]),
+  // Allergies: use a permissive schema that allows partial validation
+  // Full validation happens conditionally in superRefine based on tieneAlergias
+  allergies: z.array(z.unknown()).default([]),
   
   // Women-specific fields (conditional)
   womenSpecific: AnamnesisWomenSpecificSchema.optional(),
@@ -154,6 +147,129 @@ export const AnamnesisCreateUpdateBodySchema = z.object({
     verifiedWithPatient: z.boolean().optional(),
     reason: z.string().max(1000).optional(),
   }).optional(),
+})
+.superRefine((data, ctx) => {
+  // Validación condicional para dolor
+  if (data.tieneDolorActual && (data.dolorIntensidad === null || data.dolorIntensidad === undefined)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "La intensidad del dolor es requerida cuando hay dolor actual",
+      path: ["dolorIntensidad"],
+    })
+  }
+
+  // Validación condicional para antecedentes
+  if (data.tieneEnfermedadesCronicas) {
+    if (!data.antecedents || data.antecedents.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe agregar al menos un antecedente médico cuando tiene enfermedades crónicas",
+        path: ["antecedents"],
+      })
+    } else {
+      // Validar cada antecedente solo si tieneEnfermedadesCronicas es true
+      data.antecedents.forEach((ant, index) => {
+        const hasAntecedentId = ant.antecedentId !== undefined && ant.antecedentId !== null
+        const hasCustomName = ant.customName !== undefined && ant.customName !== null && ant.customName.trim().length > 0
+        const hasCustomCategory = ant.customCategory !== undefined && ant.customCategory !== null
+
+        if (!hasAntecedentId && (!hasCustomName || !hasCustomCategory)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Debe proporcionar un antecedente del catálogo o un nombre y categoría personalizados",
+            path: ["antecedents", index],
+          })
+        }
+      })
+    }
+  } else {
+    // Si tieneEnfermedadesCronicas es false, permitir array vacío sin validar elementos
+    // No hacer nada, el array puede estar vacío
+  }
+
+  // Validación condicional para medicaciones
+  if (data.tieneMedicacionActual) {
+    if (!data.medications || data.medications.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe agregar al menos una medicación cuando tiene medicación actual",
+        path: ["medications"],
+      })
+    } else {
+      // Validar cada medicación solo si tieneMedicacionActual es true
+      // Parse each medication to ensure it matches the schema
+      data.medications.forEach((med, index) => {
+        const result = AnamnesisMedicationLinkSchema.safeParse(med)
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Medicación inválida",
+            path: ["medications", index],
+          })
+          return
+        }
+        
+        const parsedMed = result.data
+        const hasMedicationId = parsedMed.medicationId !== undefined && parsedMed.medicationId !== null
+        const hasCatalogId = parsedMed.catalogId !== undefined && parsedMed.catalogId !== null
+        const hasCustomLabel = parsedMed.customLabel !== undefined && parsedMed.customLabel !== null && parsedMed.customLabel.trim().length > 0
+
+        if (!hasMedicationId && !hasCatalogId && !hasCustomLabel) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Debe proporcionar un medicamento del catálogo, una medicación existente del paciente, o un nombre personalizado",
+            path: ["medications", index],
+          })
+        }
+      })
+    }
+  } else {
+    // Si tieneMedicacionActual es false, ignorar cualquier elemento en el array
+    // El array será limpiado en el frontend, pero si hay elementos inválidos aquí, los ignoramos
+    // No validar nada cuando el flag es false
+  }
+
+  // Validación condicional para alergias
+  if (data.tieneAlergias) {
+    if (!data.allergies || data.allergies.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debe agregar al menos una alergia cuando tiene alergias",
+        path: ["allergies"],
+      })
+    } else {
+      // Validar cada alergia solo si tieneAlergias es true
+      // Parse each allergy to ensure it matches the schema
+      data.allergies.forEach((all, index) => {
+        const result = AnamnesisAllergyLinkSchema.safeParse(all)
+        if (!result.success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Alergia inválida",
+            path: ["allergies", index],
+          })
+          return
+        }
+        
+        const parsedAll = result.data
+        const hasAllergyId = parsedAll.allergyId !== undefined && parsedAll.allergyId !== null
+        const hasCatalogId = parsedAll.catalogId !== undefined && parsedAll.catalogId !== null
+        const hasCustomLabel = parsedAll.customLabel !== undefined && parsedAll.customLabel !== null && parsedAll.customLabel.trim().length > 0
+
+        if (!hasAllergyId && !hasCatalogId && !hasCustomLabel) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Debe proporcionar una alergia del catálogo, una alergia existente del paciente, o un nombre personalizado",
+            path: ["allergies", index],
+          })
+        }
+      })
+    }
+  } else {
+    // Si tieneAlergias es false, ignorar cualquier elemento en el array
+    // El array será limpiado en el frontend, pero si hay elementos inválidos aquí, los ignoramos
+    // No validar nada cuando el flag es false
+  }
 })
 
 export type AnamnesisCreateUpdateBody = z.infer<typeof AnamnesisCreateUpdateBodySchema>
@@ -192,13 +308,16 @@ export const AnamnesisMedicationResponseSchema = z.object({
     idPatientMedication: z.number().int().positive(),
     label: z.string().nullable(),
     medicationCatalog: z.object({
+      idMedicationCatalog: z.number().int().positive(),
       name: z.string(),
+      description: z.string().nullable(),
     }).nullable(),
     dose: z.string().nullable(),
     freq: z.string().nullable(),
     route: z.string().nullable(),
     isActive: z.boolean(),
   }),
+  notes: z.string().nullable(),
 })
 
 export type AnamnesisMedicationResponse = z.infer<typeof AnamnesisMedicationResponseSchema>

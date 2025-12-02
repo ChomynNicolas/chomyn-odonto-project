@@ -4,7 +4,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Pill, FileText } from 'lucide-react';
+import { Pill } from 'lucide-react';
 import type { PatientAnamnesisDTO } from '@/types/patient';
 
 interface AnamnesisMedicationsProps {

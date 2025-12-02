@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { DiagnosisItem } from './DiagnosisItem';
 import { Activity, Calendar, User, FileText, ExternalLink } from 'lucide-react';
 import type { ClinicalHistoryEntryDTO } from '@/types/patient';
-import { formatDate } from '@/lib/utils/patient-helpers';
 
 interface EncounterSectionProps {
   entry: ClinicalHistoryEntryDTO;
@@ -30,7 +29,8 @@ export const EncounterSection = memo(function EncounterSection({
   const diagnosesByStatus = useMemo(() => {
     if (!hasDiagnoses) return { active: [], resolved: [], other: [] };
 
-    return entry.diagnoses.reduce(
+    const diagnoses = entry.diagnoses;
+    return diagnoses.reduce(
       (acc, diag) => {
         const status = diag.status as string;
         if (status === 'ACTIVE' || status === 'UNDER_FOLLOW_UP') {
@@ -42,7 +42,7 @@ export const EncounterSection = memo(function EncounterSection({
         }
         return acc;
       },
-      { active: [] as typeof entry.diagnoses, resolved: [] as typeof entry.diagnoses, other: [] as typeof entry.diagnoses }
+      { active: [] as typeof diagnoses, resolved: [] as typeof diagnoses, other: [] as typeof diagnoses }
     );
   }, [entry.diagnoses, hasDiagnoses]);
 

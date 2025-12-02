@@ -4,7 +4,7 @@
  * Handles PDF generation and export functionality for reports.
  */
 
-import type { ReportKpi, ReportMetadata, ReportTableColumn } from "@/types/reportes"
+import type { ReportKpi, ReportMetadata } from "@/types/reportes"
 
 /** Export scope options */
 export type ExportScope = "currentPage" | "fullDataset"
@@ -203,7 +203,6 @@ export async function generateReportPdf(options: PdfExportOptions): Promise<Blob
     doc.setTextColor(30, 30, 30)
 
     const scope = options.scope ?? "fullDataset"
-    const maxRows = scope === "fullDataset" ? tableData.length : Math.min(tableData.length, 50)
     const dataToExport = scope === "fullDataset" ? tableData : tableData.slice(0, 50)
 
     dataToExport.forEach((row, rowIndex) => {

@@ -26,7 +26,6 @@ export function PatientAttachmentsViewer({
   patientId,
   patientName,
   permissions,
-  userRole,
 }: PatientAttachmentsViewerProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState<AttachmentFilterType>("all")

@@ -37,7 +37,11 @@ export async function POST(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "ID de usuario no definido en la sesión" }, { status: 500 })
+    }
+
+    const actorId = parseInt(auth.session.user.id as string)
     const result = await resetUserPassword(userId, parsed.data, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true, data: result }, { status: 200 })

@@ -3,8 +3,8 @@
  * Helpers para filtrar y ofuscar datos de auditoría según el rol del usuario
  */
 
-import type { AuditLogEntry, AuditMetadata } from "@/lib/types/audit"
-import { getAuditPermissions, canViewOtherUsers } from "./rbac"
+import type { AuditLogEntry } from "@/lib/types/audit"
+import { getAuditPermissions } from "./rbac"
 
 /**
  * Ofusca una dirección IP según el rol
@@ -48,15 +48,16 @@ export function maskEmail(email: string | null | undefined, role: "ADMIN" | "ODO
  * Ofusca información de usuario según el rol
  */
 export function maskUserInfo(
-  user: { id: number; nombre: string; email?: string | null },
+  user: { id: number; nombre: string; email?: string | null; role?: "ADMIN" | "ODONT" | "RECEP" },
   role: "ADMIN" | "ODONT" | "RECEP"
-): { id: number; nombre: string; email: string | null } {
+): { id: number; nombre: string; email: string | null; role: "ADMIN" | "ODONT" | "RECEP" } {
   const permissions = getAuditPermissions(role)
   
   return {
     id: user.id,
     nombre: permissions.canViewOtherUsers ? user.nombre : `Usuario #${user.id}`,
     email: permissions.canViewEmailAddresses ? (user.email || null) : maskEmail(user.email, role),
+    role: user.role || role,
   }
 }
 
@@ -98,7 +99,7 @@ export function filterAuditEntry(
   entry: AuditLogEntry,
   role: "ADMIN" | "ODONT" | "RECEP"
 ): AuditLogEntry {
-  const permissions = getAuditPermissions(role)
+  
   
   return {
     ...entry,

@@ -1,7 +1,6 @@
 "use client"
 
 import { ThemeToggleButton } from "@/components/common/ThemeToggleButton"
-import NotificationDropdown from "@/components/header/NotificationDropdown"
 import { UserIdentity } from "@/components/header/UserIdentity"
 import { useSidebar } from "@/context/SidebarContext"
 import { useSession } from "next-auth/react"
@@ -146,8 +145,7 @@ const AppHeader: React.FC = () => {
           {/* Theme Toggle */}
           <ThemeToggleButton />
 
-          {/* Notifications */}
-          <NotificationDropdown />
+
 
           {/* Divider - hidden on mobile */}
           <div className="hidden h-8 w-px bg-gray-200 dark:bg-gray-700 sm:block" />

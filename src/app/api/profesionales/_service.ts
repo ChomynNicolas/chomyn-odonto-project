@@ -15,7 +15,7 @@ import type { ProfesionalListItemDTO, ProfesionalDetailDTO } from "./_dto"
 import { validateUsuarioODONT, validateUniqueness } from "./_security"
 import { safeAuditWrite } from "@/lib/audit/log"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 
 /**
  * Lista profesionales con filtros, paginación y búsqueda
@@ -274,7 +274,7 @@ export async function createProfesional(
         estaActivo: body.estaActivo ?? true,
         disponibilidad: body.disponibilidad
           ? (body.disponibilidad as Prisma.InputJsonValue)
-          : null,
+          : Prisma.JsonNull,
       },
       select: {
         idProfesional: true,
@@ -375,7 +375,7 @@ export async function updateProfesional(
   if (body.disponibilidad !== undefined) {
     updateData.disponibilidad = body.disponibilidad
       ? (body.disponibilidad as Prisma.InputJsonValue)
-      : null
+      : Prisma.JsonNull
   }
 
   // Actualizar profesional y especialidades en transacción
@@ -439,7 +439,7 @@ export async function updateProfesional(
 
   // Determinar tipo de acción para audit log
   const metadata: Record<string, unknown> = {
-    changes: {},
+    changes: {} as Record<string, unknown>,
   }
 
   if (body.numeroLicencia !== undefined && body.numeroLicencia !== currentProfesional.numeroLicencia) {
@@ -450,19 +450,20 @@ export async function updateProfesional(
 
   if (body.estaActivo !== undefined && body.estaActivo !== currentProfesional.estaActivo) {
     metadata.changes = {
-      ...metadata.changes,
+      ...(metadata.changes as Record<string, unknown>),
       estaActivo: { old: currentProfesional.estaActivo, new: body.estaActivo },
     }
   }
 
   if (body.especialidadIds !== undefined) {
     const currentIds = currentProfesional.especialidades.map((e) => e.especialidadId)
-    const added = body.especialidadIds.filter((id) => !currentIds.includes(id))
-    const removed = currentIds.filter((id) => !body.especialidadIds.includes(id))
+    const especialidadIds = body.especialidadIds
+    const added = especialidadIds.filter((id) => !currentIds.includes(id))
+    const removed = currentIds.filter((id) => !especialidadIds.includes(id))
 
     if (added.length > 0 || removed.length > 0) {
       metadata.changes = {
-        ...metadata.changes,
+        ...(metadata.changes as Record<string, unknown>),
         especialidades: { added, removed },
       }
     }

@@ -33,7 +33,6 @@ interface DiagnosisItemProps {
 export const DiagnosisItem = memo(function DiagnosisItem({
   diagnosis,
   citaId,
-  patientId,
   className,
 }: DiagnosisItemProps) {
   const detailUrl = `/agenda/citas/${citaId}/consulta?diagnosisId=${diagnosis.id}`;

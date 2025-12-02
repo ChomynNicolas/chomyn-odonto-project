@@ -2,23 +2,79 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Zap, Activity, Pill, AlertTriangle, Edit } from "lucide-react"
+import { Zap, Activity, Pill, AlertTriangle } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { PatientAnamnesisDTO } from "@/types/patient"
 import { memo } from "react"
 
+// Extended type to include all relations from API response
+type AnamnesisWithAllRelations = PatientAnamnesisDTO & {
+  medications?: Array<{
+    idAnamnesisMedication: number
+    medicationId: number | null
+    medication: {
+      idPatientMedication: number
+      label: string
+      medicationCatalog: {
+        idMedicationCatalog: number
+        name: string
+        description: string | null
+      } | null
+      dose: string | null
+      freq: string | null
+      route: string | null
+      isActive: boolean
+    }
+    notes: string | null
+  }>
+  allergies?: Array<{
+    idAnamnesisAllergy: number
+    allergyId: number | null
+    allergy: {
+      idPatientAllergy: number
+      label: string
+      allergyCatalog: {
+        idAllergyCatalog: number
+        name: string
+      } | null
+      severity: string
+      reaction: string | null
+      isActive: boolean
+    }
+  }>
+  antecedents?: Array<{
+    idAnamnesisAntecedent: number
+    anamnesisId: number
+    antecedentId: number | null
+    antecedentCatalog: {
+      idAntecedentCatalog: number
+      code: string
+      name: string
+      category: string
+      description: string | null
+    } | null
+    customName: string | null
+    customCategory: string | null
+    notes: string | null
+    diagnosedAt: string | null
+    isActive: boolean
+    resolvedAt: string | null
+  }>
+  actualizadoPor?: {
+    idUsuario: number
+    nombreApellido: string
+  } | null
+}
+
 interface AnamnesisSummaryCardsProps {
-  anamnesis: PatientAnamnesisDTO
+  anamnesis: AnamnesisWithAllRelations
   canEdit: boolean
   onEdit: () => void
 }
 
 export const AnamnesisSummaryCards = memo(function AnamnesisSummaryCards({
   anamnesis,
-  canEdit,
-  onEdit,
 }: AnamnesisSummaryCardsProps) {
   const activeMedicationsCount = anamnesis.medications?.filter((m) => m.medication.isActive).length || 0
   const activeAllergiesCount = anamnesis.allergies?.filter((a) => a.allergy.isActive).length || 0
@@ -39,12 +95,6 @@ export const AnamnesisSummaryCards = memo(function AnamnesisSummaryCards({
               )}
             </p>
           </div>
-          {canEdit && (
-            <Button onClick={onEdit} variant="outline" size="sm" className="flex items-center gap-2 bg-transparent">
-              <Edit className="h-4 w-4" />
-              Editar Anamnesis
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent>

@@ -29,7 +29,7 @@ export function normalizePhone(phone: string, defaultCountryCode = "+595"): stri
   if (!phone || typeof phone !== "string") return ""
 
   // Remove all non-digit characters except +
-  let clean = phone.replace(/[^\d+]/g, "")
+  const clean = phone.replace(/[^\d+]/g, "")
 
   // Handle empty input
   if (!clean) return ""
@@ -151,7 +151,7 @@ export function isMobilePhone(phone: string): boolean {
   // Check if starts with mobile prefix (3 digits)
   if (digits.length >= 3) {
     const prefix = digits.substring(0, 3)
-    return PARAGUAY_MOBILE_PREFIXES.includes(prefix as any)
+    return (PARAGUAY_MOBILE_PREFIXES as readonly string[]).includes(prefix)
   }
 
   return false

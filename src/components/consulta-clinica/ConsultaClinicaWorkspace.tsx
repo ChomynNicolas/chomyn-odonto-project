@@ -8,6 +8,7 @@ import { useConsulta } from "./hooks/useConsulta"
 import { useConsultaPermissions } from "./hooks/useConsultaPermissions"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
 import { MobileBottomNav } from "./MobileBottomNav"
 import { ResumenDialog } from "./ResumenDialog"
 import { SafetyAlertsBar } from "./SafetyAlertsBar"
@@ -44,7 +45,7 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
 
   const { canEdit, canView } = useConsultaPermissions(userRole, null)
   const { consulta, isLoading, refetch: fetchConsulta } = useConsulta(citaId, canView, canEdit)
-  const { isFinalized, hasConsulta, canEditModules, canViewResumen } = useConsultaPermissions(userRole, consulta)
+  const { isFinalized, hasConsulta, canEditModules } = useConsultaPermissions(userRole, consulta)
 
   // Hook para anamnesis context
   const {
@@ -239,15 +240,26 @@ export function ConsultaClinicaWorkspace({ citaId, userRole }: ConsultaClinicaWo
       <SkipLinks />
 
       {/* ZONA A: Alertas de Seguridad - Sticky top */}
-      <SafetyAlertsBar alergias={consulta.alergias} medicaciones={consulta.medicaciones} />
+      <SafetyAlertsBar alergias={consulta.alergias || []} medicaciones={consulta.medicaciones || []} />
 
       {/* ZONA A: Header con contexto del paciente */}
-      <WorkspaceHeader
-        paciente={consulta.paciente}
-        status={consulta.status}
-        createdAt={consulta.createdAt}
-        finishedAt={consulta.finishedAt}
-      />
+      {consulta.paciente ? (
+        <WorkspaceHeader
+          paciente={consulta.paciente}
+          status={consulta.status}
+          createdAt={consulta.createdAt}
+          finishedAt={consulta.finishedAt}
+        />
+      ) : (
+        <header className="bg-card border-b sticky top-0 z-40 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="text-muted-foreground">Información del paciente no disponible</div>
+            <Badge variant="secondary">
+              {consulta.status === "FINAL" ? "Finalizada" : consulta.status === "DRAFT" ? "Borrador" : "No iniciada"}
+            </Badge>
+          </div>
+        </header>
+      )}
 
       {/* Layout principal: Sidebar + Contenido */}
       <div className="flex flex-1 overflow-hidden">
