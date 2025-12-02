@@ -2,7 +2,6 @@
 // Helper functions for extracting and validating anamnesis payload data
 
 import type {
-  AnamnesisPayload,
   ExtractedPayloadData,
   WomenSpecificPayload,
   PediatricSpecificPayload,

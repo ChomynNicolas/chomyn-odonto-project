@@ -103,7 +103,7 @@ export async function apiCheckSlotDisponible(params: {
     // Verificar si el slot solicitado está completamente contenido en el slot disponible
     // O tiene overlap significativo (más del 80% del slot solicitado)
     // Esto maneja casos donde hay pequeñas diferencias de milisegundos debido a redondeo
-    const slotDuration = slotEnd.getTime() - slotStart.getTime();
+    
     const solicitadoDuration = solicitadoEnd.getTime() - solicitadoStart.getTime();
     
     // Verificar si hay overlap básico

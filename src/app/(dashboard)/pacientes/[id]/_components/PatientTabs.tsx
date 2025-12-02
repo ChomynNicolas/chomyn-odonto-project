@@ -22,14 +22,17 @@ interface PatientTabsProps {
 
 type TabValue = "anamnesis" | "clinical-history" | "treatment-plans" | "odontogram" | "administrative"
 
+const clinicalTabs: TabValue[] = ["anamnesis", "clinical-history", "treatment-plans", "odontogram"]
+const adminTabs: TabValue[] = ["administrative"]
+
 export function PatientTabs({ patientId, currentRole }: PatientTabsProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const clinicalTabs: TabValue[] = ["anamnesis", "clinical-history", "treatment-plans", "odontogram"]
-  const adminTabs: TabValue[] = ["administrative"]
-  const visibleTabs = currentRole === "RECEP" ? adminTabs : [...clinicalTabs, "administrative"]
+  const visibleTabs = useMemo(() => {
+    return currentRole === "RECEP" ? adminTabs : [...clinicalTabs, "administrative"]
+  }, [currentRole])
 
   const urlTab = searchParams.get("tab") as TabValue | null
   const activeTab = useMemo(() => {

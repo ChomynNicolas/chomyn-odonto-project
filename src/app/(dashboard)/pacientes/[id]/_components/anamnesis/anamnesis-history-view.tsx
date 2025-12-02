@@ -27,7 +27,7 @@ interface AnamnesisVersion {
   restoredFromVersionId: number | null
   changeSummary: Record<string, unknown> | null
   tipo: "ADULTO" | "PEDIATRICO"
-  motivoConsulta: string | null
+  // motivoConsulta removed - it's now in consulta, not anamnesis
   tieneDolorActual: boolean
   dolorIntensidad: number | null
   urgenciaPercibida: string | null
@@ -195,12 +195,7 @@ export function AnamnesisHistoryView({ patientId }: AnamnesisHistoryViewProps) {
                             </div>
                           )}
                         </div>
-                        {version.motivoConsulta && (
-                          <div className="text-sm">
-                            <span className="font-medium">Motivo:</span>{" "}
-                            <span className="text-muted-foreground">{version.motivoConsulta}</span>
-                          </div>
-                        )}
+                        {/* motivoConsulta removed - it's now in consulta, not anamnesis */}
                       </div>
                     )}
                   </div>

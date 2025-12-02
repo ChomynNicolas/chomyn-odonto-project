@@ -39,7 +39,7 @@ const especialidadFormSchema = z.object({
   isActive: z.boolean().default(true),
 })
 
-type EspecialidadFormValues = z.infer<typeof especialidadFormSchema>
+type EspecialidadFormValues = z.input<typeof especialidadFormSchema>
 
 interface EspecialidadFormProps {
   open: boolean
@@ -102,14 +102,14 @@ export default function EspecialidadForm({
         const updateData: EspecialidadUpdateInput = {
           nombre: values.nombre,
           descripcion: values.descripcion ?? null,
-          isActive: values.isActive,
+          isActive: values.isActive ?? true,
         }
         await updateEspecialidad(especialidadId, updateData)
       } else {
         const createData: EspecialidadCreateInput = {
           nombre: values.nombre,
           descripcion: values.descripcion ?? null,
-          isActive: values.isActive,
+          isActive: values.isActive ?? true,
         }
         await createEspecialidad(createData)
       }

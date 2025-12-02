@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Image, FileText, X, Download, Eye, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, FileText,Download,  AlertCircle } from 'lucide-react';
+import Image from 'next/image';
 import {
   Dialog,
   DialogContent,
@@ -72,9 +73,9 @@ export function AttachmentGallery({ patientId, limit = 50 }: AttachmentGalleryPr
 
   const getAttachmentIcon = (tipo: string) => {
     if (tipo.includes('PHOTO') || tipo === 'IMAGE' || tipo === 'XRAY') {
-      return <Image className="h-8 w-8 text-muted-foreground" />;
+      return <ImageIcon className="h-8 w-8 text-muted-foreground" aria-label="Icono de imagen" />;
     }
-    return <FileText className="h-8 w-8 text-muted-foreground" />;
+    return <FileText className="h-8 w-8 text-muted-foreground" aria-label="Icono de documento" />;
   };
 
   const formatFileSize = (bytes: number) => {
@@ -123,13 +124,14 @@ export function AttachmentGallery({ patientId, limit = 50 }: AttachmentGalleryPr
                 onClick={() => setSelectedAttachment(attachment.id)}
               >
                 <CardContent className="p-4">
-                  <div className="aspect-square flex items-center justify-center bg-muted rounded-lg mb-2">
+                  <div className="aspect-square flex items-center justify-center bg-muted rounded-lg mb-2 relative">
                     {attachment.tipo.includes('PHOTO') || attachment.tipo === 'IMAGE' || attachment.tipo === 'XRAY' ? (
-                      <img
+                      <Image
                         src={attachment.secureUrl}
                         alt={attachment.descripcion || 'Adjunto clínico'}
-                        className="w-full h-full object-cover rounded-lg"
-                        loading="lazy"
+                        fill
+                        className="object-cover rounded-lg"
+                        sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                       />
                     ) : (
                       getAttachmentIcon(attachment.tipo)
@@ -170,11 +172,16 @@ export function AttachmentGallery({ patientId, limit = 50 }: AttachmentGalleryPr
                 </DialogHeader>
                 <div className="mt-4">
                   {(attachment.tipo.includes('PHOTO') || attachment.tipo === 'IMAGE' || attachment.tipo === 'XRAY') ? (
-                    <img
-                      src={attachment.secureUrl}
-                      alt={attachment.descripcion || 'Adjunto clínico'}
-                      className="w-full h-auto rounded-lg"
-                    />
+                    <div className="relative w-full aspect-auto">
+                      <Image
+                        src={attachment.secureUrl}
+                        alt={attachment.descripcion || 'Adjunto clínico'}
+                        width={800}
+                        height={600}
+                        className="w-full h-auto rounded-lg"
+                        sizes="(max-width: 768px) 100vw, 800px"
+                      />
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 bg-muted rounded-lg">
                       <FileText className="h-16 w-16 text-muted-foreground mb-4" />

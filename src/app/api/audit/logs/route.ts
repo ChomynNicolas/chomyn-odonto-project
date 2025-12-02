@@ -7,7 +7,7 @@
 import { type NextRequest } from "next/server"
 import { auth } from "@/auth"
 import { ok, errors } from "@/app/api/_http"
-import { auditLogFiltersSchema } from "../_schemas"
+import { parseAuditLogFilters } from "../_schemas"
 import { prisma } from "@/lib/prisma"
 import { canAccessGlobalAuditLog } from "@/lib/audit/rbac"
 import { filterAuditEntries } from "@/lib/audit/filters"
@@ -28,8 +28,20 @@ export async function GET(req: NextRequest) {
     }
 
     // Parsear y validar query params
-    const searchParams = Object.fromEntries(req.nextUrl.searchParams.entries())
-    const filters = auditLogFiltersSchema.parse(searchParams)
+    let filters
+    try {
+      filters = parseAuditLogFilters(req.nextUrl.searchParams)
+    } catch (error) {
+      if (error instanceof Error && error.name === "ZodError") {
+        const zodError = error as { issues?: Array<{ path: (string | number)[]; message: string }> }
+        const firstIssue = zodError.issues?.[0]
+        const field = firstIssue?.path?.join(".") || "filtro"
+        const message = firstIssue?.message || "Parámetro de filtro inválido"
+        console.error("[GET /api/audit/logs] Error de validación:", zodError.issues)
+        return errors.validation(`Error en el filtro '${field}': ${message}`)
+      }
+      throw error
+    }
 
     // Construir condiciones de filtro usando helper centralizado
     const where = buildAuditLogWhere(filters)
@@ -42,14 +54,30 @@ export async function GET(req: NextRequest) {
     // Contar total de registros
     const total = await prisma.auditLog.count({ where })
 
+    // Construir orderBy - manejar sorting por relación actor
+    const sortBy = filters.sortBy ?? "createdAt"
+    const sortOrder = filters.sortOrder ?? "desc"
+    
+    let orderBy: Record<string, "asc" | "desc"> | { actor: { nombreApellido: "asc" | "desc" } }
+    
+    if (sortBy === "actor") {
+      orderBy = {
+        actor: {
+          nombreApellido: sortOrder,
+        },
+      }
+    } else {
+      orderBy = {
+        [sortBy]: sortOrder,
+      }
+    }
+
     // Obtener registros con paginación
     const logs = await prisma.auditLog.findMany({
       where,
       skip,
       take: limit,
-      orderBy: {
-        [filters.sortBy ?? "createdAt"]: filters.sortOrder ?? "desc",
-      },
+      orderBy,
       include: {
         actor: {
           select: {
@@ -105,10 +133,7 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === "ZodError") {
-      const zodError = e as { issues?: Array<{ message?: string }> }
-      return errors.validation(zodError.issues?.[0]?.message ?? "Parámetros de filtro inválidos")
-    }
+    // Los errores de validación ya se manejan arriba, aquí solo errores inesperados
     const errorMessage = e instanceof Error ? e.message : String(e)
     console.error("[GET /api/audit/logs]", e)
     return errors.internal(errorMessage ?? "Error al obtener registros de auditoría")

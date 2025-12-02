@@ -34,7 +34,7 @@ export async function GET(
     const plans = await prisma.treatmentPlan.findMany({
       where: {
         pacienteId: patientId,
-        ...(includeInactive ? {} : { isActive: true }),
+        ...(includeInactive ? {} : { status: 'ACTIVE' }),
       },
       include: {
         steps: {
@@ -57,32 +57,84 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     });
 
-    const response = plans.map(plan => ({
-      id: plan.idTreatmentPlan,
-      titulo: plan.titulo,
-      descripcion: plan.descripcion,
-      isActive: plan.isActive,
-      createdAt: plan.createdAt.toISOString(),
-      createdBy: plan.creadoPor?.nombreApellido || 'Desconocido',
-      steps: plan.steps.map(step => ({
-        id: step.idTreatmentStep,
-        order: step.order,
-        // Use catalog name if available, otherwise fallback to serviceType or default
-        procedure: step.procedimientoCatalogo?.nombre || step.serviceType || 'Procedimiento',
-        toothNumber: step.toothNumber,
-        surface: step.toothSurface || null, // Map toothSurface to surface for frontend compatibility
-        status: step.status,
-        estimatedCostCents: step.estimatedCostCents,
-        notes: step.notes,
-        executedCount: step._count.consultaProcedimientos,
-      })),
-      progress: {
-        total: plan.steps.length,
-        completed: plan.steps.filter(s => s.status === 'COMPLETED').length,
-        inProgress: plan.steps.filter(s => s.status === 'IN_PROGRESS').length,
-        pending: plan.steps.filter(s => s.status === 'PENDING').length,
-      },
-    }));
+    const response = plans.map(plan => {
+      // Calculate session-level progress for multi-session steps
+      let totalSessions = 0
+      let completedSessions = 0
+
+      const steps = plan.steps.map(step => {
+        const isMultiSession = step.requiresMultipleSessions && step.totalSessions && step.totalSessions >= 2
+        const currentSession = step.currentSession ?? (isMultiSession ? 1 : null)
+        const totalSessionsForStep = isMultiSession ? step.totalSessions! : 1
+        
+        // Calculate completed sessions for this step
+        let completedSessionsForStep = 0
+        if (isMultiSession) {
+          // If step is COMPLETED, all sessions are done
+          if (step.status === 'COMPLETED') {
+            completedSessionsForStep = totalSessionsForStep
+          } else if (currentSession && currentSession > 1) {
+            // currentSession represents the next session to work on
+            // So completed sessions = currentSession - 1
+            completedSessionsForStep = currentSession - 1
+          }
+        } else {
+          // Single session step
+          completedSessionsForStep = step.status === 'COMPLETED' ? 1 : 0
+        }
+
+        // Accumulate for plan-level metrics
+        totalSessions += totalSessionsForStep
+        completedSessions += completedSessionsForStep
+
+        // Calculate session progress
+        const sessionProgress = isMultiSession ? {
+          completedSessions: completedSessionsForStep,
+          totalSessions: totalSessionsForStep,
+          isCompleted: step.status === 'COMPLETED',
+          currentSession: currentSession,
+        } : undefined
+
+        return {
+          id: step.idTreatmentStep,
+          order: step.order,
+          // Use catalog name if available, otherwise fallback to serviceType or default
+          procedure: step.procedimientoCatalogo?.nombre || step.serviceType || 'Procedimiento',
+          toothNumber: step.toothNumber,
+          surface: step.toothSurface || null, // Map toothSurface to surface for frontend compatibility
+          status: step.status,
+          estimatedCostCents: step.estimatedCostCents,
+          notes: step.notes,
+          executedCount: step._count.consultaProcedimientos,
+          // Multi-session fields
+          requiresMultipleSessions: step.requiresMultipleSessions,
+          totalSessions: step.totalSessions,
+          currentSession: currentSession,
+          completedAt: step.completedAt?.toISOString() || null,
+          // Session progress (derived)
+          sessionProgress,
+        }
+      })
+
+      return {
+        id: plan.idTreatmentPlan,
+        titulo: plan.titulo,
+        descripcion: plan.descripcion,
+        status: plan.status,
+        createdAt: plan.createdAt.toISOString(),
+        createdBy: plan.creadoPor?.nombreApellido || 'Desconocido',
+        steps,
+        progress: {
+          total: plan.steps.length,
+          completed: plan.steps.filter(s => s.status === 'COMPLETED').length,
+          inProgress: plan.steps.filter(s => s.status === 'IN_PROGRESS').length,
+          pending: plan.steps.filter(s => s.status === 'PENDING').length,
+          // Session-aware metrics
+          completedSessions: totalSessions > 0 ? completedSessions : undefined,
+          totalSessions: totalSessions > 0 ? totalSessions : undefined,
+        },
+      }
+    });
 
     return NextResponse.json({ ok: true, data: { plans: response } }, { status: 200 });
   } catch (error) {

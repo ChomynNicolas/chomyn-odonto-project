@@ -40,7 +40,7 @@ const diagnosisCatalogFormSchema = z.object({
   isActive: z.boolean().default(true),
 })
 
-type DiagnosisCatalogFormValues = z.infer<typeof diagnosisCatalogFormSchema>
+type DiagnosisCatalogFormValues = z.input<typeof diagnosisCatalogFormSchema>
 
 interface DiagnosisCatalogFormProps {
   open: boolean
@@ -119,7 +119,7 @@ export default function DiagnosisCatalogForm({
           code: values.code,
           name: values.name,
           description: values.description ?? null,
-          isActive: values.isActive,
+          isActive: values.isActive ?? true,
         }
         await createDiagnosisCatalog(createData)
       }

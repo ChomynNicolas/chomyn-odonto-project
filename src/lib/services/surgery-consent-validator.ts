@@ -139,7 +139,7 @@ export async function getResponsiblePartyForSurgery(
       ]
     },
     include: {
-      responsable: true
+      persona: true
     }
   })
   
@@ -153,7 +153,7 @@ export async function getResponsiblePartyForSurgery(
   }
   
   return {
-    responsiblePartyId: responsable.responsablePersonaId,
+    responsiblePartyId: responsable.personaId,
     isMinor: true
   }
 }
@@ -205,16 +205,15 @@ export async function validateSurgeryConsent(
     throw error
   }
   
-  // Check for valid surgery consent - prioritize consent associated with this specific appointment
-  // Surgery consents are appointment-specific, so we first look for one tied to this citaId
-  let consentimiento = await prisma.consentimiento.findFirst({
+  // Check for valid surgery consent - ONLY consent specifically for this appointment is valid
+  // All surgery consents must be per-appointment (esEspecificoPorCita = true)
+  const consentimiento = await prisma.consentimiento.findFirst({
     where: {
       Paciente_idPaciente: pacienteId,
       Persona_idPersona_responsable: responsibleParty.responsiblePartyId,
       tipo: "CIRUGIA",
       activo: true,
-      Cita_idCita: citaId, // First priority: consent specifically for this appointment
-      vigente_hasta: { gte: inicio }
+      Cita_idCita: citaId, // Only consent specifically for this appointment
     },
     include: {
       responsable: {
@@ -226,29 +225,6 @@ export async function validateSurgeryConsent(
     },
     orderBy: { vigente_hasta: "desc" }
   })
-
-  // If no appointment-specific consent found, look for any valid surgery consent
-  // (fallback for backward compatibility, though ideally all surgery consents should be appointment-specific)
-  if (!consentimiento) {
-    consentimiento = await prisma.consentimiento.findFirst({
-      where: {
-        Paciente_idPaciente: pacienteId,
-        Persona_idPersona_responsable: responsibleParty.responsiblePartyId,
-        tipo: "CIRUGIA",
-        activo: true,
-        vigente_hasta: { gte: inicio }
-      },
-      include: {
-        responsable: {
-          select: {
-            nombres: true,
-            apellidos: true
-          }
-        }
-      },
-      orderBy: { vigente_hasta: "desc" }
-    })
-  }
   
   if (!consentimiento) {
     const errorMessage = responsibleParty.isMinor
@@ -278,7 +254,7 @@ export async function validateSurgeryConsent(
       vigenteHasta: consentimiento.vigente_hasta,
       responsableNombre: `${consentimiento.responsable.nombres} ${consentimiento.responsable.apellidos}`.trim(),
       citaId: consentimiento.Cita_idCita ?? null,
-      esEspecificoPorCita: consentimiento.Cita_idCita !== null
+      esEspecificoPorCita: true // All consents are now per-appointment
     }
   }
 }

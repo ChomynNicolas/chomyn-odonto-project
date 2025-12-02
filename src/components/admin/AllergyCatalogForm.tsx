@@ -36,7 +36,7 @@ import { toast } from "sonner"
 const allergyCatalogFormSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").max(255, "El nombre no puede exceder 255 caracteres"),
   description: z.string().max(1000, "La descripción no puede exceder 1000 caracteres").optional().nullable(),
-  isActive: z.boolean().default(true),
+  isActive: z.boolean(),
 })
 
 type AllergyCatalogFormValues = z.infer<typeof allergyCatalogFormSchema>

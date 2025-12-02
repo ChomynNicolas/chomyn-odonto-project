@@ -19,7 +19,8 @@ import { toast } from "sonner"
 import { Plus, AlertTriangle } from "lucide-react"
 import { AutocompleteSearch, type SearchResult } from "./AutocompleteSearch"
 import { AllergyEntryCard, type AllergyEntry } from "./AllergyEntryCard"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema, type AnamnesisAllergyLink } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/dialog"
 
 interface AllergySelectorProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   pacienteId: number
   disabled?: boolean
 }
@@ -264,7 +265,21 @@ export function AllergySelector({
 
   // Map form fields to AllergyEntry format for display
   const entries: AllergyEntry[] = fields.map((field, index) => {
-    const value = form.watch(`allergies.${index}`)
+    const value = form.watch(`allergies.${index}`) as AnamnesisAllergyLink | undefined
+    if (!value) {
+      // Fallback for undefined values
+      return {
+        id: undefined,
+        allergyId: undefined,
+        catalogId: undefined,
+        customLabel: undefined,
+        severity: "MODERATE" as const,
+        reaction: undefined,
+        notes: undefined,
+        isActive: true,
+        label: undefined,
+      }
+    }
     return {
       id: value.id,
       allergyId: value.allergyId,

@@ -5,6 +5,7 @@ import type {
   AppointmentStatus,
   AttachmentType,
   ContactType,
+  Country,
   DiagnosisStatus,
   DocumentType,
   Gender,
@@ -95,12 +96,7 @@ function mapOdontogramFromDTO(dto: PacienteFichaCompletaDTO): OdontogramSnapshot
   return [snapshot]
 }
 
-function splitApellidos(raw?: string | null): { lastName: string; secondLastName?: string } {
-  const parts = (raw ?? "").trim().split(/\s+/).filter(Boolean)
-  const lastName = parts.shift() ?? ""
-  const secondLastName = parts.length ? parts.join(" ") : undefined
-  return { lastName, secondLastName }
-}
+
 
 // Type for vital signs from DTO
 type VitalSignsDTO = {
@@ -410,6 +406,22 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     ? documentTypeMap[dto.persona.documento.tipo] ?? "OTHER"
     : undefined
 
+  // Map country type
+  const countryMap: Record<string, Country> = {
+    PY: "PY",
+    AR: "AR",
+    BR: "BR",
+    PARAGUAY: "PY",
+    ARGENTINA: "AR",
+    BRASIL: "BR",
+    BRAZIL: "BR",
+  }
+  const mapCountry = (country?: string | null): Country | undefined => {
+    if (!country) return undefined
+    const upper = country.toUpperCase()
+    return countryMap[upper] ?? "OTHER"
+  }
+
   return {
     // Demográficos base
     id: String(dto.idPaciente),
@@ -423,11 +435,11 @@ export function mapFichaToPatientRecord(dto: PacienteFichaCompletaDTO): PatientR
     city: dto.persona.ciudad ?? undefined, // ⭐ Added
     documentType,
     documentNumber: dto.persona.documento?.numero,
-    documentCountry: dto.persona.documento?.paisEmision ?? undefined, // ⭐ Added
+    documentCountry: mapCountry(dto.persona.documento?.paisEmision), // ⭐ Added
     documentIssueDate: dto.persona.documento?.fechaEmision ?? undefined, // ⭐ Added
     documentExpiryDate: dto.persona.documento?.fechaVencimiento ?? undefined, // ⭐ Added
     ruc: dto.persona.documento?.ruc ?? undefined,
-    country: dto.persona.pais ?? "PY", // ⭐ Added
+    country: mapCountry(dto.persona.pais) ?? "PY", // ⭐ Added
     emergencyContactName: dto.persona.contactoEmergenciaNombre ?? undefined, // ⭐ Added
     emergencyContactPhone: dto.persona.contactoEmergenciaTelefono ?? undefined, // ⭐ Added
     emergencyContactRelation: dto.persona.contactoEmergenciaRelacion ?? undefined, // ⭐ Added

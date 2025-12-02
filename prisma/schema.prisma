@@ -58,7 +58,9 @@ model Usuario {
   ClinicalHistoryEntry                ClinicalHistoryEntry[]
   PatientDiagnosis                    PatientDiagnosis[]
   PatientAllergy                      PatientAllergy[]
-  PatientMedication                   PatientMedication[]
+  PatientMedication                   PatientMedication[]                    @relation("PatientMedicationCreatedBy")
+  PatientMedicationUpdatedBy          PatientMedication[]                    @relation("PatientMedicationUpdatedBy")
+  PatientMedicationDiscontinuedBy     PatientMedication[]                    @relation("PatientMedicationDiscontinuedBy")
   PatientVitals                       PatientVitals[]
   OdontogramSnapshot                  OdontogramSnapshot[]
   PeriodontogramSnapshot              PeriodontogramSnapshot[]
@@ -494,6 +496,12 @@ enum TreatmentStepStatus {
   DEFERRED
 }
 
+enum TreatmentPlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model ProcedimientoCatalogo {
   idProcedimiento    Int      @id @default(autoincrement()) @map("idProcedimiento")
   code               String   @unique @map("code") // p.ej. C11, ADA code, interno, etc.
@@ -553,6 +561,7 @@ model Consulta {
   anamnesisAuditLogs     AnamnesisAuditLog[]
   encounterDiagnoses     EncounterDiagnosis[]
   diagnosisStatusHistory DiagnosisStatusHistory[]
+  patientMedications     PatientMedication[]
 
   @@map("Consulta")
 }
@@ -658,9 +667,9 @@ model TreatmentPlan {
   pacienteId      Int      @map("Paciente_idPaciente")
   paciente        Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
 
-  titulo      String  @map("titulo")
-  descripcion String? @map("descripcion")
-  isActive    Boolean @default(true) @map("is_active")
+  titulo      String              @map("titulo")
+  descripcion String?             @map("descripcion")
+  status      TreatmentPlanStatus @default(ACTIVE) @map("status")
 
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
   creadoPor       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
@@ -670,7 +679,7 @@ model TreatmentPlan {
 
   steps TreatmentStep[]
 
-  @@index([pacienteId, isActive])
+  @@index([pacienteId, status])
   @@map("TreatmentPlan")
 }
 
@@ -694,6 +703,12 @@ model TreatmentStep {
   priority             Int?                @map("priority") // 1..5
   status               TreatmentStepStatus @default(PENDING) @map("status")
   notes                String?             @map("notes")
+
+  // Multi-session support
+  requiresMultipleSessions Boolean @default(false) @map("requires_multiple_sessions")
+  totalSessions           Int?                     @map("total_sessions")
+  currentSession          Int?    @default(1)      @map("current_session")
+  completedAt             DateTime?                 @map("completed_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -892,21 +907,33 @@ model PatientMedication {
   medicationCatalog   MedicationCatalog? @relation(fields: [medicationId], references: [idMedicationCatalog], onDelete: SetNull)
 
   // libre si no cat
-  label    String?   @map("label")
-  dose     String?   @map("dose")
-  freq     String?   @map("freq")
-  route    String?   @map("route")
-  startAt  DateTime? @map("start_at")
-  endAt    DateTime? @map("end_at")
-  isActive Boolean   @default(true) @map("is_active")
+  label       String?   @map("label")
+  description String?   @map("description") @db.VarChar(1000)
+  dose        String?   @map("dose")
+  freq        String?   @map("freq")
+  route       String?   @map("route")
+  startAt     DateTime? @map("start_at")
+  endAt       DateTime? @map("end_at")
+  isActive    Boolean   @default(true) @map("is_active")
+
+  // Audit fields
+  updatedAt            DateTime? @updatedAt @map("updated_at")
+  updatedByUserId      Int?      @map("Usuario_idUsuario_updatedBy")
+  updatedBy            Usuario?  @relation("PatientMedicationUpdatedBy", fields: [updatedByUserId], references: [idUsuario])
+  discontinuedAt       DateTime? @map("discontinued_at")
+  discontinuedByUserId Int?      @map("Usuario_idUsuario_discontinuedBy")
+  discontinuedBy       Usuario?  @relation("PatientMedicationDiscontinuedBy", fields: [discontinuedByUserId], references: [idUsuario])
+  consultaId            Int?      @map("Consulta_Cita_idCita")
+  consulta              Consulta? @relation(fields: [consultaId], references: [citaId])
 
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
-  createdBy       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
+  createdBy       Usuario @relation("PatientMedicationCreatedBy", fields: [createdByUserId], references: [idUsuario])
 
   paciente             Paciente              @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
   anamnesisMedications AnamnesisMedication[]
 
   @@index([pacienteId, isActive])
+  @@index([consultaId])
   @@map("PatientMedication")
 }
 
@@ -950,6 +977,7 @@ enum ToothCondition {
   BRIDGE
   IMPLANT
   EXTRACTION_NEEDED
+  FRACTURED
 }
 
 model OdontogramSnapshot {
@@ -1154,9 +1182,10 @@ model Consentimiento {
   provider   String  @default("CLOUDINARY") @map("provider")
 
   // Otros
-  observaciones String? @map("observaciones")
-  version       Int     @default(1) @map("version")
-  activo        Boolean @default(true) @map("activo")
+  observaciones       String?  @map("observaciones")
+  version             Int      @default(1) @map("version")
+  activo              Boolean  @default(true) @map("activo")
+  esEspecificoPorCita Boolean  @default(false) @map("es_especifico_por_cita")
 
   // Timestamps
   created_at DateTime  @default(now()) @map("created_at")
@@ -1168,6 +1197,8 @@ model Consentimiento {
   @@index([Paciente_idPaciente, Persona_idPersona_responsable, tipo, activo], map: "Consentimiento_Paciente_idPaciente_Persona_idPersona_respo_idx")
   @@index([vigente_hasta], map: "Consentimiento_vigente_hasta_idx")
   @@index([Cita_idCita], map: "Consentimiento_Cita_idCita_idx")
+  @@index([esEspecificoPorCita, Cita_idCita], map: "Consentimiento_esEspecificoPorCita_Cita_idx")
+  @@unique([Cita_idCita, tipo, activo], map: "unique_consent_per_cita_tipo")
   @@map("Consentimiento")
 }
 

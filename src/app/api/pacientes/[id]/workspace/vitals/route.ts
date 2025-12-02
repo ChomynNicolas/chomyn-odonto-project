@@ -3,10 +3,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionWithRoles } from '@/app/api/_lib/auth';
-import { ok, errors } from '@/app/api/_http';
 import { patientIdSchema, paginationQuerySchema } from '@/lib/api/patients/validators';
 import { prisma } from '@/lib/prisma';
-import type { RolNombre, PaginatedResponse } from '@/types/patient';
+import type {  PaginatedResponse } from '@/types/patient';
 
 export async function GET(
   req: NextRequest,
@@ -50,10 +49,7 @@ export async function GET(
       prisma.patientVitals.findMany({
         where: { pacienteId: patientId },
         include: {
-          consulta: {
-            select: { idConsulta: true },
-          },
-          recordedByUser: {
+          createdBy: {
             select: { nombreApellido: true },
           },
         },
@@ -73,6 +69,10 @@ export async function GET(
         bmi = Math.round((vital.weightKg / (heightM * heightM)) * 10) / 10;
       }
 
+      const bloodPressure = vital.bpSyst && vital.bpDiast 
+        ? `${vital.bpSyst}/${vital.bpDiast}` 
+        : null;
+
       return {
         id: vital.idPatientVitals,
         measuredAt: vital.measuredAt.toISOString(),
@@ -80,10 +80,10 @@ export async function GET(
         heightCm: vital.heightCm,
         weightKg: vital.weightKg,
         bmi,
-        bloodPressure: vital.bloodPressure,
+        bloodPressure,
         heartRate: vital.heartRate,
         notes: vital.notes,
-        recordedBy: vital.recordedByUser?.nombreApellido || 'Desconocido',
+        recordedBy: vital.createdBy?.nombreApellido || 'Desconocido',
       };
     });
 

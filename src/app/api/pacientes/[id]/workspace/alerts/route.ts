@@ -40,9 +40,16 @@ export async function GET(
         isActive: true,
         severity: 'SEVERE',
       },
+      include: {
+        allergyCatalog: {
+          select: {
+            name: true,
+          },
+        },
+      },
     });
 
-    highSeverityAllergies.forEach((allergy, idx) => {
+    highSeverityAllergies.forEach((allergy) => {
       alerts.push({
         id: `allergy-${allergy.idPatientAllergy}`,
         type: 'ALLERGY',

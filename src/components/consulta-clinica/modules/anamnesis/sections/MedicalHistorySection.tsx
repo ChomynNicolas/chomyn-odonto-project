@@ -6,14 +6,15 @@ import type { UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import { Heart, Cigarette, Moon, Brush } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { AntecedentSelector } from "../components/AntecedentSelector"
 import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface MedicalHistorySectionProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   canEdit: boolean
   pacienteId: number
 }
@@ -21,7 +22,7 @@ interface MedicalHistorySectionProps {
 export function MedicalHistorySection({ form, canEdit }: MedicalHistorySectionProps) {
   const tieneEnfermedadesCronicas = form.watch("tieneEnfermedadesCronicas")
   const antecedents = form.watch("antecedents")
-  const isComplete = !tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0)
+  const isComplete = Boolean(!tieneEnfermedadesCronicas || (tieneEnfermedadesCronicas && antecedents && antecedents.length > 0))
 
   return (
     <Card className="section-medical border-l-4 border-l-rose-500 shadow-sm">
@@ -62,7 +63,11 @@ export function MedicalHistorySection({ form, canEdit }: MedicalHistorySectionPr
             <FormItem>
               <FormLabel className="text-base font-medium">Antecedentes específicos</FormLabel>
               <FormControl>
-                <AntecedentSelector value={field.value || []} onChange={field.onChange} disabled={!canEdit} />
+                <AntecedentSelector 
+                  value={(field.value || []).map(item => ({ ...item, isActive: item.isActive ?? true }))} 
+                  onChange={field.onChange} 
+                  disabled={!canEdit} 
+                />
               </FormControl>
               <FormDescription className="text-sm leading-relaxed">
                 Seleccione antecedentes del catálogo o agregue personalizados

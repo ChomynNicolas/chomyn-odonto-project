@@ -75,7 +75,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session?.user?.id
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR" }, { status: 500 })
+    }
+    const actorId = parseInt(userId)
     const antecedentCatalog = await createAntecedentCatalog(
       parsed.data,
       actorId,

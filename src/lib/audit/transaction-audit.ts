@@ -5,7 +5,6 @@
 // These functions accept PrismaClient (which can be a transaction client)
 // to ensure audit logs are written atomically with the main operation
 
-import type { PrismaClient } from "@prisma/client";
 import type { EstadoCita, TipoCita, MotivoCancelacion } from "@prisma/client";
 import { AuditAction, AuditEntity } from "./actions";
 import type { Prisma } from "@prisma/client";
@@ -14,12 +13,13 @@ import type { Prisma } from "@prisma/client";
  * Writes audit log within a transaction (safe - logs errors but doesn't throw)
  */
 async function safeTransactionAudit(
-  tx: PrismaClient,
+  tx: Prisma.TransactionClient,
   opts: {
     actorId: number;
     action: string;
     entity: string;
     entityId: number;
+    ip?: string | null;
     metadata?: Record<string, unknown>;
   }
 ): Promise<void> {
@@ -30,6 +30,7 @@ async function safeTransactionAudit(
         action: opts.action,
         entity: opts.entity,
         entityId: opts.entityId,
+        ip: opts.ip ?? null,
         metadata: opts.metadata as Prisma.InputJsonValue,
       },
     });
@@ -43,7 +44,7 @@ async function safeTransactionAudit(
  * Audits appointment cancellation with complete metadata
  */
 export async function auditCitaCancel(opts: {
-  tx: PrismaClient;
+  tx: Prisma.TransactionClient;
   actorId: number;
   citaId: number;
   motivoCancelacion: MotivoCancelacion;
@@ -54,6 +55,7 @@ export async function auditCitaCancel(opts: {
   pacienteId: number;
   profesionalId: number;
   consultorioId?: number | null;
+  ip?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   await safeTransactionAudit(opts.tx, {
@@ -61,6 +63,7 @@ export async function auditCitaCancel(opts: {
     action: AuditAction.CITA_CANCEL,
     entity: AuditEntity.Cita,
     entityId: opts.citaId,
+    ip: opts.ip ?? null,
     metadata: {
       motivoCancelacion: opts.motivoCancelacion,
       notas: opts.notas ?? null,
@@ -81,7 +84,7 @@ export async function auditCitaCancel(opts: {
  * Audits appointment creation
  */
 export async function auditCitaCreate(opts: {
-  tx: PrismaClient;
+  tx: Prisma.TransactionClient;
   actorId: number;
   citaId: number;
   tipo: TipoCita;
@@ -93,6 +96,7 @@ export async function auditCitaCreate(opts: {
   consultorioId?: number | null;
   motivo?: string | null;
   notas?: string | null;
+  ip?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   await safeTransactionAudit(opts.tx, {
@@ -100,6 +104,7 @@ export async function auditCitaCreate(opts: {
     action: AuditAction.CITA_CREATE,
     entity: AuditEntity.Cita,
     entityId: opts.citaId,
+    ip: opts.ip ?? null,
     metadata: {
       tipo: opts.tipo,
       inicioISO: opts.inicioISO,
@@ -121,12 +126,13 @@ export async function auditCitaCreate(opts: {
  * Audits appointment state change
  */
 export async function auditCitaEstadoChange(opts: {
-  tx: PrismaClient;
+  tx: Prisma.TransactionClient;
   actorId: number;
   citaId: number;
   estadoPrevio: EstadoCita;
   estadoNuevo: EstadoCita;
   nota?: string | null;
+  ip?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   await safeTransactionAudit(opts.tx, {
@@ -134,6 +140,7 @@ export async function auditCitaEstadoChange(opts: {
     action: AuditAction.CITA_ESTADO_CHANGE,
     entity: AuditEntity.Cita,
     entityId: opts.citaId,
+    ip: opts.ip ?? null,
     metadata: {
       estadoPrevio: opts.estadoPrevio,
       estadoNuevo: opts.estadoNuevo,
@@ -148,7 +155,7 @@ export async function auditCitaEstadoChange(opts: {
  * Audits appointment rescheduling (success)
  */
 export async function auditCitaReprogramar(opts: {
-  tx: PrismaClient;
+  tx: Prisma.TransactionClient;
   actorId: number;
   citaOriginalId: number;
   citaNuevaId: number;
@@ -158,6 +165,7 @@ export async function auditCitaReprogramar(opts: {
   nuevoFinISO: string;
   profesionalId: number;
   consultorioId?: number | null;
+  ip?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   await safeTransactionAudit(opts.tx, {
@@ -165,6 +173,7 @@ export async function auditCitaReprogramar(opts: {
     action: AuditAction.CITA_REPROGRAMAR,
     entity: AuditEntity.Cita,
     entityId: opts.citaNuevaId,
+    ip: opts.ip ?? null,
     metadata: {
       citaOriginalId: opts.citaOriginalId,
       anteriorInicioISO: opts.anteriorInicioISO,
@@ -183,7 +192,7 @@ export async function auditCitaReprogramar(opts: {
  * Audits failed rescheduling attempt due to overlap
  */
 export async function auditCitaReprogramarOverlap(opts: {
-  tx: PrismaClient;
+  tx: Prisma.TransactionClient;
   actorId: number;
   citaId: number;
   intentoInicioISO: string;
@@ -195,6 +204,7 @@ export async function auditCitaReprogramarOverlap(opts: {
     inicioISO: string;
     finISO: string;
   }>;
+  ip?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   await safeTransactionAudit(opts.tx, {
@@ -202,6 +212,7 @@ export async function auditCitaReprogramarOverlap(opts: {
     action: AuditAction.CITA_REPROGRAMAR_OVERLAP,
     entity: AuditEntity.Cita,
     entityId: opts.citaId,
+    ip: opts.ip ?? null,
     metadata: {
       intentoInicioISO: opts.intentoInicioISO,
       intentoFinISO: opts.intentoFinISO,

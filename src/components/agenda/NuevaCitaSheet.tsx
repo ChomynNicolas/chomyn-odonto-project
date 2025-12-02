@@ -13,14 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { apiCreateCita, apiReprogramarCita } from "@/lib/api/agenda/citas"
-import type { CurrentUser, CitaDetalleDTO } from "@/types/agenda"
+import type { CurrentUser, CitaDetalleDTO, FollowUpContext } from "@/types/agenda"
 import { Controller } from "react-hook-form";
+import { formatFollowUpMotivo, getPrimaryNextSession, getSuggestedDuration } from "@/lib/utils/follow-up-helpers";
+import { Badge } from "@/components/ui/badge";
 import { PacienteAsyncSelect } from "@/components/selectors/PacienteAsyncSelect";
 import { ProfesionalAsyncSelect } from "@/components/selectors/ProfesionalAsyncSelect";
 import { useDisponibilidadValidator, roundToMinutes } from "@/hooks/useDisponibilidadValidator";
 import { SlotRecommendations } from "./SlotRecommendations";
 import { handleApiError, showErrorToast, showSuccessToast } from "@/lib/messages/agenda-toast-helpers";
 import { getErrorMessage } from "@/lib/messages/agenda-messages";
+import { useActivePlansContext } from "@/hooks/useActivePlansContext";
 // Surgery consent validation removed - now handled during check-in
 
 
@@ -57,10 +60,11 @@ interface NuevaCitaSheetProps {
   currentUser?: CurrentUser
   onSuccess?: () => void
   prefill?: Partial<NuevaCitaForm> & { lockPaciente?: boolean; pacienteDocumento?: number }
-  // Modo reprogramación
-  mode?: "create" | "reschedule"
+  // Modo reprogramación o follow-up
+  mode?: "create" | "reschedule" | "follow-up"
   citaId?: number
   citaData?: CitaDetalleDTO
+  followUpContext?: FollowUpContext | null
 }
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -81,9 +85,40 @@ export function NuevaCitaSheet({
   mode = "create",
   citaId,
   citaData,
+  followUpContext,
 }: NuevaCitaSheetProps) {
-  // Prellenar datos si es modo reprogramación
+  // Prellenar datos según el modo
   const getInitialValues = (): Partial<NuevaCitaForm> => {
+    // Modo follow-up: pre-fill from completed appointment and follow-up context
+    if (mode === "follow-up" && citaData) {
+      const recommendedDate = followUpContext?.recommendedFollowUpDate 
+        ? new Date(followUpContext.recommendedFollowUpDate)
+        : defaults?.inicio || new Date()
+      
+      // Use suggested duration from next sessions, or default to original duration
+      const suggestedDuration = followUpContext 
+        ? getSuggestedDuration(followUpContext)
+        : citaData.duracionMinutos
+
+      // Format motivo from follow-up context
+      const motivo = followUpContext
+        ? formatFollowUpMotivo(followUpContext)
+        : (citaData.motivo ?? "Control de seguimiento")
+
+      return {
+        pacienteId: citaData.paciente.id,
+        profesionalId: citaData.profesional.id,
+        consultorioId: citaData.consultorio?.id,
+        duracionMinutos: suggestedDuration,
+        tipo: citaData.tipo,
+        motivo: motivo,
+        notas: citaData.notas ?? undefined,
+        fecha: toLocalDateInputValue(recommendedDate),
+        horaInicio: defaults?.inicio ? toLocalTimeInputValue(defaults.inicio) : toLocalTimeInputValue(new Date(recommendedDate.setHours(9, 0, 0, 0))),
+      }
+    }
+
+    // Modo reprogramación
     if (mode === "reschedule" && citaData) {
       const inicioDate = new Date(citaData.inicio)
       return {
@@ -98,6 +133,7 @@ export function NuevaCitaSheet({
         horaInicio: toLocalTimeInputValue(inicioDate),
       }
     }
+    
     // Modo create: usar prefill o defaults
     return {
       pacienteId: prefill?.pacienteId ?? undefined,
@@ -128,6 +164,61 @@ export function NuevaCitaSheet({
     resolver: zodResolver(mode === "reschedule" ? reprogramarCitaSchema : nuevaCitaSchema),
     defaultValues: getInitialValues(),
   })
+
+  // Get primary next session for display in follow-up mode
+  const primaryNextSession = React.useMemo(() => {
+    return followUpContext ? getPrimaryNextSession(followUpContext) : null
+  }, [followUpContext])
+
+  // Fetch active plans context when in create mode and patient is selected
+  const pacienteIdValue = watch("pacienteId")
+  const { data: activePlansContext, isLoading: isLoadingActivePlans } = useActivePlansContext(
+    pacienteIdValue ?? null,
+    mode === "create"
+  )
+
+  // Track if we've auto-filled from active plan to avoid overwriting user changes
+  const hasAutoFilledRef = React.useRef(false)
+
+  // Auto-fill form fields when active plan is detected (only in create mode)
+  React.useEffect(() => {
+    if (
+      mode === "create" &&
+      activePlansContext?.hasActivePlans &&
+      activePlansContext.plans.length > 0 &&
+      !hasAutoFilledRef.current
+    ) {
+      const plan = activePlansContext.plans[0] // Use most recent plan
+      hasAutoFilledRef.current = true
+      
+      // Only auto-fill if fields are still at default values (don't overwrite user input)
+      const currentValues = getValues()
+      if (
+        currentValues.motivo === "Cita" ||
+        currentValues.motivo === prefill?.motivo ||
+        !currentValues.motivo
+      ) {
+        setValue("motivo", plan.recommendedMotivo, { shouldValidate: false })
+      }
+      if (currentValues.tipo === "CONSULTA" || currentValues.tipo === prefill?.tipo) {
+        setValue("tipo", plan.recommendedTipo, { shouldValidate: false })
+      }
+      if (currentValues.duracionMinutos === 30 || currentValues.duracionMinutos === prefill?.duracionMinutos) {
+        setValue("duracionMinutos", plan.recommendedDuracion, { shouldValidate: false })
+      }
+    }
+  }, [activePlansContext, mode, setValue, getValues, prefill])
+
+  // Reset auto-fill flag when sheet closes or patient changes
+  React.useEffect(() => {
+    if (!open) {
+      hasAutoFilledRef.current = false
+    }
+  }, [open])
+
+  React.useEffect(() => {
+    hasAutoFilledRef.current = false
+  }, [pacienteIdValue])
 
   // Validación de disponibilidad usando hook (después de declarar watch)
   const fechaValue = watch("fecha")
@@ -222,6 +313,35 @@ export function NuevaCitaSheet({
       return
     }
 
+    // Modo follow-up: pre-fill from completed appointment and follow-up context
+    if (mode === "follow-up" && citaData) {
+      const recommendedDate = followUpContext?.recommendedFollowUpDate 
+        ? new Date(followUpContext.recommendedFollowUpDate)
+        : defaults?.inicio || new Date()
+      
+      const suggestedDuration = followUpContext 
+        ? getSuggestedDuration(followUpContext)
+        : citaData.duracionMinutos
+
+      const motivo = followUpContext
+        ? formatFollowUpMotivo(followUpContext)
+        : (citaData.motivo ?? "Control de seguimiento")
+
+      reset({
+        pacienteId: citaData.paciente.id,
+        profesionalId: citaData.profesional.id,
+        consultorioId: citaData.consultorio?.id,
+        duracionMinutos: suggestedDuration,
+        tipo: citaData.tipo,
+        motivo: motivo,
+        notas: citaData.notas ?? undefined,
+        fecha: toLocalDateInputValue(recommendedDate),
+        horaInicio: defaults?.inicio ? toLocalTimeInputValue(defaults.inicio) : toLocalTimeInputValue(new Date(recommendedDate.setHours(9, 0, 0, 0))),
+      })
+      setConflictos(null)
+      return
+    }
+
     // Modo create: usar defaults
     const inicio = defaults?.inicio ?? new Date();
     const current = getValues();
@@ -236,7 +356,7 @@ export function NuevaCitaSheet({
       tipo: (current.tipo as NuevaCitaForm["tipo"]) || "CONSULTA",
     });
     setConflictos(null) // Limpiar conflictos al abrir
-  }, [open, defaults?.inicio, reset, getValues, currentUser, mode, citaData, handleClose]);
+  }, [open, defaults?.inicio, reset, getValues, currentUser, mode, citaData, followUpContext, handleClose]);
 
   // Limpiar ref cuando se cierra el sheet
   React.useEffect(() => {
@@ -426,17 +546,76 @@ export function NuevaCitaSheet({
     >
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{mode === "reschedule" ? "Reprogramar cita" : "Nueva cita"}</SheetTitle>
+          <SheetTitle>
+            {mode === "reschedule" 
+              ? "Reprogramar cita" 
+              : mode === "follow-up"
+              ? "Crear cita de seguimiento"
+              : "Nueva cita"}
+          </SheetTitle>
           <SheetDescription>
             {mode === "reschedule"
               ? "Modifique los datos para reprogramar la cita. La cita original se cancelará y se creará una nueva."
+              : mode === "follow-up"
+              ? "Complete los datos para agendar una cita de seguimiento. Los datos han sido prellenados desde la cita anterior."
               : "Complete los datos para agendar una nueva cita. Se validará la disponibilidad automáticamente."}
           </SheetDescription>
+          
+          {/* Show session context badge in follow-up mode */}
+          {mode === "follow-up" && primaryNextSession && (
+            <div className="pt-2">
+              <Badge variant="secondary" className="text-xs">
+                Sesión {primaryNextSession.nextSessionNumber} de {primaryNextSession.totalSessions} - {primaryNextSession.stepName}
+              </Badge>
+              {followUpContext?.planTitle && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Plan: {followUpContext.planTitle}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Show active plan indicator in create mode */}
+          {mode === "create" && (
+            <>
+              {isLoadingActivePlans && pacienteIdValue && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Verificando planes de tratamiento...</span>
+                  </div>
+                </div>
+              )}
+              {activePlansContext?.hasActivePlans && activePlansContext.plans.length > 0 && (
+                <div className="pt-2 space-y-1">
+                  <Alert className="border-blue-500/30 bg-blue-500/10 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <AlertDescription className="text-blue-900 dark:text-blue-100">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="secondary" className="text-xs">
+                          Plan activo detectado
+                        </Badge>
+                        <span className="text-xs font-semibold">
+                          {activePlansContext.plans[0].planTitle}
+                        </span>
+                      </div>
+                      {activePlansContext.plans[0].nextSessions.length > 0 && (
+                        <p className="text-xs mt-1.5">
+                          Próxima sesión: {activePlansContext.plans[0].nextSessions[0].stepName} 
+                          {" "}(Sesión {activePlansContext.plans[0].nextSessions[0].nextSessionNumber} de {activePlansContext.plans[0].nextSessions[0].totalSessions})
+                        </p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
+            </>
+          )}
         </SheetHeader>
 
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 py-6">
-          {/* Paciente - Solo en modo create */}
+          {/* Paciente - Mostrar selector solo en modo create, info en follow-up y reschedule */}
           {mode === "create" && (
             <div className="space-y-2">
               <Label>Paciente <span className="text-destructive">*</span></Label>
@@ -462,8 +641,8 @@ export function NuevaCitaSheet({
             </div>
           )}
 
-          {/* En modo reschedule, mostrar info del paciente */}
-          {mode === "reschedule" && citaData && (
+          {/* En modo follow-up o reschedule, mostrar info del paciente */}
+          {(mode === "follow-up" || mode === "reschedule") && citaData && (
             <div className="space-y-2">
               <Label>Paciente</Label>
               <div className="rounded-lg border bg-muted/50 p-3 text-sm">
@@ -728,7 +907,11 @@ export function NuevaCitaSheet({
                   {mode === "reschedule" ? "Reprogramando..." : "Creando..."}
                 </>
               ) : (
-                mode === "reschedule" ? "Reprogramar cita" : "Crear cita"
+                mode === "reschedule" 
+                  ? "Reprogramar cita" 
+                  : mode === "follow-up"
+                  ? "Crear cita de seguimiento"
+                  : "Crear cita"
               )}
             </Button>
             <SheetClose asChild>

@@ -71,7 +71,14 @@ export async function PUT(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "Invalid user id" }, { status: 500 })
+    }
+    const actorId = parseInt(userId)
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "User id is not a number" }, { status: 500 })
+    }
     const diagnosisCatalog = await updateDiagnosisCatalog(
       parsedId.data.id,
       parsedBody.data,
@@ -115,7 +122,14 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "Invalid user id" }, { status: 500 })
+    }
+    const actorId = parseInt(userId)
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "User id is not a number" }, { status: 500 })
+    }
     await deleteDiagnosisCatalog(parsed.data.id, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true }, { status: 200 })

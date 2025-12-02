@@ -12,7 +12,6 @@ import type {
 } from "./_schemas"
 import { safeAuditWrite } from "@/lib/audit/log"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Headers } from "next/headers"
 
 /**
  * Lista medication catalogs con filtros, paginación y búsqueda
@@ -249,7 +248,7 @@ export async function updateMedicationCatalog(
     })
 
     // Determine audit action based on isActive change
-    let auditAction = AuditAction.MEDICATION_CATALOG_UPDATE
+    let auditAction: typeof AuditAction[keyof typeof AuditAction] = AuditAction.MEDICATION_CATALOG_UPDATE
     if (changes.isActive) {
       auditAction =
         changes.isActive.new === true

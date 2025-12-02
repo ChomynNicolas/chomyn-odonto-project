@@ -4,7 +4,6 @@ import type {
   MedicationCatalogListQuery,
   MedicationCatalogCreateBody,
   MedicationCatalogUpdateBody,
-  MedicationCatalogItem,
 } from "@/app/api/medication-catalog/_schemas"
 import {
   fetchMedicationCatalogs,

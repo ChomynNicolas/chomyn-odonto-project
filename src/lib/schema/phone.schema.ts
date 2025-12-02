@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod"
-import { normalizePhone, validatePhone, isMobilePhone } from "@/lib/phone-utils"
+import { normalizePhone, validatePhone } from "@/lib/phone-utils"
 
 /**
  * Schema base para teléfono que valida formato y normaliza
@@ -27,22 +27,22 @@ export function createPhoneSchema(options?: {
     allowEmpty = true,
   } = options || {}
 
-  let schema = z.string()
+  let schema: z.ZodSchema<string | undefined>
 
   // Validación de requerido
   if (required) {
-    schema = schema.min(1, "El teléfono es requerido")
+    schema = z.string().min(1, "El teléfono es requerido")
   } else if (allowEmpty) {
-    schema = schema.optional().or(z.literal(""))
+    schema = z.union([z.string(), z.literal("")]).optional()
   } else {
-    schema = schema.optional()
+    schema = z.string().optional()
   }
 
   // Transformación: normalizar y limpiar espacios
   schema = schema.transform((val) => {
     if (!val || typeof val !== "string") return ""
     return val.trim()
-  })
+  }) as z.ZodSchema<string | undefined>
 
   // Validación de formato usando phone-utils
   schema = schema.refine(
@@ -56,18 +56,8 @@ export function createPhoneSchema(options?: {
       const validation = validatePhone(val || "", countryCode)
       return validation.isValid
     },
-    (val) => {
-      // Mensaje de error personalizado
-      if (!val || val.trim() === "") {
-        return { message: "El teléfono es requerido" }
-      }
-
-      const validation = validatePhone(val, countryCode)
-      return {
-        message: validation.error || "Formato de teléfono inválido",
-      }
-    }
-  )
+    "Formato de teléfono inválido"
+  ) as z.ZodSchema<string | undefined>
 
   // Transformación final: normalizar a E.164
   schema = schema.transform((val) => {

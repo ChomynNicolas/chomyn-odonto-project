@@ -4,7 +4,6 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -106,12 +105,7 @@ export function AnamnesisSummaryCard({ patientId, currentRole }: AnamnesisSummar
 
               {/* Key Information */}
               <CollapsibleContent className="space-y-2 pt-2 border-t">
-                {anamnesis.motivoConsulta && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Motivo de Consulta</p>
-                    <p className="text-xs line-clamp-2">{anamnesis.motivoConsulta}</p>
-                  </div>
-                )}
+                {/* motivoConsulta removed - it's now in consulta, not anamnesis */}
 
                 {/* Flags Summary */}
                 <div className="grid grid-cols-2 gap-2 text-xs">

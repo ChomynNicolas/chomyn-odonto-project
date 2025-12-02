@@ -53,7 +53,8 @@ function toMini(c: CitaWithRelations): CitaMiniDTO {
 export async function cancelarCita(
   idCita: number,
   body: CancelarBody,
-  userId: number
+  userId: number,
+  ip?: string | null
 ): Promise<
   | { ok: true; data: CitaMiniDTO }
   | { ok: false; status: number; error: string; details?: unknown }
@@ -135,6 +136,7 @@ export async function cancelarCita(
       pacienteId: cita.paciente.idPaciente,
       profesionalId: cita.profesional.idProfesional,
       consultorioId: cita.consultorio?.idConsultorio ?? null,
+      ip: ip ?? null,
     });
 
     return { ok: true as const, data: toMini(updated) };

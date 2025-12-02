@@ -5,15 +5,49 @@ import type { Prisma } from "@prisma/client"
 
 /**
  * Extrae IP, user-agent y referer desde Headers (opcional)
+ * Mejora la detección de IP para manejar localhost y diferentes formatos
  * No exportes helpers sync si tu archivo tiene "use server" global.
  */
 function extractRequestContext(h?: Headers) {
   try {
     if (!h) return {}
-    const ip =
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      h.get("x-real-ip") ||
-      undefined
+    
+    // Extraer IP con múltiples estrategias
+    let ip: string | undefined = undefined
+    
+    // 1. Intentar desde x-forwarded-for (primera IP de la lista si hay proxy)
+    const xForwardedFor = h.get("x-forwarded-for")
+    if (xForwardedFor) {
+      const firstIp = xForwardedFor.split(",")[0]?.trim()
+      if (firstIp && firstIp !== "::1" && firstIp !== "127.0.0.1") {
+        ip = firstIp
+      }
+    }
+    
+    // 2. Intentar desde x-real-ip
+    if (!ip) {
+      const xRealIp = h.get("x-real-ip")
+      if (xRealIp && xRealIp !== "::1" && xRealIp !== "127.0.0.1") {
+        ip = xRealIp
+      }
+    }
+    
+    // 3. Si aún no hay IP válida, intentar desde cf-connecting-ip (Cloudflare)
+    if (!ip) {
+      const cfIp = h.get("cf-connecting-ip")
+      if (cfIp && cfIp !== "::1" && cfIp !== "127.0.0.1") {
+        ip = cfIp
+      }
+    }
+    
+    // 4. Si es localhost, guardar como "localhost" en lugar de ::1 o 127.0.0.1
+    // Solo si realmente no hay otra IP disponible
+    if (!ip) {
+      const localhostIp = xForwardedFor?.split(",")[0]?.trim() || h.get("x-real-ip")
+      if (localhostIp === "::1" || localhostIp === "127.0.0.1") {
+        ip = "localhost"
+      }
+    }
 
     const userAgent = h.get("user-agent") || undefined
     const referer = h.get("referer") || undefined

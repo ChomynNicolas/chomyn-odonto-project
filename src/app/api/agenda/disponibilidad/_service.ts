@@ -7,7 +7,6 @@ import {
   parseProfesionalDisponibilidad,
   buildWorkingWindows,
   dayBoundsUtc,
-  type ProfesionalDisponibilidad,
 } from "@/lib/utils/availability-validation";
 
 const prisma = new PrismaClient();

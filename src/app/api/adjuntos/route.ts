@@ -6,9 +6,7 @@ import { auth } from "@/auth";
 import type { AdjuntoTipo, AccessMode } from "@prisma/client";
 import {
   MAX_FILE_SIZE_BYTES,
-  validateFileSize,
   validateFileExtension,
-  ALLOWED_MIME_TYPES,
 } from "@/lib/validation/file-validation";
 import { auditAttachmentCreate } from "@/lib/audit/attachments";
 
@@ -85,8 +83,8 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (isImage && data.resourceType === "raw" && data.resourceType !== "auto") {
-      // Allow auto, but warn if it's explicitly raw for an image
+    if (isImage && data.resourceType === "raw") {
+      // Warn if it's explicitly raw for an image (should typically be "image" or "auto")
       console.warn(`[API] Image file with resourceType 'raw': ${data.originalFilename}`);
     }
   }

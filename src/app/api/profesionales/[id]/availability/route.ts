@@ -40,11 +40,19 @@ export async function PATCH(
     }
 
     // Validar acceso según rol
-    const actorId = parseInt(auth.session.user.id)
+    const userIdStr = auth.session.user.id
+    if (typeof userIdStr !== "string") {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "ID de usuario no disponible" }, { status: 500 })
+    }
+    const actorId = parseInt(userIdStr)
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "ID de usuario inválido" }, { status: 500 })
+    }
     const accessCheck = await validateProfesionalAccess(id, actorId, auth.role)
     if (!accessCheck.ok) {
       return NextResponse.json({ ok: false, error: accessCheck.error }, { status: 403 })
     }
+
 
     const profesional = await updateAvailability(id, parsed.data, actorId, req.headers, req.nextUrl.pathname)
 

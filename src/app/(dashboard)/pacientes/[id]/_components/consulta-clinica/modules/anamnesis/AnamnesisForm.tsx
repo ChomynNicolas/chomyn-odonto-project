@@ -5,14 +5,14 @@ import { Card, CardContent } from "@/components/ui/card"
 
 interface AnamnesisFormProps {
   pacienteId: number
-  initialData: any
+  initialData: Record<string, unknown> | null
   onSave: () => void
   canEdit: boolean
   patientGender?: string
 }
 
 // Mock form component for demo purposes
-export function AnamnesisForm({ pacienteId, initialData, onSave, canEdit }: AnamnesisFormProps) {
+export function AnamnesisForm({ onSave }: AnamnesisFormProps) {
   return (
     <Card>
       <CardContent className="pt-6">

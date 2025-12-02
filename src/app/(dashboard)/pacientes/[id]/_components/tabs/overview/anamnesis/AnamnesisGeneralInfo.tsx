@@ -21,13 +21,7 @@ export function AnamnesisGeneralInfo({ anamnesis }: AnamnesisGeneralInfoProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Motivo de Consulta */}
-        {anamnesis.motivoConsulta && (
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Motivo de Consulta</p>
-            <p className="text-sm">{anamnesis.motivoConsulta}</p>
-          </div>
-        )}
+        {/* motivoConsulta removed - it's now in consulta, not anamnesis */}
 
         {/* Urgency and Pain */}
         <div className="flex items-center gap-2 flex-wrap">

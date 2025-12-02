@@ -43,7 +43,7 @@ export const consentimientoRepo = {
     return vinculo
   },
 
-  // Buscar consentimiento vigente
+  // Buscar consentimiento vigente (legacy time-based)
   buscarConsentimientoVigente: async (pacienteId: number, tipo: string, responsablePersonaId?: number) => {
     const where: Prisma.ConsentimientoWhereInput = {
       Paciente_idPaciente: pacienteId,
@@ -62,6 +62,29 @@ export const consentimientoRepo = {
       select: {
         idConsentimiento: true,
         vigente_hasta: true,
+      },
+    })
+  },
+
+  // Buscar consentimiento específico para una cita
+  buscarConsentimientoPorCita: async (pacienteId: number, citaId: number, tipo: string) => {
+    return await prisma.consentimiento.findFirst({
+      where: {
+        Paciente_idPaciente: pacienteId,
+        Cita_idCita: citaId,
+        tipo: tipo as TipoConsentimiento,
+        activo: true,
+      },
+      select: {
+        idConsentimiento: true,
+        esEspecificoPorCita: true,
+        vigente_hasta: true,
+        cita: {
+          select: {
+            idCita: true,
+            estado: true,
+          },
+        },
       },
     })
   },
@@ -85,6 +108,7 @@ export const consentimientoRepo = {
       hash: string | null
       observaciones: string | null
       registradoPorUsuarioId: number
+      esEspecificoPorCita: boolean
     },
   ) => {
     return await tx.consentimiento.create({
@@ -106,6 +130,7 @@ export const consentimientoRepo = {
         observaciones: data.observaciones,
         version: 1,
         activo: true,
+        esEspecificoPorCita: data.esEspecificoPorCita,
         Usuario_idUsuario_registradoPor: data.registradoPorUsuarioId,
       },
       include: {
@@ -124,6 +149,7 @@ export const consentimientoRepo = {
             idCita: true,
             inicio: true,
             tipo: true,
+            estado: true,
           },
         },
         registradoPor: {
@@ -185,6 +211,7 @@ export const consentimientoRepo = {
             idCita: true,
             inicio: true,
             tipo: true,
+            estado: true,
           },
         },
         registradoPor: {
@@ -218,6 +245,7 @@ export const consentimientoRepo = {
             idCita: true,
             inicio: true,
             tipo: true,
+            estado: true,
           },
         },
         registradoPor: {

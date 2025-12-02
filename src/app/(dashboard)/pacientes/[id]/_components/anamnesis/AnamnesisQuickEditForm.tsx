@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
@@ -21,7 +20,7 @@ import { toast } from "sonner"
 import type { PatientAnamnesisDTO } from "@/types/patient"
 
 const quickEditSchema = z.object({
-  motivoConsulta: z.string().max(500).optional().nullable(),
+  // motivoConsulta removed - it's now in consulta, not anamnesis
   tieneDolorActual: z.boolean(),
   dolorIntensidad: z.number().min(0).max(10).optional().nullable(),
   urgenciaPercibida: z.enum(["RUTINA", "PRIORITARIO", "URGENCIA"]).optional().nullable(),
@@ -55,7 +54,7 @@ export function AnamnesisQuickEditForm({
   const form = useForm<QuickEditFormData>({
     resolver: zodResolver(quickEditSchema),
     defaultValues: {
-      motivoConsulta: initialData?.motivoConsulta || "",
+      // motivoConsulta removed - it's now in consulta, not anamnesis
       tieneDolorActual: initialData?.tieneDolorActual || false,
       dolorIntensidad: initialData?.dolorIntensidad || null,
       urgenciaPercibida: initialData?.urgenciaPercibida || null,
@@ -128,27 +127,7 @@ export function AnamnesisQuickEditForm({
           </AlertDescription>
         </Alert>
 
-        {/* Motivo de Consulta */}
-        <FormField
-          control={form.control}
-          name="motivoConsulta"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Motivo de Consulta</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Describa el motivo de la consulta..."
-                  className="resize-none"
-                  rows={3}
-                  {...field}
-                  value={field.value || ""}
-                />
-              </FormControl>
-              <FormDescription>Máximo 500 caracteres</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Motivo de Consulta removed - it's now in consulta, not anamnesis */}
 
         {/* Dolor Actual */}
         <FormField

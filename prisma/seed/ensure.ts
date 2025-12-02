@@ -57,7 +57,9 @@ create: { profesionalId, especialidadId: esp.idEspecialidad },
 
 
 export async function ensurePersonaConDocumento(prisma: PrismaClient, p: {
-nombres: string; apellidos: string; genero?: Genero | null; fechaNacimiento?: Date | null;
+nombres: string; apellidos: string; segundoApellido?: string | null; genero?: Genero | null; fechaNacimiento?: Date | null;
+direccion?: string | null; ciudad?: string | null; pais?: string | null;
+contactoEmergenciaNombre?: string | null; contactoEmergenciaTelefono?: string | null; contactoEmergenciaRelacion?: string | null;
 doc: { tipo: TipoDocumento; numero: string; paisEmision?: string | null; ruc?: string | null };
 }) {
 const { doc } = p;
@@ -69,8 +71,15 @@ await prisma.persona.update({ where: { idPersona: per.idPersona }, data: {
 estaActivo: true,
 nombres: per.nombres || p.nombres,
 apellidos: per.apellidos || p.apellidos,
+segundoApellido: typeof p.segundoApellido !== "undefined" ? p.segundoApellido : per.segundoApellido,
 genero: typeof p.genero !== "undefined" ? p.genero : per.genero,
 fechaNacimiento: typeof p.fechaNacimiento !== "undefined" ? p.fechaNacimiento : per.fechaNacimiento,
+direccion: typeof p.direccion !== "undefined" ? p.direccion : per.direccion,
+ciudad: typeof p.ciudad !== "undefined" ? p.ciudad : per.ciudad,
+pais: typeof p.pais !== "undefined" ? p.pais : per.pais,
+contactoEmergenciaNombre: typeof p.contactoEmergenciaNombre !== "undefined" ? p.contactoEmergenciaNombre : per.contactoEmergenciaNombre,
+contactoEmergenciaTelefono: typeof p.contactoEmergenciaTelefono !== "undefined" ? p.contactoEmergenciaTelefono : per.contactoEmergenciaTelefono,
+contactoEmergenciaRelacion: typeof p.contactoEmergenciaRelacion !== "undefined" ? p.contactoEmergenciaRelacion : per.contactoEmergenciaRelacion,
 }});
 }
 return existente.persona;
@@ -78,8 +87,15 @@ return existente.persona;
 return prisma.persona.create({ data: {
 nombres: p.nombres,
 apellidos: p.apellidos,
+segundoApellido: p.segundoApellido ?? null,
 genero: p.genero ?? null,
 fechaNacimiento: p.fechaNacimiento ?? null,
+direccion: p.direccion ?? null,
+ciudad: p.ciudad ?? null,
+pais: p.pais ?? "PY",
+contactoEmergenciaNombre: p.contactoEmergenciaNombre ?? null,
+contactoEmergenciaTelefono: p.contactoEmergenciaTelefono ?? null,
+contactoEmergenciaRelacion: p.contactoEmergenciaRelacion ?? null,
 estaActivo: true,
 documento: { create: { tipo: doc.tipo, numero: doc.numero, paisEmision: doc.paisEmision ?? null, ruc: doc.ruc ?? null } },
 }});
@@ -252,7 +268,6 @@ export async function createPlanSimpleConSteps(
     data: {
       pacienteId: params.pacienteId,
       titulo: "Plan inicial",
-      isActive: true,
       createdByUserId: params.createdByUserId,
     },
   });
@@ -295,7 +310,6 @@ export async function createConsultaParaCita(
     status?: ConsultaEstado;
     startedAt?: Date | null;
     finishedAt?: Date | null;
-    reason?: string | null;
     diagnosis?: string | null;
     clinicalNotes?: string | null;
   }
@@ -310,7 +324,6 @@ export async function createConsultaParaCita(
       status: params.status ?? ConsultaEstado.DRAFT,
       startedAt: params.startedAt ?? null,
       finishedAt: params.finishedAt ?? null,
-      reason: params.reason ?? null,
       diagnosis: params.diagnosis ?? null,
       clinicalNotes: params.clinicalNotes ?? null,
     },
@@ -468,11 +481,13 @@ export async function addClinicalBasics(
         pacienteId: params.pacienteId,
         medicationId: med.idMedicationCatalog,
         label: med.name,
+        description: null,
         dose: "1 comp",
         freq: "c/8h",
         route: "VO",
         startAt: new Date(),
         isActive: true,
+        consultaId: params.consultaId ?? null,
         createdByUserId: params.createdByUserId,
       },
     });
@@ -561,4 +576,71 @@ export async function ensureMedicationCatalog(prisma: PrismaClient, items: Array
       create: { name: it.name, description: it.description ?? null, isActive: true },
     });
   }
+}
+
+export async function ensureAntecedentCatalog(
+  prisma: PrismaClient,
+  items: Array<{
+    code: string;
+    name: string;
+    category: string;
+    description?: string;
+  }>
+) {
+  for (const it of items) {
+    await prisma.antecedentCatalog.upsert({
+      where: { code: it.code },
+      update: {
+        name: it.name,
+        category: it.category as any,
+        description: it.description ?? null,
+        isActive: true,
+      },
+      create: {
+        code: it.code,
+        name: it.name,
+        category: it.category as any,
+        description: it.description ?? null,
+        isActive: true,
+      },
+    });
+  }
+}
+
+export async function ensureAnamnesisConfig(
+  prisma: PrismaClient,
+  items: Array<{
+    key: string;
+    value: unknown;
+    description?: string;
+    updatedByUserId: number;
+  }>
+) {
+  for (const it of items) {
+    await prisma.anamnesisConfig.upsert({
+      where: { key: it.key },
+      update: {
+        value: it.value as any,
+        description: it.description ?? null,
+        updatedByUserId: it.updatedByUserId,
+      },
+      create: {
+        key: it.key,
+        value: it.value as any,
+        description: it.description ?? null,
+        updatedByUserId: it.updatedByUserId,
+      },
+    });
+  }
+}
+
+export async function ensureProfesionalDisponibilidad(
+  prisma: PrismaClient,
+  profesionalId: number,
+  disponibilidad: Record<string, Array<{ inicio: string; fin: string }>>
+) {
+  await prisma.profesional.update({
+    where: { idProfesional: profesionalId },
+    data: { disponibilidad: disponibilidad as any },
+  });
 }

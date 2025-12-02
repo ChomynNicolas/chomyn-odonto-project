@@ -5,7 +5,6 @@ import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { AdjuntoUI } from "@/lib/schema/paciente.schema"
 import {
-  MAX_FILE_SIZE_BYTES,
   MAX_FILE_SIZE_MB,
   ALLOWED_MIME_TYPES,
   validateFile,

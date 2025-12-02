@@ -4,8 +4,6 @@ import type {
   DiagnosisCatalogListQuery,
   DiagnosisCatalogCreateBody,
   DiagnosisCatalogUpdateBody,
-  DiagnosisCatalogItem,
-  DiagnosisCatalogListResponse,
 } from "@/app/api/diagnosis-catalog/_schemas"
 import {
   fetchDiagnosisCatalogs,

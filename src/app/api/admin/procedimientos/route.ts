@@ -57,7 +57,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED", message: "Usuario no válido" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     const procedimiento = await createProcedimiento(
       parsed.data,
       actorId,

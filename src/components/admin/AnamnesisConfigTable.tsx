@@ -207,7 +207,7 @@ export default function AnamnesisConfigTable({ initialData, userRole }: Anamnesi
               </TableRow>
             ) : (
               configs.map((config) => {
-                const isHighImpact = HIGH_IMPACT_KEYS.includes(config.key as any)
+                const isHighImpact = (HIGH_IMPACT_KEYS as readonly string[]).includes(config.key)
                 return (
                   <TableRow key={config.idAnamnesisConfig}>
                     <TableCell className="font-medium">

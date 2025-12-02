@@ -75,7 +75,7 @@ export async function PATCH(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const actorId = parseInt(auth.session.user.id as string)
     const procedimiento = await updateProcedimiento(
       parsedId.data.id,
       parsedBody.data,
@@ -123,7 +123,7 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const actorId = parseInt(auth.session.user.id as string)
     await deleteProcedimientoIfUnused(parsed.data.id, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true }, { status: 200 })

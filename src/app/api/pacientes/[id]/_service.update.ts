@@ -9,20 +9,7 @@ interface UpdateContext {
   ip?: string
 }
 
-/**
- * Calculate field differences for audit logging
- */
-function calculateDiff(oldData: Record<string, unknown>, newData: Record<string, unknown>): Record<string, { old: unknown; new: unknown }> {
-  const diff: Record<string, { old: unknown; new: unknown }> = {}
 
-  for (const key in newData) {
-    if (newData[key] !== undefined && oldData[key] !== newData[key]) {
-      diff[key] = { old: oldData[key], new: newData[key] }
-    }
-  }
-
-  return diff
-}
 
 /**
  * Update patient with concurrency control, duplicate detection, and audit logging

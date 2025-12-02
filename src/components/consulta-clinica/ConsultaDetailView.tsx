@@ -376,7 +376,7 @@ function ConsultaDetailHeader({
   patientId: number
   canViewResumen: boolean
 }) {
-  const { paciente, status, createdAt, performedBy, citaEstado, diagnosis, clinicalNotes } = consulta
+  const { status, createdAt, performedBy, citaEstado, diagnosis, clinicalNotes } = consulta
   const hasConsulta = createdAt !== null
   const isFinalized = status === "FINAL"
 
@@ -390,7 +390,7 @@ function ConsultaDetailHeader({
     })
   }
 
-  const nombreCompleto = paciente ? `${paciente.nombres} ${paciente.apellidos}`.trim() : "Paciente sin nombre"
+  
 
   return (
     <Card className="border-2 border-muted">
@@ -526,18 +526,24 @@ export function ConsultaDetailView({ citaId, patientId, userRole }: ConsultaDeta
 
   const { canEdit, canView } = useConsultaPermissions(userRole, null)
   const { consulta, isLoading, error } = useConsulta(citaId, true, false) // canView=true, canEdit=false
-  const { isFinalized, hasConsulta, canEditModules, canViewResumen } = useConsultaPermissions(userRole, consulta)
+  const { isFinalized, hasConsulta,  canViewResumen } = useConsultaPermissions(userRole, consulta)
 
   // Hook para anamnesis context
   const {
     anamnesis,
     context,
-    isLoading: isLoadingAnamnesis,
-    refetch: refetchAnamnesis,
+    isLoading: isLoadingAnamnesis
   } = useAnamnesisContext(consulta?.pacienteId)
 
   const tabCounts = useMemo(() => {
-    if (!consulta) return {}
+    if (!consulta) {
+      return {
+        diagnosticos: 0,
+        procedimientos: 0,
+        medicacion: 0,
+        adjuntos: 0,
+      }
+    }
 
     return {
       diagnosticos: consulta.diagnosticos?.length || 0,
@@ -655,9 +661,9 @@ export function ConsultaDetailView({ citaId, patientId, userRole }: ConsultaDeta
                 <ClipboardList className="h-4 w-4" />
                 <span className="hidden sm:inline">Diagnósticos</span>
                 <span className="sm:hidden text-xs">Dx</span>
-                {tabCounts.diagnosticos > 0 && (
+                {(tabCounts.diagnosticos ?? 0) > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {tabCounts.diagnosticos}
+                    {tabCounts.diagnosticos ?? 0}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -670,9 +676,9 @@ export function ConsultaDetailView({ citaId, patientId, userRole }: ConsultaDeta
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Procedimientos</span>
                 <span className="sm:hidden text-xs">Proc</span>
-                {tabCounts.procedimientos > 0 && (
+                {(tabCounts.procedimientos ?? 0) > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {tabCounts.procedimientos}
+                    {tabCounts.procedimientos ?? 0}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -685,9 +691,9 @@ export function ConsultaDetailView({ citaId, patientId, userRole }: ConsultaDeta
                 <ImageIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Adjuntos</span>
                 <span className="sm:hidden text-xs">Adj</span>
-                {tabCounts.adjuntos > 0 && (
+                {(tabCounts.adjuntos ?? 0) > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {tabCounts.adjuntos}
+                    {tabCounts.adjuntos ?? 0}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -710,9 +716,9 @@ export function ConsultaDetailView({ citaId, patientId, userRole }: ConsultaDeta
                 <Pill className="h-4 w-4" />
                 <span className="hidden sm:inline">Medicación</span>
                 <span className="sm:hidden text-xs">Med</span>
-                {tabCounts.medicacion > 0 && (
+                {(tabCounts.medicacion ?? 0) > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {tabCounts.medicacion}
+                    {tabCounts.medicacion ?? 0}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -755,7 +761,7 @@ export function ConsultaDetailView({ citaId, patientId, userRole }: ConsultaDeta
                     }}
                     anamnesisContext={context}
                     canEdit={false}
-                    patientGender={consulta.paciente?.genero}
+                    patientGender={consulta.paciente?.genero ?? undefined}
                     patientBirthDate={consulta.paciente?.fechaNacimiento}
                     isLoadingAnamnesis={isLoadingAnamnesis}
                   />

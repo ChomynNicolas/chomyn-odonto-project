@@ -40,7 +40,7 @@ async function DiagnosisCatalogContent({ searchParams }: DiagnosisCatalogPagePro
   const result = await listDiagnosisCatalogs(validatedFilters)
 
   // Envolver en formato esperado por DiagnosisCatalogTable
-  const diagnosisCatalogResponse: { ok: boolean; data: typeof result.data; meta: typeof result.meta } = {
+  const diagnosisCatalogResponse: { ok: true; data: typeof result.data; meta: typeof result.meta } = {
     ok: true,
     data: result.data,
     meta: result.meta,

@@ -14,7 +14,7 @@ import { useState } from 'react';
 
 interface PreviousAnamnesisPreviewProps {
   previousAnamnesis: AnamnesisResponse | null;
-  onCopyToForm?: (field: string, value: any) => void;
+  onCopyToForm?: (field: string, value: unknown) => void;
   onCopyAll?: () => void;
 }
 
@@ -86,26 +86,7 @@ export function PreviousAnamnesisPreview({
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="pt-0 space-y-4">
-            {/* Motivo de Consulta */}
-            {previousAnamnesis.motivoConsulta && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-muted-foreground">Motivo de Consulta:</span>
-                  {onCopyToForm && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={() => onCopyToForm('motivoConsulta', previousAnamnesis.motivoConsulta)}
-                    >
-                      <Copy className="h-3 w-3 mr-1" />
-                      Copiar
-                    </Button>
-                  )}
-                </div>
-                <p className="text-sm">{previousAnamnesis.motivoConsulta}</p>
-              </div>
-            )}
+            {/* Motivo de Consulta removed - it's now in consulta, not anamnesis */}
 
             {/* Dolor */}
             {previousAnamnesis.tieneDolorActual && (

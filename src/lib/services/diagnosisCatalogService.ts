@@ -4,7 +4,7 @@
  * Abstracts API calls and provides type-safe interfaces
  */
 
-import type { DiagnosisCatalogItem, DiagnosisCatalogListQuery } from "@/app/api/diagnosis-catalog/_schemas"
+import type { DiagnosisCatalogItem } from "@/app/api/diagnosis-catalog/_schemas"
 
 export interface DiagnosisCatalogFilters {
   search?: string

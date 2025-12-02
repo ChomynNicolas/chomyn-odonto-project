@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -37,7 +37,7 @@ const medicationFormSchema = z.object({
   isActive: z.boolean().default(true),
 })
 
-type MedicationFormValues = z.infer<typeof medicationFormSchema>
+type MedicationFormValues = z.input<typeof medicationFormSchema>
 
 interface MedicationCatalogFormProps {
   open: boolean
@@ -93,14 +93,14 @@ export default function MedicationCatalogForm({
           data: {
             name: values.name,
             description: values.description ?? null,
-            isActive: values.isActive,
+            isActive: values.isActive ?? true,
           },
         })
       } else {
         await createMutation.mutateAsync({
           name: values.name,
           description: values.description ?? null,
-          isActive: values.isActive,
+          isActive: values.isActive ?? true,
         })
       }
       onSuccess()

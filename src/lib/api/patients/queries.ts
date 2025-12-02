@@ -85,7 +85,7 @@ export async function getPatientOverviewData(patientId: number, role: RolNombre)
       
       // Active treatment plans (only for clinical roles)
       role === 'RECEP' ? null : prisma.treatmentPlan.findMany({
-        where: { pacienteId: patientId, isActive: true },
+        where: { pacienteId: patientId, status: 'ACTIVE' },
         include: {
           steps: true,
         },

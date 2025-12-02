@@ -9,8 +9,30 @@ import { es } from "date-fns/locale"
 import type { PatientAnamnesisDTO } from "@/types/patient"
 import { memo } from "react"
 
+// Extended type to include antecedents from API response
+type AnamnesisWithAntecedents = PatientAnamnesisDTO & {
+  antecedents?: Array<{
+    idAnamnesisAntecedent: number
+    anamnesisId: number
+    antecedentId: number | null
+    antecedentCatalog: {
+      idAntecedentCatalog: number
+      code: string
+      name: string
+      category: string
+      description: string | null
+    } | null
+    customName: string | null
+    customCategory: string | null
+    notes: string | null
+    diagnosedAt: string | null
+    isActive: boolean
+    resolvedAt: string | null
+  }>
+}
+
 interface AnamnesisMedicalHistoryProps {
-  anamnesis: PatientAnamnesisDTO
+  anamnesis: AnamnesisWithAntecedents
 }
 
 export const AnamnesisMedicalHistory = memo(function AnamnesisMedicalHistory({
@@ -27,12 +49,7 @@ export const AnamnesisMedicalHistory = memo(function AnamnesisMedicalHistory({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {anamnesis.motivoConsulta && (
-          <div>
-            <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Motivo de Consulta</h4>
-            <p className="text-sm leading-relaxed">{anamnesis.motivoConsulta}</p>
-          </div>
-        )}
+        {/* motivoConsulta removed - it's now in consulta, not anamnesis */}
 
         {activeAntecedents.length > 0 ? (
           <div>

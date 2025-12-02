@@ -27,7 +27,11 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID de usuario inválido" }, { status: 400 })
+    }
+    const actorId = parseInt(userId)
     const allergyCatalog = await toggleAllergyCatalogActive(
       parsed.data.id,
       actorId,

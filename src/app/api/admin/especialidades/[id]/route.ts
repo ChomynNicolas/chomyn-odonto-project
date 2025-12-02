@@ -71,7 +71,10 @@ export async function PATCH(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED", message: "Usuario no válido" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     const especialidad = await updateEspecialidad(
       parsedId.data.id,
       parsedBody.data,
@@ -115,7 +118,10 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED", message: "Usuario no válido" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     await deleteEspecialidad(parsed.data.id, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true }, { status: 200 })

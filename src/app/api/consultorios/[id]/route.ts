@@ -12,7 +12,6 @@ import {
   getConsultorioById,
   updateConsultorio,
   deleteConsultorio,
-  toggleConsultorioActivo,
 } from "../_service"
 
 export const dynamic = "force-dynamic"
@@ -76,7 +75,22 @@ export async function PUT(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id
+    if (typeof userId !== 'string') {
+      return NextResponse.json(
+        { ok: false, error: "INTERNAL_ERROR", message: "ID de usuario inválido en la sesión" },
+        { status: 500 }
+      )
+    }
+
+    const actorId = parseInt(userId)
+    if (isNaN(actorId)) {
+      return NextResponse.json(
+        { ok: false, error: "INTERNAL_ERROR", message: "ID de usuario inválido en la sesión" },
+        { status: 500 }
+      )
+    }
+
     const consultorio = await updateConsultorio(
       parsedId.data.id,
       parsedBody.data,
@@ -124,7 +138,10 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    if (!auth.session.user.id) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED", message: "Usuario no válido" }, { status: 401 })
+    }
+    const actorId = parseInt(auth.session.user.id, 10)
     await deleteConsultorio(parsed.data.id, actorId, req.headers, req.nextUrl.pathname)
 
     return NextResponse.json({ ok: true }, { status: 200 })

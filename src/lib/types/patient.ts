@@ -27,6 +27,21 @@ export type AttachmentType =
   | "LAB_REPORT"
   | "OTHER"
 
+// Filter types include AttachmentType plus virtual filters
+// "CONSENT" is a virtual filter for consentimientos only
+// "all" shows all attachments including consentimientos
+export type AttachmentFilterType = AttachmentType | "CONSENT" | "all"
+
+// Consent type matching Prisma schema TipoConsentimiento
+export type ConsentType =
+  | "CONSENTIMIENTO_MENOR_ATENCION"
+  | "TRATAMIENTO_ESPECIFICO"
+  | "ANESTESIA"
+  | "CIRUGIA"
+  | "RADIOGRAFIA"
+  | "DATOS_PERSONALES"
+  | "OTRO"
+
 // Legacy type mapping for backward compatibility
 export type LegacyAttachmentType = "XRAY" | "PHOTO" | "DOCUMENT" | "CONSENT" | "LAB_RESULT" | "OTHER"
 export type ToothCondition =
@@ -324,6 +339,8 @@ export interface Attachment {
     firmadoEn: string
     vigenteHasta: string
     vigente: boolean
+    esEspecificoPorCita: boolean
+    citaId?: number | null
   }
 }
 

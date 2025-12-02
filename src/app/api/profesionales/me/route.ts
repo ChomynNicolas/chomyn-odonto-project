@@ -18,7 +18,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const actorId = parseInt(auth.session.user.id)
+    const userIdStr = auth.session.user.id
+    if (typeof userIdStr !== "string") {
+      return NextResponse.json(
+        { ok: false, error: "INTERNAL_ERROR", message: "El ID de usuario es indefinido." },
+        { status: 500 }
+      )
+    }
+    const actorId = parseInt(userIdStr, 10)
+    if (isNaN(actorId)) {
+      return NextResponse.json(
+        { ok: false, error: "INTERNAL_ERROR", message: "El ID de usuario no es un número válido." },
+        { status: 500 }
+      )
+    }
 
     // Buscar el profesional asociado al usuario actual
     const profesional = await prisma.profesional.findUnique({

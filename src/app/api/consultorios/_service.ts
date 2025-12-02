@@ -12,7 +12,7 @@ import type {
 } from "./_schemas"
 import { safeAuditWrite } from "@/lib/audit/log"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Headers } from "next/headers"
+// Removed invalid import of type { Headers } from "next/headers"
 
 /**
  * Lista consultorios con filtros, paginación, búsqueda y estadísticas
@@ -281,7 +281,7 @@ export async function updateConsultorio(
     })
 
     // Determine audit action based on activo change
-    let auditAction = AuditAction.CONSULTORIO_UPDATE
+    let auditAction: typeof AuditAction[keyof typeof AuditAction] = AuditAction.CONSULTORIO_UPDATE
     if (changes.activo) {
       auditAction =
         changes.activo.new === true

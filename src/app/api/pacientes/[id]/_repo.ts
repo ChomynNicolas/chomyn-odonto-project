@@ -94,7 +94,7 @@ export const fichaRepo = {
   ) => prisma.persona.update({ where: { idPersona }, data }),
 
   updatePacienteNotas: (idPaciente: number, notas: unknown) =>
-    prisma.paciente.update({ where: { idPaciente }, data: { notas: JSON.stringify(notas) } }),
+    prisma.paciente.update({ where: { idPaciente }, data: { notasAdministrativas: JSON.stringify(notas) } }),
 
   countDependencies: async (pacienteId: number) => {
     const [citas, consultas, plans, diag, alerg, meds, vitals, odo, perio] = await Promise.all([

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Search, Filter, Plus, Phone, Mail, MessageCircle, Copy, Eye, EyeOff, ChevronDown, Loader2 } from "lucide-react"
+import { Search, Filter, Plus, Phone, Mail, MessageCircle, Copy, ChevronDown, Loader2 } from "lucide-react"
 import { PatientQuickCreateModal } from "./PatientQuickCreateModal"
 import { formatForWhatsApp } from "@/lib/phone-utils"
 import { canShowWhatsAppIcon } from "@/lib/patient-utils"
@@ -145,24 +145,6 @@ export default function PacientesTable() {
           {/* Actions */}
           <div className="flex items-center gap-2">
             {/* Privacy Mode Toggle */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPrivacyMode(!privacyMode)}
-                    aria-label={privacyMode ? "Desactivar modo privacidad" : "Activar modo privacidad"}
-                    aria-pressed={privacyMode}
-                  >
-                    {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {privacyMode ? "Desactivar modo privacidad" : "Activar modo privacidad"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
 
             {/* Filters - Mobile Sheet */}
             <Sheet open={showFilters} onOpenChange={setShowFilters}>

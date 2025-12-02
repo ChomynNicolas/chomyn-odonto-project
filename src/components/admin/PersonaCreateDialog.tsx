@@ -14,7 +14,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,7 +30,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
-import type { TipoDocumento, Genero } from "@prisma/client"
 
 // Función para dividir nombre completo en nombres y apellidos
 function splitNombreCompleto(nombreCompleto: string): {

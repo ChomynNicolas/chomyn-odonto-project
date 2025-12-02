@@ -9,15 +9,15 @@ import { GridIcon, HorizontaLDots } from "@/icons/index";
 
 import {
   CalendarDays,
-  CalendarSearch,
   LogIn,
   UserRoundPlus,
   Users,
   LogOut,
   User,
   Settings,
+  FileText,
+  Shield,
 } from "lucide-react";
-import { SlUserFollow } from "react-icons/sl";
 
 /** =========================
  * Tipos y RBAC
@@ -39,7 +39,6 @@ const navItems: NavItem[] = [
   // Operación
   { group: "Operación", name: "Inicio", path: "/", icon: <GridIcon /> },
   { group: "Operación", name: "Agenda", path: "/calendar", icon: <CalendarDays /> },
-  { group: "Operación", name: "Búsqueda de Citas", path: "/citas", icon: <CalendarSearch /> },
 
   // Pacientes
   { group: "Pacientes", name: "Pacientes", path: "/pacientes", icon: <Users /> },
@@ -60,13 +59,20 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
 
-  // Utilidades - Solo "Crear cuenta" (Iniciar sesión no se muestra si está autenticado)
+  // Utilidades
   {
     group: "Utilidades",
-    name: "Crear cuenta",
-    path: "/signup",
-    icon: <SlUserFollow size={28} className="-ml-1" />,
-    roles: ["ADMIN"],
+    name: "Reportes",
+    path: "/reportes",
+    icon: <FileText size={22} />,
+    // All roles can access reports, but they see different reports based on role
+  },
+  {
+    group: "Utilidades",
+    name: "Auditoría",
+    path: "/audit",
+    icon: <Shield size={22} />,
+    roles: ["ADMIN"], // Only ADMIN can access global audit log
   },
 ];
 
@@ -97,6 +103,14 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
       // Special handling for config area - active if in /configuracion/*
       if (path === "/configuracion") {
         return pathname === "/configuracion" || pathname.startsWith("/configuracion/");
+      }
+      // Special handling for reportes area - active if in /reportes/*
+      if (path === "/reportes") {
+        return pathname === "/reportes" || pathname.startsWith("/reportes/");
+      }
+      // Special handling for audit area - active if in /audit/*
+      if (path === "/audit") {
+        return pathname === "/audit" || pathname.startsWith("/audit/");
       }
       return pathname === path || pathname.startsWith(path + "/");
     },

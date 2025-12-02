@@ -2,7 +2,7 @@
 // Servicio completo de auditoría para anamnesis con diffs, versionado y cumplimiento
 
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { createHash } from "crypto"
 
 export type AnamnesisAuditAction = "CREATE" | "UPDATE" | "DELETE" | "VIEW" | "RESTORE" | "EXPORT" | "PRINT"
@@ -69,6 +69,9 @@ type PrismaTransaction = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends" | "$use"
 >
 
+// Type for Prisma client that can be either transaction or regular client
+type PrismaClientLike = PrismaTransaction | typeof prisma
+
 /**
  * Extrae contexto de la petición desde headers
  */
@@ -119,11 +122,11 @@ export function calculateAnamnesisDiff(
     return Object.keys(newState || {}).map((key) => ({
       fieldPath: key,
       fieldLabel: getFieldLabel(key),
-      fieldType: typeof newState?.[key] ?? "unknown",
+      fieldType: newState?.[key] !== undefined ? typeof newState?.[key] : "unknown",
       oldValue: null,
       newValue: newState?.[key],
-      oldValueDisplay: null,
-      newValueDisplay: formatDisplayValue(newState?.[key]),
+      oldValueDisplay: undefined,
+      newValueDisplay: formatDisplayValue(newState?.[key]) ?? undefined,
       isCritical: isCriticalField(key),
       changeType: "ADDED" as FieldChangeType,
     }))
@@ -133,11 +136,11 @@ export function calculateAnamnesisDiff(
     return Object.keys(previousState).map((key) => ({
       fieldPath: key,
       fieldLabel: getFieldLabel(key),
-      fieldType: typeof previousState[key] ?? "unknown",
+      fieldType: previousState[key] !== undefined ? typeof previousState[key] : "unknown",
       oldValue: previousState[key],
       newValue: null,
-      oldValueDisplay: formatDisplayValue(previousState[key]),
-      newValueDisplay: null,
+      oldValueDisplay: formatDisplayValue(previousState[key]) ?? undefined,
+      newValueDisplay: undefined,
       isCritical: isCriticalField(key),
       changeType: "REMOVED" as FieldChangeType,
     }))
@@ -172,11 +175,11 @@ export function calculateAnamnesisDiff(
         diffs.push({
           fieldPath: key,
           fieldLabel: getFieldLabel(key),
-          fieldType: typeof newVal ?? typeof oldVal ?? "unknown",
+          fieldType: newVal !== undefined ? typeof newVal : oldVal !== undefined ? typeof oldVal : "unknown",
           oldValue: oldVal,
           newValue: newVal,
-          oldValueDisplay: formatDisplayValue(oldVal),
-          newValueDisplay: formatDisplayValue(newVal),
+          oldValueDisplay: formatDisplayValue(oldVal) ?? undefined,
+          newValueDisplay: formatDisplayValue(newVal) ?? undefined,
           isCritical: isCriticalField(key),
           changeType: "MODIFIED" as FieldChangeType,
         })
@@ -216,11 +219,11 @@ function compareNestedObject(
         diffs.push({
           fieldPath,
           fieldLabel: getFieldLabel(key),
-          fieldType: typeof newVal ?? typeof oldVal ?? "unknown",
+          fieldType: newVal !== undefined ? typeof newVal : oldVal !== undefined ? typeof oldVal : "unknown",
           oldValue: oldVal,
           newValue: newVal,
-          oldValueDisplay: formatDisplayValue(oldVal),
-          newValueDisplay: formatDisplayValue(newVal),
+          oldValueDisplay: formatDisplayValue(oldVal) ?? undefined,
+          newValueDisplay: formatDisplayValue(newVal) ?? undefined,
           isCritical: isCriticalField(key),
           changeType: oldVal === undefined ? ("ADDED" as FieldChangeType) : newVal === undefined ? ("REMOVED" as FieldChangeType) : ("MODIFIED" as FieldChangeType),
         })
@@ -410,7 +413,7 @@ export async function createAnamnesisAuditLog(
   params: CreateAnamnesisAuditLogParams,
   tx?: PrismaTransaction
 ): Promise<number> {
-  const client = (tx as any) || prisma
+  const client: PrismaClientLike = tx || prisma
 
   // Extraer contexto de la petición
   const context = extractRequestContext(params.headers)
@@ -463,10 +466,10 @@ export async function createAnamnesisAuditLog(
       userAgent: context.userAgent,
       sessionId: context.sessionId,
       requestPath: params.path,
-      previousState: sanitizedPreviousState ? (sanitizedPreviousState as Prisma.JsonValue) : null,
-      newState: sanitizedNewState ? (sanitizedNewState as Prisma.JsonValue) : null,
-      fieldDiffs: fieldDiffs.length > 0 ? (fieldDiffs as Prisma.JsonValue) : null,
-      changesSummary: changesSummary as Prisma.JsonValue,
+      previousState: sanitizedPreviousState ? (sanitizedPreviousState as Prisma.InputJsonValue) : Prisma.JsonNull,
+      newState: sanitizedNewState ? (sanitizedNewState as Prisma.InputJsonValue) : Prisma.JsonNull,
+      fieldDiffs: fieldDiffs.length > 0 ? (fieldDiffs as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+      changesSummary: changesSummary as Prisma.InputJsonValue,
       reason: params.reason,
       severity,
       consultaId: params.consultaId,
@@ -484,8 +487,8 @@ export async function createAnamnesisAuditLog(
         fieldPath: diff.fieldPath,
         fieldLabel: diff.fieldLabel,
         fieldType: diff.fieldType,
-        oldValue: diff.oldValue !== undefined ? (diff.oldValue as Prisma.JsonValue) : null,
-        newValue: diff.newValue !== undefined ? (diff.newValue as Prisma.JsonValue) : null,
+        oldValue: diff.oldValue !== undefined ? (diff.oldValue as Prisma.InputJsonValue) : Prisma.JsonNull,
+        newValue: diff.newValue !== undefined ? (diff.newValue as Prisma.InputJsonValue) : Prisma.JsonNull,
         oldValueDisplay: diff.oldValueDisplay,
         newValueDisplay: diff.newValueDisplay,
         isCritical: diff.isCritical,
@@ -508,7 +511,7 @@ export async function createAnamnesisSnapshot(
   headers?: Headers,
   tx?: PrismaTransaction
 ): Promise<number> {
-  const client = (tx as any) || prisma
+  const client: PrismaClientLike = tx || prisma
 
   // Obtener anamnesis completa con relaciones
   const anamnesis = await client.patientAnamnesis.findUnique({
@@ -587,7 +590,7 @@ export async function restoreAnamnesisVersion(
   headers?: Headers,
   tx?: PrismaTransaction
 ): Promise<AnamnesisState> {
-  const client = (tx as any) || prisma
+  const client: PrismaClientLike = tx || prisma
 
   // Obtener snapshot a restaurar
   const snapshot = await client.patientAnamnesisVersion.findUnique({
@@ -657,7 +660,7 @@ export async function restoreAnamnesisVersion(
       ultimaVisitaDental: snapshot.ultimaVisitaDental,
       tieneHabitosSuccion: snapshot.tieneHabitosSuccion,
       lactanciaRegistrada: snapshot.lactanciaRegistrada,
-      payload: snapshot.payload as Prisma.JsonValue,
+      payload: snapshot.payload as Prisma.InputJsonValue,
       versionNumber: newVersionNumber,
       actualizadoPorUserId: actorId,
     },
@@ -686,7 +689,7 @@ export async function restoreAnamnesisVersion(
       ultimaVisitaDental: snapshot.ultimaVisitaDental,
       tieneHabitosSuccion: snapshot.tieneHabitosSuccion,
       lactanciaRegistrada: snapshot.lactanciaRegistrada,
-      payload: snapshot.payload as Prisma.JsonValue,
+      payload: snapshot.payload as Prisma.InputJsonValue,
       motivoCambio: reason || "Restauración de versión anterior",
       versionNumber: newVersionNumber,
       restoredFromVersionId: versionId,

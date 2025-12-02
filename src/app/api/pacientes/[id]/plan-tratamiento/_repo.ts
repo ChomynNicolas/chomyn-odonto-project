@@ -1,13 +1,12 @@
 // src/app/api/pacientes/[id]/plan-tratamiento/_repo.ts
 import { prisma as db } from "@/lib/prisma"
-import type { DienteSuperficie, TreatmentStepStatus } from "@prisma/client"
-import type { CreatePlanInput, UpdatePlanInput } from "./_schemas"
+import type { DienteSuperficie, TreatmentStepStatus, TreatmentPlanStatus } from "@prisma/client"
 
 export async function repoGetActivePlan(pacienteId: number) {
   return db.treatmentPlan.findFirst({
     where: {
       pacienteId,
-      isActive: true,
+      status: "ACTIVE",
     },
     include: {
       creadoPor: {
@@ -58,27 +57,20 @@ export async function repoCreatePlan(data: {
     estimatedCostCents?: number | null
     priority?: number | null
     notes?: string | null
+    requiresMultipleSessions?: boolean
+    totalSessions?: number | null
+    currentSession?: number | null
   }>
 }) {
   return db.$transaction(async (tx) => {
-    // Deactivate any existing active plan
-    await tx.treatmentPlan.updateMany({
-      where: {
-        pacienteId: data.pacienteId,
-        isActive: true,
-      },
-      data: {
-        isActive: false,
-      },
-    })
-
-    // Create new plan
+    // Create new plan with ACTIVE status
+    // Note: Validation for existing active plan should be done in service layer
     const plan = await tx.treatmentPlan.create({
       data: {
         pacienteId: data.pacienteId,
         titulo: data.titulo,
         descripcion: data.descripcion ?? null,
-        isActive: true,
+        status: "ACTIVE",
         createdByUserId: data.createdByUserId,
       },
     })
@@ -96,6 +88,9 @@ export async function repoCreatePlan(data: {
         estimatedCostCents: step.estimatedCostCents ?? null,
         priority: step.priority ?? null,
         notes: step.notes ?? null,
+        requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+        totalSessions: step.totalSessions ?? null,
+        currentSession: step.currentSession ?? (step.requiresMultipleSessions ? 1 : null),
         status: "PENDING" as TreatmentStepStatus,
       })),
     })
@@ -154,6 +149,9 @@ export async function repoUpdatePlan(
       estimatedCostCents?: number | null
       priority?: number | null
       notes?: string | null
+      requiresMultipleSessions?: boolean
+      totalSessions?: number | null
+      currentSession?: number | null
     }>
   }
 ) {
@@ -213,6 +211,9 @@ export async function repoUpdatePlan(
               estimatedCostCents: step.estimatedCostCents ?? null,
               priority: step.priority ?? null,
               notes: step.notes ?? null,
+              requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+              totalSessions: step.totalSessions ?? null,
+              currentSession: step.currentSession ?? null,
             },
           })
         } else {
@@ -229,6 +230,9 @@ export async function repoUpdatePlan(
               estimatedCostCents: step.estimatedCostCents ?? null,
               priority: step.priority ?? null,
               notes: step.notes ?? null,
+              requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+              totalSessions: step.totalSessions ?? null,
+              currentSession: step.currentSession ?? (step.requiresMultipleSessions ? 1 : null),
               status: "PENDING" as TreatmentStepStatus,
             },
           })
@@ -316,5 +320,56 @@ export async function repoGetPlan(planId: number) {
       },
     },
   })
+}
+
+export async function repoGetStepWithPlan(stepId: number) {
+  return db.treatmentStep.findUnique({
+    where: { idTreatmentStep: stepId },
+    include: {
+      plan: {
+        select: {
+          idTreatmentPlan: true,
+          pacienteId: true,
+          status: true,
+        },
+      },
+      procedimientoCatalogo: {
+        select: {
+          idProcedimiento: true,
+          code: true,
+          nombre: true,
+        },
+      },
+    },
+  })
+}
+
+/**
+ * Updates the status of a treatment plan
+ */
+export async function repoUpdatePlanStatus(
+  planId: number,
+  status: TreatmentPlanStatus
+) {
+  return db.treatmentPlan.update({
+    where: { idTreatmentPlan: planId },
+    data: { status },
+  })
+}
+
+/**
+ * Checks if a patient has an active treatment plan
+ */
+export async function repoHasActivePlan(pacienteId: number): Promise<boolean> {
+  const activePlan = await db.treatmentPlan.findFirst({
+    where: {
+      pacienteId,
+      status: "ACTIVE",
+    },
+    select: {
+      idTreatmentPlan: true,
+    },
+  })
+  return activePlan !== null
 }
 

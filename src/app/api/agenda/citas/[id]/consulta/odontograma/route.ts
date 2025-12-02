@@ -169,6 +169,29 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             entriesRemoved: diff.removed.length,
             entriesModified: diff.modified.length,
             patientLevelUpdate: true, // Indica que es una actualización a nivel de paciente
+            // Guardar detalles del diff para visualización
+            diffDetails: {
+              added: diff.added.map(entry => ({
+                toothNumber: entry.toothNumber,
+                surface: entry.surface,
+                condition: entry.condition,
+                notes: entry.notes,
+              })),
+              removed: diff.removed.map(entry => ({
+                toothNumber: entry.toothNumber,
+                surface: entry.surface,
+                condition: entry.condition,
+                notes: entry.notes,
+              })),
+              modified: diff.modified.map(entry => ({
+                toothNumber: entry.toothNumber,
+                surface: entry.surface,
+                oldCondition: entry.oldCondition,
+                newCondition: entry.newCondition,
+                oldNotes: entry.oldNotes,
+                newNotes: entry.newNotes,
+              })),
+            },
           },
         })
       } else {

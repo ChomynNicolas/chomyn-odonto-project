@@ -48,12 +48,34 @@ export async function GET(req: NextRequest) {
   } = parsed.data;
 
   try {
+    // Security: For ODONT users, enforce filtering by their professional ID
+    let enforcedProfesionalId = profesionalId;
+    if (auth.role === "ODONT") {
+      // Get the professional ID for the logged-in ODONT user
+      const userId = Number(auth.session.user.id);
+      if (!Number.isFinite(userId)) {
+        return NextResponse.json({ ok: false, error: "INVALID_USER" }, { status: 400 });
+      }
+      
+      const profesional = await prisma.profesional.findUnique({
+        where: { userId },
+        select: { idProfesional: true },
+      });
+      
+      if (!profesional) {
+        return NextResponse.json({ ok: false, error: "PROFESSIONAL_NOT_FOUND" }, { status: 403 });
+      }
+      
+      // Override any profesionalId parameter with the authenticated user's professional ID
+      enforcedProfesionalId = profesional.idProfesional;
+    }
+
     const where: Prisma.CitaWhereInput = {
       inicio: { lt: end },
       fin: { gt: start },
     };
 
-    if (profesionalId) where.profesionalId = profesionalId;
+    if (enforcedProfesionalId) where.profesionalId = enforcedProfesionalId;
     if (consultorioId) where.consultorioId = consultorioId;
 
     if (estado) {

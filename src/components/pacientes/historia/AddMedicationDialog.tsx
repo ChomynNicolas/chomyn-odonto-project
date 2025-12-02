@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 
@@ -21,9 +22,11 @@ export function AddMedicationDialog({ open, onOpenChange, patientId, onSuccess }
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     label: "",
+    description: "",
     dose: "",
     freq: "",
     route: "ORAL",
+    startAt: "",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,7 +40,7 @@ export function AddMedicationDialog({ open, onOpenChange, patientId, onSuccess }
         body: JSON.stringify({
           ...formData,
           isActive: true,
-          startAt: new Date().toISOString(),
+          startAt: formData.startAt || new Date().toISOString(),
         }),
       })
 
@@ -46,7 +49,7 @@ export function AddMedicationDialog({ open, onOpenChange, patientId, onSuccess }
       toast.success("Medicación agregada exitosamente")
       onSuccess()
       onOpenChange(false)
-      setFormData({ label: "", dose: "", freq: "", route: "ORAL" })
+      setFormData({ label: "", description: "", dose: "", freq: "", route: "ORAL", startAt: "" })
     } catch {
       toast.error("Error al agregar medicación")
     } finally {
@@ -70,6 +73,22 @@ export function AddMedicationDialog({ open, onOpenChange, patientId, onSuccess }
               placeholder="Ej: Ibuprofeno"
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Descripción</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Descripción opcional del medicamento..."
+              rows={4}
+              maxLength={1000}
+              className="resize-none"
+            />
+            <p className="text-xs text-muted-foreground">
+              {formData.description.length}/1000 caracteres
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -108,6 +127,16 @@ export function AddMedicationDialog({ open, onOpenChange, patientId, onSuccess }
                 <SelectItem value="OTHER">Otra</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="startAt">Fecha de inicio</Label>
+            <Input
+              id="startAt"
+              type="date"
+              value={formData.startAt}
+              onChange={(e) => setFormData({ ...formData, startAt: e.target.value })}
+            />
           </div>
 
           <DialogFooter>

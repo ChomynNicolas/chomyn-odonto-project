@@ -17,6 +17,19 @@ import { AnamnesisAllergies } from './anamnesis/AnamnesisAllergies';
 import { AnamnesisHygiene } from './anamnesis/AnamnesisHygiene';
 import { useRouter } from 'next/navigation';
 import type { RolNombre } from '@/types/patient';
+import type {
+  AnamnesisAntecedentResponse,
+  AnamnesisMedicationResponse,
+  AnamnesisAllergyResponse,
+} from '@/app/api/pacientes/[id]/anamnesis/_schemas';
+import type { PatientAnamnesisDTO } from '@/types/patient';
+
+// Extended type to include normalized relationships from API response
+type AnamnesisWithRelations = PatientAnamnesisDTO & {
+  antecedents?: AnamnesisAntecedentResponse[];
+  medications?: AnamnesisMedicationResponse[];
+  allergies?: AnamnesisAllergyResponse[];
+};
 
 interface AnamnesisOverviewSectionProps {
   patientId: number;
@@ -28,7 +41,8 @@ export const AnamnesisOverviewSection = memo(function AnamnesisOverviewSection({
   currentRole,
 }: AnamnesisOverviewSectionProps) {
   const router = useRouter();
-  const { data: anamnesis, isLoading, error } = usePatientAnamnesis(patientId);
+  const { data: anamnesisData, isLoading, error } = usePatientAnamnesis(patientId);
+  const anamnesis = anamnesisData as AnamnesisWithRelations | null;
 
   // Don't show for receptionists
   if (currentRole === 'RECEP') {
@@ -89,10 +103,9 @@ export const AnamnesisOverviewSection = memo(function AnamnesisOverviewSection({
   }
 
   // Extract normalized data from anamnesis (if available in response)
-  // Note: These would come from the API response if the endpoint includes them
-  const antecedents = (anamnesis as any).antecedents || [];
-  const medications = (anamnesis as any).medications || [];
-  const allergies = (anamnesis as any).allergies || [];
+  const antecedents = anamnesis?.antecedents || [];
+  const medications = anamnesis?.medications || [];
+  const allergies = anamnesis?.allergies || [];
 
   return (
     <div className="space-y-4">

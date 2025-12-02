@@ -85,7 +85,7 @@ export function validateFileSignature(
     error: detected
       ? `Firma de archivo no coincide con tipo declarado. Tipo detectado: ${detected}`
       : "Firma de archivo no válida o no reconocida",
-    detectedMimeType: detected,
+    detectedMimeType: detected ?? undefined,
   }
 }
 

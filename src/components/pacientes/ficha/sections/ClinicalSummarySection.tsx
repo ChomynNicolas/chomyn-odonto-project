@@ -3,11 +3,9 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp, AlertTriangle, Pill, Heart, Activity, FileText, Link as LinkIcon } from "lucide-react"
+import { ChevronDown, ChevronUp, AlertTriangle, Pill, Heart, Activity } from "lucide-react"
 import { useState } from "react"
-import { ClinicalAlertBadge } from "../components/ClinicalAlertBadge"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import type { PatientRecord } from "@/lib/types/patient"
 

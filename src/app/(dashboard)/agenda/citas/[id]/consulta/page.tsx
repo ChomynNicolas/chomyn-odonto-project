@@ -54,13 +54,6 @@ export default async function ConsultaClinicaPage({ params }: PageProps) {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Consulta Clínica</h1>
-        <p className="text-muted-foreground">
-          Paciente: {cita.paciente.persona.nombres} {cita.paciente.persona.apellidos}
-        </p>
-      </div>
-
       <ConsultaClinicaWorkspace citaId={citaId} userRole={rol} />
     </div>
   )

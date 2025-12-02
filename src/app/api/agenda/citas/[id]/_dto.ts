@@ -132,7 +132,7 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
   const esMenor = isMinorAt(fechaNacimiento, cita.inicio)
 
   // 1. Verificar consentimiento de menor (si aplica)
-  let minorConsentStatus = {
+  const minorConsentStatus = {
     esMenorAlInicio: esMenor === true,
     requiereConsentimiento: esMenor === true,
     consentimientoVigente: esMenor !== true, // Si no es menor, no requiere consentimiento
@@ -140,9 +140,11 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
   }
 
   if (esMenor === true) {
-    // Es menor de edad: verificar consentimiento vigente a la fecha/hora de la cita
+    // Es menor de edad: verificar consentimiento vigente para ESTA cita específica
+    // Solo se aceptan consentimientos específicos para esta cita (esEspecificoPorCita = true)
     const consentimientoMenor = cita.paciente.consentimientos.find(
-      (c) => c.tipo === "CONSENTIMIENTO_MENOR_ATENCION" && c.vigente_hasta >= cita.inicio
+      (c) => c.tipo === "CONSENTIMIENTO_MENOR_ATENCION" && 
+             c.Cita_idCita === citaId
     )
 
     if (consentimientoMenor) {
@@ -156,7 +158,7 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
         responsableNombre,
         responsableTipoVinculo: "RESPONSABLE",
         citaId: consentimientoMenor.Cita_idCita ?? null,
-        esEspecificoPorCita: consentimientoMenor.Cita_idCita !== null,
+        esEspecificoPorCita: true, // Always per-appointment
       }
     } else {
       minorConsentStatus.consentimientoVigente = false
@@ -166,7 +168,7 @@ export async function getCitaConsentimientoStatus(citaId: number): Promise<CitaC
   // 2. Verificar consentimiento de cirugía
   const surgeryValidation = await validateSurgeryConsent(citaId, cita.pacienteId, cita.inicio)
   
-  let surgeryConsentStatus = {
+  const surgeryConsentStatus = {
     requiereCirugia: surgeryValidation.requiresConsent,
     cirugiaConsentimientoVigente: surgeryValidation.isValid,
     cirugiaConsentimientoResumen: undefined as ConsentimientoResumen | undefined,

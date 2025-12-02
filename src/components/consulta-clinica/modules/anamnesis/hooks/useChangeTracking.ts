@@ -4,7 +4,9 @@
 "use client"
 
 import { useMemo, useCallback } from "react"
-import type { AnamnesisCreateUpdateBody, AnamnesisResponse } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import type {  AnamnesisResponse } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 
 export type ChangeSeverity = "critical" | "medium" | "low"
 export type ChangeType = "added" | "removed" | "modified"
@@ -22,7 +24,7 @@ export interface FieldChange {
 // Field configuration with labels, sections, and severity levels
 const FIELD_CONFIG: Record<string, { label: string; section: string; severity: ChangeSeverity }> = {
   // General fields (low severity)
-  motivoConsulta: { label: "Motivo de consulta", section: "general", severity: "low" },
+  // motivoConsulta removed - it's now in consulta, not anamnesis
   tieneDolorActual: { label: "Tiene dolor actual", section: "general", severity: "low" },
   dolorIntensidad: { label: "Intensidad del dolor", section: "general", severity: "low" },
   urgenciaPercibida: { label: "Urgencia percibida", section: "general", severity: "low" },
@@ -119,7 +121,7 @@ function mapResponseToComparable(response: AnamnesisResponse | null): Record<str
   const payload = response.payload as Record<string, unknown> | null
 
   return {
-    motivoConsulta: response.motivoConsulta || "",
+    // motivoConsulta removed - it's now in consulta, not anamnesis
     tieneDolorActual: response.tieneDolorActual,
     dolorIntensidad: response.dolorIntensidad,
     urgenciaPercibida: response.urgenciaPercibida,
@@ -143,7 +145,7 @@ function mapResponseToComparable(response: AnamnesisResponse | null): Record<str
 
 interface UseChangeTrackingOptions {
   initialData: AnamnesisResponse | null
-  currentValues: Partial<AnamnesisCreateUpdateBody>
+  currentValues: Partial<z.input<typeof AnamnesisCreateUpdateBodySchema>>
 }
 
 interface UseChangeTrackingResult {
@@ -175,7 +177,7 @@ export function useChangeTracking({
     
     // Fields to compare
     const fieldsToCheck = [
-      "motivoConsulta",
+      // motivoConsulta removed - it's now in consulta, not anamnesis
       "tieneDolorActual",
       "dolorIntensidad",
       "urgenciaPercibida",

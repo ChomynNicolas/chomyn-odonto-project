@@ -71,7 +71,14 @@ export async function PUT(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const userId = auth.session.user.id;
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "Invalid user ID" }, { status: 500 });
+    }
+    const actorId = parseInt(userId);
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "User ID is not a number" }, { status: 500 });
+    }
     const medicationCatalog = await updateMedicationCatalog(
       parsedId.data.id,
       parsedBody.data,
@@ -115,10 +122,18 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
-    await deleteMedicationCatalog(parsed.data.id, actorId, req.headers, req.nextUrl.pathname)
+    const userId = auth.session.user.id;
+    if (typeof userId !== "string") {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "Invalid user ID" }, { status: 500 });
+    }
+    const actorId = parseInt(userId);
+    if (isNaN(actorId)) {
+      return NextResponse.json({ ok: false, error: "INTERNAL_ERROR", message: "User ID is not a number" }, { status: 500 });
+    }
 
-    return NextResponse.json({ ok: true }, { status: 200 })
+    await deleteMedicationCatalog(parsed.data.id, actorId, req.headers, req.nextUrl.pathname);
+
+    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
 

@@ -178,6 +178,18 @@ export async function getConsultaClinica(
       createdBy: {
         select: userMiniSelect,
       },
+      updatedBy: {
+        select: userMiniSelect,
+      },
+      discontinuedBy: {
+        select: userMiniSelect,
+      },
+      medicationCatalog: {
+        select: {
+          name: true,
+          description: true,
+        },
+      },
     },
     orderBy: { startAt: "desc" },
   })
@@ -226,11 +238,11 @@ export async function getConsultaClinica(
     orderBy: { notedAt: "desc" },
   })
 
-  // Obtener plan de tratamiento activo del paciente
-  const planTratamiento = await prisma.treatmentPlan.findFirst({
+  // Obtener plan de tratamiento: primero intentar plan activo, luego el más reciente completado/cancelado
+  let planTratamiento = await prisma.treatmentPlan.findFirst({
     where: {
       pacienteId: consulta.cita.pacienteId,
-      isActive: true,
+      status: "ACTIVE",
     },
     include: {
       creadoPor: {
@@ -250,6 +262,34 @@ export async function getConsultaClinica(
       },
     },
   })
+
+  // Si no hay plan activo, obtener el más reciente plan completado o cancelado (para contexto)
+  if (!planTratamiento) {
+    planTratamiento = await prisma.treatmentPlan.findFirst({
+      where: {
+        pacienteId: consulta.cita.pacienteId,
+        status: { in: ["COMPLETED", "CANCELLED"] },
+      },
+      include: {
+        creadoPor: {
+          select: userMiniSelect,
+        },
+        steps: {
+          include: {
+            procedimientoCatalogo: {
+              select: {
+                idProcedimiento: true,
+                code: true,
+                nombre: true,
+              },
+            },
+          },
+          orderBy: { order: "asc" },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    })
+  }
 
   // Calcular edad del paciente
   const calcularEdad = (fechaNacimiento: Date | null): number | null => {
@@ -421,17 +461,34 @@ export async function getConsultaClinica(
     medicaciones: medicaciones.map((m) => ({
       id: m.idPatientMedication,
       medicationId: m.medicationId,
-      label: m.label,
+      // Usar label si existe, si no, usar nombre del catálogo, o "Medicación desconocida"
+      label: m.label ?? m.medicationCatalog?.name ?? "Medicación desconocida",
+      description: m.description,
       dose: m.dose,
       freq: m.freq,
       route: m.route,
       startAt: m.startAt?.toISOString() ?? null,
       endAt: m.endAt?.toISOString() ?? null,
       isActive: m.isActive,
+      updatedAt: m.updatedAt?.toISOString() ?? null,
+      discontinuedAt: m.discontinuedAt?.toISOString() ?? null,
+      consultaId: m.consultaId,
       createdBy: {
         id: m.createdBy.idUsuario,
         nombre: displayUser(m.createdBy),
       },
+      updatedBy: m.updatedBy
+        ? {
+            id: m.updatedBy.idUsuario,
+            nombre: displayUser(m.updatedBy),
+          }
+        : null,
+      discontinuedBy: m.discontinuedBy
+        ? {
+            id: m.discontinuedBy.idUsuario,
+            nombre: displayUser(m.discontinuedBy),
+          }
+        : null,
     })),
 
     adjuntos: consulta.adjuntos.map((a) => ({
@@ -523,7 +580,7 @@ export async function getConsultaClinica(
           id: planTratamiento.idTreatmentPlan,
           titulo: planTratamiento.titulo,
           descripcion: planTratamiento.descripcion,
-          isActive: planTratamiento.isActive,
+          status: planTratamiento.status,
           createdAt: planTratamiento.createdAt.toISOString(),
           updatedAt: planTratamiento.updatedAt.toISOString(),
           createdBy: {
@@ -587,7 +644,7 @@ export async function getConsultaAdmin(citaId: number): Promise<ConsultaAdminDTO
       id: consulta.cita.profesionalId,
       nombre: `${consulta.cita.profesional.persona.nombres} ${consulta.cita.profesional.persona.apellidos}`.trim(),
     },
-    motivo: consulta.reason,
+    motivo: null, // consulta.reason no longer exists; use PatientAnamnesis.motivoConsulta instead
     estado: consulta.status,
     createdAt: consulta.createdAt.toISOString(),
   }

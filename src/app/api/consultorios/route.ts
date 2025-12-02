@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const actorId = parseInt(auth.session.user.id ?? "0")
     const consultorio = await createConsultorio(
       parsed.data,
       actorId,

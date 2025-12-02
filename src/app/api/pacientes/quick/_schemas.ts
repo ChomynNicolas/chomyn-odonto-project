@@ -23,14 +23,8 @@ const TelefonoValidado = z
       const validation = validatePhone(val, "+595")
       return validation.isValid
     },
-    (val) => {
-      if (!val || val.trim() === "") {
-        return { message: "El teléfono es requerido" }
-      }
-      const validation = validatePhone(val, "+595")
-      return {
-        message: validation.error || "Formato de teléfono inválido. Ej: 0991234567 o +595991234567",
-      }
+    {
+      message: "Formato de teléfono inválido. Ej: 0991234567 o +595991234567",
     }
   )
   .refine(

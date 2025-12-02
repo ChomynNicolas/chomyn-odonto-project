@@ -62,7 +62,28 @@ export default function CitasCalendar({
 }) {
   const calendarRef = useRef<FullCalendar>(null)
 
-  const [filters, setFilters] = useState<AgendaFilters>({})
+  // Auto-initialize filters for ODONT users: automatically filter by their professional ID
+  const [filters, setFilters] = useState<AgendaFilters>(() => {
+    if (currentUser?.role === "ODONT" && currentUser.profesionalId) {
+      return {
+        profesionalId: currentUser.profesionalId,
+      }
+    }
+    return {}
+  })
+
+  // Ensure filters stay locked for ODONT users (prevent manual changes)
+  const handleFiltersChange = useCallback((newFilters: AgendaFilters) => {
+    if (currentUser?.role === "ODONT" && currentUser.profesionalId) {
+      // For ODONT users, always enforce their professional ID
+      setFilters({
+        ...newFilters,
+        profesionalId: currentUser.profesionalId,
+      })
+    } else {
+      setFilters(newFilters)
+    }
+  }, [currentUser])
 
   const events = useCitasCalendarSource(filters)
 
@@ -162,7 +183,7 @@ export default function CitasCalendar({
     <div className="flex flex-col h-full">
       <AgendaTopbar
         filters={filters}
-        onFiltersChange={setFilters}
+        onFiltersChange={handleFiltersChange}
         onNuevaCita={() => {
           setNuevaCitaDefaults({})
           setNuevaCitaOpen(true)

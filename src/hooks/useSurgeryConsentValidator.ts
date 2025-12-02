@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { showErrorToast } from "@/lib/messages/agenda-toast-helpers"
 
 interface SurgeryConsentValidationResult {
   isChecking: boolean

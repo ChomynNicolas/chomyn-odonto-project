@@ -4,8 +4,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { AnamnesisConfigValueSchema, AnamnesisConfigResponseSchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisConfigValueSchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { z } from "zod"
+import type { Prisma } from "@prisma/client"
 
 /**
  * GET /api/anamnesis/config
@@ -14,7 +15,7 @@ import { z } from "zod"
  * 
  * @returns { data: AnamnesisConfigResponse }
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const session = await auth()
     if (!session?.user?.id) {
@@ -22,8 +23,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Get all config entries
-    // Note: Prisma client uses camelCase, so AnamnesisConfig becomes anamnesisConfig
-    const configs = await (prisma as any).anamnesisConfig.findMany({
+    const configs = await prisma.anamnesisConfig.findMany({
       include: {
         updatedBy: {
           select: {
@@ -103,17 +103,16 @@ export async function PUT(req: NextRequest) {
     const validatedValue = AnamnesisConfigValueSchema.parse(value)
 
     // Upsert config
-    // Note: Prisma client uses camelCase, so AnamnesisConfig becomes anamnesisConfig
-    const config = await (prisma as any).anamnesisConfig.upsert({
+    const config = await prisma.anamnesisConfig.upsert({
       where: { key },
       create: {
         key,
-        value: validatedValue as any,
+        value: validatedValue as Prisma.InputJsonValue,
         description: description || null,
         updatedByUserId: userId,
       },
       update: {
-        value: validatedValue as any,
+        value: validatedValue as Prisma.InputJsonValue,
         description: description || null,
         updatedByUserId: userId,
       },

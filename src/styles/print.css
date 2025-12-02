@@ -1,0 +1,337 @@
+/* src/styles/print.css */
+/**
+ * Print Stylesheet for Reports
+ * Optimizes layout for A4/Letter printing.
+ */
+
+@media print {
+  /* ============== GENERAL RESETS ============== */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  body {
+    font-size: 12pt;
+    line-height: 1.4;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  /* Remove scrollbars */
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ============== HIDE NON-ESSENTIAL ELEMENTS ============== */
+  /* Navigation */
+  nav,
+  aside,
+  header:not(.print-header),
+  .sidebar,
+  [data-sidebar],
+  [data-navigation] {
+    display: none !important;
+  }
+
+  /* Interactive elements */
+  button:not(.print-visible),
+  .btn,
+  input,
+  select,
+  textarea,
+  form {
+    display: none !important;
+  }
+
+  /* Utility classes for hiding */
+  .print\:hidden,
+  .no-print,
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Toast notifications */
+  [data-sonner-toaster],
+  .sonner-toast {
+    display: none !important;
+  }
+
+  /* Tooltips and popovers */
+  [role="tooltip"],
+  [data-state="open"],
+  .tooltip,
+  .popover {
+    display: none !important;
+  }
+
+  /* ============== SHOW PRINT ELEMENTS ============== */
+  .print\:block {
+    display: block !important;
+  }
+
+  .print\:flex {
+    display: flex !important;
+  }
+
+  /* ============== PAGE SETUP ============== */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 10mm;
+  }
+
+  @page :first {
+    margin-top: 10mm;
+  }
+
+  /* Page breaks */
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+
+  /* Prevent orphans and widows */
+  p,
+  li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Keep headings with content */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    page-break-after: avoid;
+  }
+
+  /* ============== LAYOUT ============== */
+  main,
+  .main-content,
+  [data-main-content] {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Grid adjustments */
+  .grid {
+    display: grid !important;
+  }
+
+  .print\:grid-cols-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  .print\:gap-2 {
+    gap: 0.5rem !important;
+  }
+
+  /* ============== TYPOGRAPHY ============== */
+  h1 {
+    font-size: 18pt !important;
+    margin-bottom: 8pt !important;
+  }
+
+  h2 {
+    font-size: 14pt !important;
+    margin-bottom: 6pt !important;
+  }
+
+  h3 {
+    font-size: 12pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  /* Ensure text is readable */
+  .text-gray-400,
+  .text-gray-500,
+  .text-gray-600 {
+    color: #444 !important;
+  }
+
+  /* ============== TABLES ============== */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9pt !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  th,
+  td {
+    padding: 4pt 6pt !important;
+    border: 0.5pt solid #ddd !important;
+    text-align: left !important;
+  }
+
+  th {
+    background-color: #f5f5f5 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Alternating rows */
+  tbody tr:nth-child(even) {
+    background-color: #fafafa !important;
+  }
+
+  /* ============== KPI CARDS ============== */
+  .print\:p-2 {
+    padding: 0.5rem !important;
+  }
+
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  .print\:border {
+    border: 1pt solid #ddd !important;
+  }
+
+  .print\:text-xs {
+    font-size: 8pt !important;
+  }
+
+  .print\:text-lg {
+    font-size: 12pt !important;
+  }
+
+  /* ============== COLORS ============== */
+  /* Preserve important colors */
+  .bg-green-100,
+  .bg-green-50 {
+    background-color: #dcfce7 !important;
+  }
+
+  .bg-red-100,
+  .bg-red-50 {
+    background-color: #fee2e2 !important;
+  }
+
+  .bg-amber-100,
+  .bg-amber-50 {
+    background-color: #fef3c7 !important;
+  }
+
+  .bg-blue-100,
+  .bg-blue-50 {
+    background-color: #dbeafe !important;
+  }
+
+  .text-green-600,
+  .text-green-700 {
+    color: #16a34a !important;
+  }
+
+  .text-red-600,
+  .text-red-700 {
+    color: #dc2626 !important;
+  }
+
+  .text-amber-600,
+  .text-amber-700 {
+    color: #d97706 !important;
+  }
+
+  .text-blue-600,
+  .text-blue-700 {
+    color: #2563eb !important;
+  }
+
+  /* ============== BORDERS & SHADOWS ============== */
+  .border,
+  .rounded-xl,
+  .rounded-lg {
+    border-radius: 0 !important;
+  }
+
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* ============== LINKS ============== */
+  a[href] {
+    text-decoration: none !important;
+    color: inherit !important;
+  }
+
+  /* Show URLs for external links */
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: #666;
+  }
+
+  /* ============== REPORT-SPECIFIC ============== */
+  /* Report header */
+  .report-header {
+    border-bottom: 1pt solid #000;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
+  }
+
+  /* Filter summary */
+  .filter-summary {
+    background-color: #f9fafb !important;
+    padding: 8pt !important;
+    margin-bottom: 12pt !important;
+    border: 0.5pt solid #e5e7eb !important;
+  }
+
+  /* ============== DARK MODE OVERRIDE ============== */
+  .dark {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .dark * {
+    background: transparent !important;
+    color: #000 !important;
+    border-color: #ddd !important;
+  }
+
+  .dark .bg-gray-950,
+  .dark .bg-gray-900,
+  .dark .bg-gray-800 {
+    background: #fff !important;
+  }
+
+  .dark .text-gray-100,
+  .dark .text-gray-200,
+  .dark .text-gray-300 {
+    color: #000 !important;
+  }
+
+  .dark .text-gray-400,
+  .dark .text-gray-500 {
+    color: #444 !important;
+  }
+
+  .dark .border-gray-800,
+  .dark .border-gray-700 {
+    border-color: #ddd !important;
+  }
+}
+

@@ -133,13 +133,14 @@ export interface ResponsiblePersonDTO {
     id: number;
     fullName: string;
     document: { type: string; number: string } | null;
-    contacts: Array<{ tipo: string; valor: string }>;
+    contacts: Array<{ tipo: string; valor: string; esPrincipal: boolean }>;
   };
   relacion: string;
   esPrincipal: boolean;
   autoridadLegal: boolean;
   vigenteDesde: string;
   vigenteHasta: string | null;
+  notas: string | null;
 }
 
 export interface AdministrativeDTO {
@@ -208,4 +209,92 @@ export interface AttachmentDTO {
   uploadedBy: string;
   consultaId: number | null;
   procedimientoId: number | null;
+}
+
+
+// Agregar o actualizar en tu archivo de tipos
+
+export interface AppointmentsSummaryDTO {
+  total: number;
+  completed: number;
+  cancelled: number;
+  noShow: number;
+  scheduled: number;
+  nextAppointment: {
+    id: number;
+    date: string;
+    tipo: string;
+    profesional: string;
+  } | null;
+  lastAppointment: {
+    id: number;
+    date: string;
+    tipo: string;
+  } | null;
+  attendanceRate: number; // Porcentaje de asistencia
+}
+
+export interface ConsentDTO {
+  id: number;
+  tipo: string;
+  firmadoEn: string;
+  responsable: {
+    id: number;
+    fullName: string;
+  };
+  cita: {
+    id: number;
+    fecha: string;
+  } | null;
+  registradoPor: string;
+  observaciones: string | null;
+}
+
+
+export interface TreatmentPlanSummaryDTO {
+  id: number;
+  titulo: string;
+  descripcion: string | null;
+  isActive: boolean;
+  createdAt: string;
+  totalSteps: number;
+  completedSteps: number;
+  pendingSteps: number;
+  progressPercentage: number;
+}
+
+export interface PatientStatusDTO {
+  estaActivo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdministrativeDTO {
+  status: PatientStatusDTO;
+  responsibles: Array<{
+    id: number;
+    persona: {
+      id: number;
+      fullName: string;
+      document: {
+        type: string;
+        number: string;
+      } | null;
+      contacts: Array<{
+        tipo: string;
+        valor: string;
+        esPrincipal: boolean;
+      }>;
+    };
+    relacion: string;
+    esPrincipal: boolean;
+    autoridadLegal: boolean;
+    vigenteDesde: string;
+    vigenteHasta: string | null;
+    notas: string | null;
+  }>;
+  administrativeNotes: string | null;
+  appointmentsSummary: AppointmentsSummaryDTO;
+  treatmentPlans: TreatmentPlanSummaryDTO[];
+  consents: ConsentDTO[];
 }

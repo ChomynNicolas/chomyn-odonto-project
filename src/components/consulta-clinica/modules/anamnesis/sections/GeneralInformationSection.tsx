@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
 import { FileText, AlertCircle } from "lucide-react"
@@ -16,17 +17,15 @@ import { SectionCompletionIndicator } from "../components/SectionCompletionIndic
 import { PainSlider } from "../components/PainSlider"
 
 interface GeneralInformationSectionProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   canEdit: boolean
 }
 
 export function GeneralInformationSection({ form, canEdit }: GeneralInformationSectionProps) {
-  // Calculate completion
-  const motivoConsulta = form.watch("motivoConsulta")
+  // Calculate completion (motivoConsulta removed - it's now in consulta)
   const tieneDolorActual = form.watch("tieneDolorActual")
   const dolorIntensidad = form.watch("dolorIntensidad")
   const isComplete =
-    !!motivoConsulta &&
     (!tieneDolorActual || (tieneDolorActual && dolorIntensidad !== null && dolorIntensidad !== undefined))
 
   return (
@@ -43,35 +42,6 @@ export function GeneralInformationSection({ form, canEdit }: GeneralInformationS
         </div>
       </CardHeader>
       <CardContent className="space-y-8">
-        <FormField
-          control={form.control}
-          name="motivoConsulta"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-base font-medium flex items-center gap-2">
-                Motivo de consulta
-                <span className="text-destructive text-lg">*</span>
-                <Badge variant="secondary" className="ml-auto">
-                  {field.value?.length || 0}/200
-                </Badge>
-              </FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  placeholder="Ej: Dolor en muela superior derecha"
-                  maxLength={200}
-                  disabled={!canEdit}
-                  className="text-base h-11"
-                />
-              </FormControl>
-              <FormDescription className="text-sm leading-relaxed">
-                Describa brevemente el motivo principal de la consulta
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <FormField
           control={form.control}
           name="tieneDolorActual"
@@ -115,24 +85,33 @@ export function GeneralInformationSection({ form, canEdit }: GeneralInformationS
           <FormField
             control={form.control}
             name="urgenciaPercibida"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-base font-medium">Urgencia percibida</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!canEdit}>
-                  <FormControl>
-                    <SelectTrigger className="h-11 text-base">
-                      <SelectValue placeholder="Seleccione la urgencia" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="RUTINA">Rutina</SelectItem>
-                    <SelectItem value="PRIORITARIO">Prioritario</SelectItem>
-                    <SelectItem value="URGENCIA">Urgencia</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              // Si field.value es nulo o undefined, forzamos que sea "RUTINA"
+              const currentValue = field.value ?? "RUTINA";
+              // Cuando cambias la selección, actualiza a ese valor
+              return (
+                <FormItem>
+                  <FormLabel className="text-base font-medium">Urgencia percibida</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={currentValue}
+                    disabled={!canEdit}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="h-11 text-base">
+                        <SelectValue placeholder="Seleccione la urgencia" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent >
+                      <SelectItem value="RUTINA" >Rutina</SelectItem>
+                      <SelectItem value="PRIORITARIO">Prioritario</SelectItem>
+                      <SelectItem value="URGENCIA">Urgencia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )
+            }}
           />
 
           <FormField

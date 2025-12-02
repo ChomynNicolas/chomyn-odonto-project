@@ -43,9 +43,14 @@ async function ConsultoriosContent({ searchParams }: ConsultoriosPageProps) {
   const result = await listConsultoriosWithStats(validatedFilters)
 
   // Envolver en formato esperado por ConsultoriosTable
-  const consultoriosResponse: { ok: boolean; data: typeof result.data; meta: typeof result.meta } = {
-    ok: true,
-    data: result.data,
+  // Convertir Date a string ISO para compatibilidad con el tipo del cliente
+  const consultoriosResponse = {
+    ok: true as const,
+    data: result.data.map((item) => ({
+      ...item,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    })),
     meta: result.meta,
   }
 

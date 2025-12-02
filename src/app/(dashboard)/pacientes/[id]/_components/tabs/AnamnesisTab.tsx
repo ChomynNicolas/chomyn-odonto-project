@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, AlertCircle, History, Eye } from "lucide-react"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { FileText, AlertCircle} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { RolNombre } from "@/types/patient"
 import { AnamnesisDisplayView } from "../anamnesis/anamnesis-display-view"
@@ -20,14 +20,26 @@ import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import type { AnamnesisStatus } from "@/types/anamnesis-outside-consultation"
+import type { AnamnesisMetadata } from "../anamnesis/types/anamnesis-display.types"
+import type { PatientAnamnesisDTO } from "@/types/patient"
 
 interface AnamnesisTabProps {
   patientId: number
   currentRole: RolNombre
 }
 
+// Extended type to include payload and actualizadoPor from API response
+type AnamnesisWithPayload = PatientAnamnesisDTO & {
+  payload?: Record<string, unknown> | null
+  actualizadoPor?: {
+    idUsuario: number
+    nombreApellido: string
+  } | null
+}
+
 export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
-  const { data: anamnesis, isLoading, error, refetch } = usePatientAnamnesis(patientId)
+  const { data: anamnesisData, isLoading, error, refetch } = usePatientAnamnesis(patientId)
+  const anamnesis = anamnesisData as AnamnesisWithPayload | null
   const { data: patientOverview } = usePatientOverview(patientId)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [activeView, setActiveView] = useState<"display" | "history">("display")
@@ -39,7 +51,7 @@ export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
     }
     // Try to get from anamnesis metadata
     if (anamnesis?.payload && typeof anamnesis.payload === "object" && "_metadata" in anamnesis.payload) {
-      const metadata = (anamnesis.payload as any)._metadata
+      const metadata = (anamnesis.payload as { _metadata?: AnamnesisMetadata })._metadata
       if (metadata?.patientGender) {
         return metadata.patientGender as "MASCULINO" | "FEMENINO" | "OTRO" | "NO_ESPECIFICADO"
       }
@@ -202,16 +214,7 @@ export function AnamnesisTab({ patientId, currentRole }: AnamnesisTabProps) {
         </CardHeader>
         <CardContent>
           <Tabs value={activeView} onValueChange={(v) => setActiveView(v as "display" | "history")} className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="display" className="flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                Vista Actual
-              </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center gap-2">
-                <History className="h-4 w-4" />
-                Historial
-              </TabsTrigger>
-            </TabsList>
+            
 
             <TabsContent value="display" className="mt-6">
               <AnamnesisDisplayView

@@ -5,7 +5,6 @@
 
 import { prisma } from "@/lib/prisma"
 import type { PersonaCreateBody } from "./_schemas.create"
-import type { TipoDocumento, TipoContacto } from "@prisma/client"
 import { normalizarEmail, normalizarTelefono, esMovilPY } from "@/lib/normalize"
 
 export async function createPersona(body: PersonaCreateBody) {

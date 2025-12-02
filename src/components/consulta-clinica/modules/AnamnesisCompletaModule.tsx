@@ -25,7 +25,6 @@ import {
   Save, 
   Edit, 
   AlertCircle, 
-  Info,
   User,
   Calendar,
   Phone,
@@ -145,7 +144,6 @@ export function AnamnesisCompletaModule({
   citaId, 
   consulta, 
   canEdit, 
-  hasConsulta, 
   onUpdate 
 }: AnamnesisCompletaModuleProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)

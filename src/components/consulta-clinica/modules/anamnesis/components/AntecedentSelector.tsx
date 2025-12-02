@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Check, X, Plus } from "lucide-react"
-import { cn } from "@/lib/utils"
+import {  X, Plus } from "lucide-react"
 import { type AntecedentCategory } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
 import { toast } from "sonner"
 
@@ -28,9 +27,9 @@ type AntecedentValue = {
   customName?: string
   customCategory?: AntecedentCategory
   notes?: string
-  diagnosedAt?: string
+  diagnosedAt?: string | null
   isActive: boolean
-  resolvedAt?: string
+  resolvedAt?: string | null
 }[]
 
 interface AntecedentSelectorProps {
@@ -55,17 +54,21 @@ export function AntecedentSelector({ value, onChange, disabled }: AntecedentSele
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [catalog, setCatalog] = useState<AntecedentCatalogItem[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [, setIsLoading] = useState(false)
   const [customName, setCustomName] = useState("")
   const [customCategory, setCustomCategory] = useState<AntecedentCategory>("OTHER")
+  const [catalogLoaded, setCatalogLoaded] = useState(false)
 
+  // Load catalog on mount if there are antecedents from catalog (antecedentId without customName)
   useEffect(() => {
-    if (open) {
+    const hasCatalogAntecedents = value.some((v) => v.antecedentId && !v.customName)
+    if (hasCatalogAntecedents && !catalogLoaded) {
       setIsLoading(true)
       fetch("/api/anamnesis/antecedents/catalog?activeOnly=true")
         .then((res) => res.json())
         .then((data) => {
           setCatalog(data.data?.items || [])
+          setCatalogLoaded(true)
           setIsLoading(false)
         })
         .catch((error) => {
@@ -73,7 +76,25 @@ export function AntecedentSelector({ value, onChange, disabled }: AntecedentSele
           setIsLoading(false)
         })
     }
-  }, [open])
+  }, [value, catalogLoaded])
+
+  // Also load catalog when popover opens (for adding new items)
+  useEffect(() => {
+    if (open && !catalogLoaded) {
+      setIsLoading(true)
+      fetch("/api/anamnesis/antecedents/catalog?activeOnly=true")
+        .then((res) => res.json())
+        .then((data) => {
+          setCatalog(data.data?.items || [])
+          setCatalogLoaded(true)
+          setIsLoading(false)
+        })
+        .catch((error) => {
+          console.error("Error loading catalog:", error)
+          setIsLoading(false)
+        })
+    }
+  }, [open, catalogLoaded])
 
   const handleAddFromCatalog = (item: AntecedentCatalogItem) => {
     if (value.some((v) => v.antecedentId === item.idAntecedentCatalog)) {

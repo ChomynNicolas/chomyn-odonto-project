@@ -136,7 +136,6 @@ export function UploadConsentDialog({
   });
 
   const responsableId = watch("responsablePersonaId");
-  const firmadoEn = watch("firmadoEn");
 
   // Load patient info if not provided
   useEffect(() => {
@@ -162,7 +161,7 @@ export function UploadConsentDialog({
             }
           }
         })
-        .catch((error) => {
+        .catch(() => {
           toast.error("Error al cargar el paciente");
         })
         .finally(() => {
@@ -534,17 +533,8 @@ export function UploadConsentDialog({
               className="resize-none text-sm"
             />
           </div>
-          {/* Consent Info */}
-          <Alert className="text-xs py-2 px-3 border-l-4 border-blue-400 bg-blue-50 dark:bg-blue-950/30">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            <AlertDescription>
-              {consentIsSurgery
-                ? "Válido solo para la cita quirúrgica asociada."
-                : workflow.requiresGuardian
-                ? "Vigencia: 12 meses. Permite atención del menor."
-                : "Vigencia: 12 meses. Permite atención del paciente."}
-            </AlertDescription>
-          </Alert>
+          
+          
         </div>
         {/* Sticky footer: Buttons always visible, shadow for separation */}
         <DialogFooter className="sticky bottom-0 bg-white dark:bg-neutral-900 z-10 px-6 py-3 border-t shadow-sm flex space-x-2">

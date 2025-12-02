@@ -1,7 +1,7 @@
 // src/components/consulta-clinica/modules/PlanesTratamientoModule.tsx
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Progress } from "@/components/ui/progress"
 import {
   Dialog,
   DialogContent,
@@ -34,10 +35,11 @@ import {
   Save,
 } from "lucide-react"
 import type { ConsultaClinicaDTO, TreatmentStepDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
-import { TreatmentStepStatus, DienteSuperficie } from "@prisma/client"
+import { TreatmentStepStatus, TreatmentPlanStatus, DienteSuperficie } from "@prisma/client"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { CompletarSesionDialog } from "./planes-tratamiento/CompletarSesionDialog"
 
 interface PlanesTratamientoModuleProps {
   citaId: number
@@ -69,6 +71,9 @@ interface StepFormData {
   estimatedCostCents: number | null
   priority: number | null
   notes: string
+  requiresMultipleSessions: boolean
+  totalSessions: number | null
+  currentSession: number | null
 }
 
 /**
@@ -103,6 +108,39 @@ export function PlanesTratamientoModule({
 
   // Loading state
   const [isSaving, setIsSaving] = useState(false)
+
+  // Session completion dialog state
+  const [selectedStepForCompletion, setSelectedStepForCompletion] = useState<TreatmentStepDTO | null>(null)
+  const [isCompletionDialogOpen, setIsCompletionDialogOpen] = useState(false)
+
+  // Función para obtener el badge de estado del plan
+  const getPlanStatusBadge = (status: TreatmentPlanStatus) => {
+    switch (status) {
+      case TreatmentPlanStatus.ACTIVE:
+        return (
+          <Badge variant="default" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Activo
+          </Badge>
+        )
+      case TreatmentPlanStatus.COMPLETED:
+        return (
+          <Badge variant="secondary" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Completado
+          </Badge>
+        )
+      case TreatmentPlanStatus.CANCELLED:
+        return (
+          <Badge variant="destructive" className="bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border-red-200">
+            <XCircle className="h-3 w-3 mr-1" />
+            Cancelado
+          </Badge>
+        )
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
 
   // Función para obtener el badge de estado del step
   const getStatusBadge = (status: TreatmentStepStatus) => {
@@ -201,12 +239,29 @@ export function PlanesTratamientoModule({
     return `Prioridad ${priority}`
   }
 
+  const loadCatalog = useCallback(async () => {
+    try {
+      setIsLoadingCatalog(true)
+      const res = await fetch("/api/procedimientos/catalogo?activo=true")
+      if (!res.ok) throw new Error("Error al cargar catálogo")
+      const data = await res.json()
+      if (data.ok) {
+        setCatalogOptions(data.data)
+      }
+    } catch (error) {
+      console.error("Error loading catalog:", error)
+      toast.error("Error al cargar catálogo de procedimientos")
+    } finally {
+      setIsLoadingCatalog(false)
+    }
+  }, [])
+
   // Load catalog when dialog opens
   useEffect(() => {
     if (isDialogOpen && catalogOptions.length === 0 && !isLoadingCatalog) {
       loadCatalog()
     }
-  }, [isDialogOpen])
+  }, [isDialogOpen, catalogOptions.length, isLoadingCatalog, loadCatalog])
 
   // Initialize form when editing
   useEffect(() => {
@@ -225,6 +280,9 @@ export function PlanesTratamientoModule({
           estimatedCostCents: step.estimatedCostCents,
           priority: step.priority,
           notes: step.notes || "",
+          requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+          totalSessions: step.totalSessions ?? null,
+          currentSession: step.currentSession ?? null,
         }))
       )
     } else if (isDialogOpen && !isEditing) {
@@ -234,23 +292,6 @@ export function PlanesTratamientoModule({
       setSteps([])
     }
   }, [isDialogOpen, plan, isEditing])
-
-  const loadCatalog = async () => {
-    try {
-      setIsLoadingCatalog(true)
-      const res = await fetch("/api/procedimientos/catalogo?activo=true")
-      if (!res.ok) throw new Error("Error al cargar catálogo")
-      const data = await res.json()
-      if (data.ok) {
-        setCatalogOptions(data.data)
-      }
-    } catch (error) {
-      console.error("Error loading catalog:", error)
-      toast.error("Error al cargar catálogo de procedimientos")
-    } finally {
-      setIsLoadingCatalog(false)
-    }
-  }
 
   const handleOpenCreateDialog = () => {
     setIsEditing(false)
@@ -282,6 +323,9 @@ export function PlanesTratamientoModule({
         estimatedCostCents: null,
         priority: null,
         notes: "",
+        requiresMultipleSessions: false,
+        totalSessions: null,
+        currentSession: 1,
       },
     ])
     setEditingStepIndex(steps.length)
@@ -349,6 +393,18 @@ export function PlanesTratamientoModule({
         toast.error(`El paso #${step.order} debe tener un procedimiento del catálogo o un nombre manual`)
         return
       }
+
+      // Validate multi-session steps
+      if (step.requiresMultipleSessions) {
+        if (!step.totalSessions || step.totalSessions < 2) {
+          toast.error(`El paso #${step.order} requiere múltiples sesiones pero el número total de sesiones es inválido (mínimo 2)`)
+          return
+        }
+        if (step.totalSessions > 10) {
+          toast.error(`El paso #${step.order} no puede tener más de 10 sesiones`)
+          return
+        }
+      }
     }
 
     try {
@@ -373,6 +429,9 @@ export function PlanesTratamientoModule({
           estimatedCostCents: step.estimatedCostCents,
           priority: step.priority,
           notes: step.notes.trim() || null,
+          requiresMultipleSessions: step.requiresMultipleSessions,
+          totalSessions: step.requiresMultipleSessions ? step.totalSessions : null,
+          currentSession: step.requiresMultipleSessions ? (step.currentSession ?? 1) : null,
         })),
       }
 
@@ -418,61 +477,81 @@ export function PlanesTratamientoModule({
 
   if (!plan) {
     return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Plan de Tratamiento
-            </CardTitle>
-            {canEdit && !isFinalized && consulta.pacienteId && (
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={handleOpenCreateDialog} size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Crear Plan
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Crear Plan de Tratamiento</DialogTitle>
-                    <DialogDescription>
-                      Cree un nuevo plan de tratamiento para el paciente. Solo puede haber un plan activo a la vez.
-                    </DialogDescription>
-                  </DialogHeader>
-                  {renderPlanForm()}
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <p className="mb-4">No hay plan de tratamiento activo para este paciente.</p>
-            {canEdit && consulta.pacienteId && (
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/pacientes/${consulta.pacienteId}/planes`)}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Ver Planes de Tratamiento
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                Plan de Tratamiento
+              </CardTitle>
+              {canEdit && !isFinalized && consulta.pacienteId && (
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={handleOpenCreateDialog} size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Crear Plan
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Crear Plan de Tratamiento</DialogTitle>
+                      <DialogDescription>
+                        Cree un nuevo plan de tratamiento para el paciente. Solo puede haber un plan activo a la vez.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {renderPlanForm()}
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="mb-4">No hay plan de tratamiento activo para este paciente.</p>
+              {canEdit && consulta.pacienteId && (
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/pacientes/${consulta.pacienteId}/planes`)}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Ver Planes de Tratamiento
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        {selectedStepForCompletion && consulta.pacienteId && (
+          <CompletarSesionDialog
+            isOpen={isCompletionDialogOpen}
+            onOpenChange={setIsCompletionDialogOpen}
+            step={selectedStepForCompletion}
+            patientId={consulta.pacienteId}
+            onSessionCompleted={async () => {
+              await onUpdate()
+              setSelectedStepForCompletion(null)
+            }}
+          />
+        )}
+      </>
     )
   }
 
+  const isPlanInactive = plan.status === TreatmentPlanStatus.COMPLETED || plan.status === TreatmentPlanStatus.CANCELLED
+
   return (
-    <Card>
+    <>
+    <Card className={isPlanInactive ? "opacity-75 border-dashed" : ""}>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Plan de Tratamiento
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                Plan de Tratamiento
+              </CardTitle>
+              {getPlanStatusBadge(plan.status)}
+            </div>
             <p className="text-sm text-muted-foreground mt-1">
               {plan.titulo}
               {plan.descripcion && ` • ${plan.descripcion}`}
@@ -486,7 +565,7 @@ export function PlanesTratamientoModule({
             </div>
           </div>
           <div className="flex gap-2">
-            {canEdit && !isFinalized && consulta.pacienteId && (
+            {canEdit && !isFinalized && consulta.pacienteId && plan.status === TreatmentPlanStatus.ACTIVE && (
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={handleOpenEditDialog} variant="outline" size="sm">
@@ -499,6 +578,25 @@ export function PlanesTratamientoModule({
                     <DialogTitle>Editar Plan de Tratamiento</DialogTitle>
                     <DialogDescription>
                       Modifique el plan de tratamiento activo del paciente.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {renderPlanForm()}
+                </DialogContent>
+              </Dialog>
+            )}
+            {canEdit && !isFinalized && consulta.pacienteId && (plan.status === TreatmentPlanStatus.COMPLETED || plan.status === TreatmentPlanStatus.CANCELLED) && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleOpenCreateDialog} variant="default" size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Nuevo Plan
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Crear Nuevo Plan de Tratamiento</DialogTitle>
+                    <DialogDescription>
+                      Cree un nuevo plan de tratamiento para el paciente. El plan anterior está {plan.status === TreatmentPlanStatus.COMPLETED ? "completado" : "cancelado"}.
                     </DialogDescription>
                   </DialogHeader>
                   {renderPlanForm()}
@@ -527,6 +625,14 @@ export function PlanesTratamientoModule({
             </AlertDescription>
           </Alert>
         )}
+        {(plan.status === TreatmentPlanStatus.COMPLETED || plan.status === TreatmentPlanStatus.CANCELLED) && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Este plan está {plan.status === TreatmentPlanStatus.COMPLETED ? "completado" : "cancelado"}. Puede crear un nuevo plan de tratamiento.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="space-y-4">
           {sortedSteps.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
@@ -545,7 +651,31 @@ export function PlanesTratamientoModule({
                         <span className="text-sm font-medium text-muted-foreground">#{step.order}</span>
                         <h4 className="font-semibold">{getProcedureName(step)}</h4>
                         {getStatusBadge(step.status)}
+                        {step.requiresMultipleSessions && step.totalSessions && (
+                          <Badge
+                            variant="outline"
+                            className={
+                              step.currentSession === step.totalSessions
+                                ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                                : "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
+                            }
+                          >
+                            <Clock className="h-3 w-3 mr-1" />
+                            Sesión {step.currentSession ?? 1}/{step.totalSessions}
+                          </Badge>
+                        )}
                       </div>
+                      {step.requiresMultipleSessions && step.totalSessions && (
+                        <div className="space-y-1 mt-2">
+                          <Progress
+                            value={((step.currentSession ?? 1) / step.totalSessions) * 100}
+                            className="h-2"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {step.currentSession ?? 1} de {step.totalSessions} sesiones completadas
+                          </p>
+                        </div>
+                      )}
                       {getToothDescription(step) && (
                         <p className="text-sm text-muted-foreground">{getToothDescription(step)}</p>
                       )}
@@ -554,6 +684,28 @@ export function PlanesTratamientoModule({
                       )}
                     </div>
                   </div>
+                  {step.requiresMultipleSessions &&
+                    step.status === TreatmentStepStatus.IN_PROGRESS &&
+                    step.currentSession &&
+                    step.totalSessions &&
+                    step.currentSession < step.totalSessions &&
+                    canEdit &&
+                    !isFinalized && (
+                      <div className="pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedStepForCompletion(step)
+                            setIsCompletionDialogOpen(true)
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Completar Sesión {step.currentSession}
+                        </Button>
+                      </div>
+                    )}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground pt-2 border-t">
                     <div>
                       <span className="font-medium">Duración:</span> {formatDuration(step.estimatedDurationMin)}
@@ -575,6 +727,19 @@ export function PlanesTratamientoModule({
         </div>
       </CardContent>
     </Card>
+    {selectedStepForCompletion && consulta.pacienteId && (
+      <CompletarSesionDialog
+        isOpen={isCompletionDialogOpen}
+        onOpenChange={setIsCompletionDialogOpen}
+        step={selectedStepForCompletion}
+        patientId={consulta.pacienteId}
+        onSessionCompleted={async () => {
+          await onUpdate()
+          setSelectedStepForCompletion(null)
+        }}
+      />
+    )}
+    </>
   )
 
   function renderPlanForm() {
@@ -620,7 +785,7 @@ export function PlanesTratamientoModule({
 
           {steps.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              No hay pasos agregados. Haga clic en "Agregar Paso" para comenzar.
+              No hay pasos agregados. Haga clic en &quot;Agregar Paso&quot; para comenzar.
             </p>
           ) : (
             <div className="space-y-4">
@@ -811,6 +976,60 @@ export function PlanesTratamientoModule({
                             <SelectItem value="5">5 - Muy Baja</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+
+                      {/* Multiple Sessions Section */}
+                      <div className="space-y-4 rounded-lg border p-4">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`multiSession-${index}`}
+                            checked={step.requiresMultipleSessions}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              handleUpdateStep(index, {
+                                requiresMultipleSessions: checked,
+                                totalSessions: checked ? 2 : null,
+                                currentSession: checked ? 1 : null,
+                              })
+                            }}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <Label htmlFor={`multiSession-${index}`} className="font-medium cursor-pointer">
+                            Requiere múltiples sesiones
+                          </Label>
+                        </div>
+
+                        {step.requiresMultipleSessions && (
+                          <div className="space-y-2 pl-6">
+                            <div className="space-y-2">
+                              <Label htmlFor={`totalSessions-${index}`}>
+                                Total de Sesiones <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                id={`totalSessions-${index}`}
+                                type="number"
+                                min={2}
+                                max={10}
+                                value={step.totalSessions || ""}
+                                onChange={(e) => {
+                                  const value = e.target.value ? Number.parseInt(e.target.value, 10) : null
+                                  handleUpdateStep(index, {
+                                    totalSessions: value,
+                                  })
+                                }}
+                                placeholder="Ej: 3"
+                                required
+                              />
+                            </div>
+
+                            {step.id && step.totalSessions && step.currentSession && (
+                              <p className="text-sm text-muted-foreground">
+                                Sesión actual: {step.currentSession} de {step.totalSessions}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Estimated Duration */}

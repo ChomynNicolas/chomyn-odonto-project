@@ -6,9 +6,10 @@ import { paramsSchema, createProcedureSchema } from "../_schemas"
 import { CONSULTA_RBAC } from "../_rbac"
 import { prisma } from "@/lib/prisma"
 import { ensureConsulta } from "../_service"
-import { TreatmentStepStatus } from "@prisma/client"
 import { auditProcedureCreate } from "./_audit"
 import { sanitizeProcedimientoForRole } from "../_utils"
+import { handleStepSessionProgress } from "./_step-session"
+import { checkPlanCompletion } from "@/app/api/pacientes/[id]/plan-tratamiento/_service"
 
 /**
  * GET /api/agenda/citas/[id]/consulta/procedimientos
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         include: { profesional: true },
       })
       if (!cita) return errors.notFound("Cita no encontrada")
-      consulta = await ensureConsulta(citaId, cita.profesionalId, userId)
+      await ensureConsulta(citaId, cita.profesionalId, userId)
       // Re-fetch to get pacienteId
       const consultaWithPaciente = await prisma.consulta.findUnique({
         where: { citaId },
@@ -143,9 +144,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         },
       })
-      if (consultaWithPaciente) {
-        consulta = consultaWithPaciente
+      if (!consultaWithPaciente) {
+        return errors.internal("Error al crear consulta")
       }
+      consulta = consultaWithPaciente
     }
 
     // Validate diagnosisId if provided
@@ -168,65 +170,75 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     // Calcular total si no se proporciona
     const totalCents = input.totalCents ?? (input.unitPriceCents ? input.unitPriceCents * input.quantity : null)
 
-    const procedimiento = await prisma.consultaProcedimiento.create({
-      data: {
-        consultaId: citaId,
-        procedureId: input.procedureId ?? null,
-        serviceType: input.serviceType ?? null,
-        toothNumber: input.toothNumber ?? null,
-        toothSurface: input.toothSurface ?? null,
-        quantity: input.quantity,
-        unitPriceCents: input.unitPriceCents ?? null,
-        totalCents,
-        resultNotes: input.resultNotes ?? null,
-        treatmentStepId: input.treatmentStepId ?? null,
-        diagnosisId: input.diagnosisId ?? null,
-      },
-      include: {
-        diagnosis: {
-          select: {
-            idPatientDiagnosis: true,
-            label: true,
-            status: true,
+    // Use transaction to ensure atomicity: create procedure and update step
+    const result = await prisma.$transaction(async (tx) => {
+      // Create procedure
+      const procedimiento = await tx.consultaProcedimiento.create({
+        data: {
+          consultaId: citaId,
+          procedureId: input.procedureId ?? null,
+          serviceType: input.serviceType ?? null,
+          toothNumber: input.toothNumber ?? null,
+          toothSurface: input.toothSurface ?? null,
+          quantity: input.quantity,
+          unitPriceCents: input.unitPriceCents ?? null,
+          totalCents,
+          resultNotes: input.resultNotes ?? null,
+          treatmentStepId: input.treatmentStepId ?? null,
+          diagnosisId: input.diagnosisId ?? null,
+        },
+        include: {
+          diagnosis: {
+            select: {
+              idPatientDiagnosis: true,
+              label: true,
+              status: true,
+            },
           },
         },
-      },
-    })
-
-    // Si el procedimiento está vinculado a un step, actualizar su estado
-    if (input.treatmentStepId) {
-      const step = await prisma.treatmentStep.findUnique({
-        where: { idTreatmentStep: input.treatmentStepId },
-        select: { status: true },
       })
 
-      if (step) {
-        // Actualizar estado a COMPLETED si está en PENDING, SCHEDULED o IN_PROGRESS
-        if (
-          step.status === TreatmentStepStatus.PENDING ||
-          step.status === TreatmentStepStatus.SCHEDULED ||
-          step.status === TreatmentStepStatus.IN_PROGRESS
-        ) {
-          await prisma.treatmentStep.update({
-            where: { idTreatmentStep: input.treatmentStepId },
-            data: { status: TreatmentStepStatus.COMPLETED },
-          })
+      // Handle step session progress if procedure is linked to a step
+      let stepProgressResult = null
+      if (input.treatmentStepId) {
+        try {
+          stepProgressResult = await handleStepSessionProgress(tx, input.treatmentStepId)
+        } catch (error) {
+          // Log error but don't fail the procedure creation
+          console.error("[POST /api/agenda/citas/[id]/consulta/procedimientos] Error updating step:", error)
         }
-        // Si ya está en COMPLETED, CANCELLED o DEFERRED, no cambiar (idempotencia)
+      }
+
+      return { procedimiento, stepProgressResult }
+    })
+
+    const { procedimiento, stepProgressResult } = result
+
+    // Check if plan should be auto-completed after step completion
+    if (stepProgressResult?.treatmentPlanId && stepProgressResult.wasCompleted) {
+      try {
+        await checkPlanCompletion(stepProgressResult.treatmentPlanId)
+      } catch (error) {
+        // Log error but don't fail the procedure creation
+        console.error(
+          "[POST /api/agenda/citas/[id]/consulta/procedimientos] Error checking plan completion:",
+          error
+        )
       }
     }
 
-    // Audit logging
+    // Audit logging (after transaction succeeds)
     await auditProcedureCreate(
       procedimiento.idConsultaProcedimiento,
       userId,
       {
         citaId,
-        consultaId: consulta.citaId, // Use the actual consultaId from the consulta object
+        consultaId: consulta.citaId,
         procedureId: procedimiento.procedureId,
         serviceType: procedimiento.serviceType,
         quantity: procedimiento.quantity,
         treatmentStepId: procedimiento.treatmentStepId,
+        diagnosisId: procedimiento.diagnosisId,
         toothNumber: procedimiento.toothNumber,
         toothSurface: procedimiento.toothSurface,
       },

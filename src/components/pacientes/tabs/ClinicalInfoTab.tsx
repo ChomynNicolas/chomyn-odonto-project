@@ -10,7 +10,7 @@ import { OdontogramPreview } from "@/components/pacientes/OdontogramPreview"
 import { PeriodontogramPreview } from "@/components/pacientes/PeriodontogramPreview"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FileText, Calendar } from "lucide-react"
+import { FileText } from "lucide-react"
 import { toast } from "sonner"
 
 interface ClinicalInfoTabProps {
@@ -44,7 +44,7 @@ export function ClinicalInfoTab({ patient, userRole }: ClinicalInfoTabProps) {
   // Load anamnesis data
   // Reference: ANAMNESIS_MVP_IMPLEMENTATION.md lines 418-460
   useEffect(() => {
-    fetch(`/api/pacientes/${patient.idPaciente}/anamnesis`)
+    fetch(`/api/pacientes/${patient.id}/anamnesis`)
       .then((res) => {
         if (!res.ok) {
           if (res.status === 404) {
@@ -66,7 +66,7 @@ export function ClinicalInfoTab({ patient, userRole }: ClinicalInfoTabProps) {
       .finally(() => {
         setIsLoadingAnamnesis(false)
       })
-  }, [patient.idPaciente])
+  }, [patient.id])
 
   return (
     <div className="space-y-6">

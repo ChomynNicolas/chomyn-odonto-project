@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AlertCircle, FileText, Calendar, User } from "lucide-react"
+import {  FileText, Calendar } from "lucide-react"
 import { AnamnesisView, type AnamnesisData } from "./AnamnesisView"
 import { formatDate } from "@/lib/utils/patient-helpers"
 

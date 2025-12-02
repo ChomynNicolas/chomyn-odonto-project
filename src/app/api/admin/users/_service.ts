@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs"
 import type { UserListQuery, UserCreateBody, UserUpdateBody, PasswordResetBody } from "./_schemas"
 import { validateUserUpdateSafety } from "./_security"
 import { safeAuditWrite } from "@/lib/audit/log"
-import { AuditAction, AuditEntity } from "@/lib/audit/actions"
+import { AuditAction, type AuditAction as AuditActionType, AuditEntity } from "@/lib/audit/actions"
 
 /**
  * Lista usuarios con filtros, paginación y búsqueda
@@ -318,7 +318,7 @@ export async function updateUser(
   })
 
   // Determinar tipo de acción para audit log
-  let auditAction = AuditAction.USER_UPDATE
+  let auditAction: AuditActionType = AuditAction.USER_UPDATE
   const metadata: Record<string, unknown> = {
     changes: {},
   }

@@ -16,6 +16,7 @@ import { UploadConsentDialog } from "@/components/pacientes/consentimientos/Uplo
 import { NuevaCitaSheet } from "./NuevaCitaSheet"
 import type { CitaConsentimientoStatus } from "@/app/api/agenda/citas/[id]/_dto"
 import { handleApiError, showSuccessToast, showErrorToast } from "@/lib/messages/agenda-toast-helpers"
+import { useFollowUpContext } from "@/hooks/useFollowUpContext"
 import {
   Calendar,
   Clock,
@@ -35,12 +36,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Upload,
-  Search,
   ExternalLink,
 } from "lucide-react"
 import type { CitaDetalleDTO, CurrentUser, EstadoCita, AccionCita } from "@/types/agenda"
 import { cn } from "@/lib/utils"
-import { formatDate } from "@/lib/utils/patient-helpers"
 import { isMinorAt } from "@/lib/utils/consent-helpers"
 import Image from "next/image"
 
@@ -66,6 +65,14 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
   const [cancelSubmitting, setCancelSubmitting] = React.useState(false)
   const [uploadConsentOpen, setUploadConsentOpen] = React.useState(false)
   const [rescheduleOpen, setRescheduleOpen] = React.useState(false)
+  const [followUpOpen, setFollowUpOpen] = React.useState(false)
+
+  // Fetch follow-up context only for COMPLETED appointments
+  const isCompleted = dto?.estado === "COMPLETED"
+  const { data: followUpContext, isLoading: isLoadingFollowUp } = useFollowUpContext(
+    idCita,
+    isCompleted
+  )
 
   const loadData = React.useCallback(
     async (forceRefresh = false) => {
@@ -537,26 +544,15 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                             <div className="flex items-start gap-1.5">
                               <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
                               <p>
-                                <strong>Firmado:</strong> {consentimientoStatus.consentimientoResumen.responsableNombre}
+                                <strong>Firmado por:</strong> {consentimientoStatus.consentimientoResumen.responsableNombre}
                               </p>
                             </div>
-                            {consentimientoStatus.consentimientoResumen.esEspecificoPorCita &&
-                            consentimientoStatus.consentimientoResumen.citaId ? (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido para:</strong> Esta cita específica únicamente
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido hasta:</strong>{" "}
-                                  {formatDate(consentimientoStatus.consentimientoResumen.vigenteHasta)}
-                                </p>
-                              </div>
-                            )}
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
+                              <p>
+                                <strong>Válido para:</strong> Esta cita específica (#{dto.idCita})
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -570,7 +566,11 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                             </div>
                           </div>
                           <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-                            Se requiere consentimiento firmado por el responsable del menor.
+                            Se requiere consentimiento firmado por el responsable del menor{" "}
+                            <strong>para esta cita específica (#{dto.idCita})</strong>.
+                          </p>
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 italic">
+                            Cada cita requiere un nuevo consentimiento.
                           </p>
                         </div>
                       )}
@@ -600,26 +600,16 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                             <div className="flex items-start gap-1.5">
                               <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
                               <p>
-                                <strong>Firmado:</strong>{" "}
+                                <strong>Firmado por:</strong>{" "}
                                 {consentimientoStatus.cirugiaConsentimientoResumen.responsableNombre}
                               </p>
                             </div>
-                            {consentimientoStatus.cirugiaConsentimientoResumen.esEspecificoPorCita ? (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido para:</strong> Esta cita quirúrgica específica únicamente
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
-                                <p>
-                                  <strong>Válido hasta:</strong>{" "}
-                                  {formatDate(consentimientoStatus.cirugiaConsentimientoResumen.vigenteHasta)}
-                                </p>
-                              </div>
-                            )}
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
+                              <p>
+                                <strong>Válido para:</strong> Esta cita quirúrgica (#{dto.idCita})
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -635,10 +625,13 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
                           <p className="text-xs leading-relaxed text-red-800 dark:text-red-200">
                             Se requiere consentimiento de cirugía firmado{" "}
                             {consentimientoStatus.esMenorAlInicio ? "por el responsable del menor" : "por el paciente"}{" "}
-                            para iniciar la consulta.
+                            <strong>para esta cita quirúrgica específica (#{dto.idCita})</strong>.
                           </p>
                           <p className="text-xs text-red-700 dark:text-red-300 mt-2 font-medium">
                             El consentimiento se firma durante el check-in y debe subirse antes de iniciar la consulta.
+                          </p>
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1 italic">
+                            Cada procedimiento quirúrgico requiere un nuevo consentimiento.
                           </p>
                         </div>
                       )}
@@ -757,29 +750,44 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
         {dto && (
           <div className="flex flex-wrap gap-1.5">
             {(currentUser?.role === "ADMIN" || currentUser?.role === "ODONT") && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  window.open(`/agenda/citas/${dto.idCita}/consulta`, "_blank")
-                }}
-                className="gap-1.5 font-semibold text-xs h-9 flex-1 sm:flex-none"
-              >
-                <Stethoscope className="h-3.5 w-3.5" />
-                Consulta
-              </Button>
-            )}
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                window.open(`/citas?q=${encodeURIComponent(dto.paciente.nombre)}`, "_blank")
+                window.open(`/agenda/citas/${dto.idCita}/consulta`, "_blank")
               }}
               className="gap-1.5 font-semibold text-xs h-9 flex-1 sm:flex-none"
             >
-              <Search className="h-3.5 w-3.5" />
-              Buscar
+              <Stethoscope className="h-3.5 w-3.5" />
+              Consulta
             </Button>
+            )}
+            
+            {/* Follow-up appointment button - only for COMPLETED appointments */}
+            {dto.estado === "COMPLETED" && (
+              <Button
+                variant={followUpContext?.hasPendingSessions ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFollowUpOpen(true)}
+                disabled={isLoadingFollowUp}
+                className="gap-1.5 font-semibold text-xs h-9 flex-1 sm:flex-none"
+                title={
+                  followUpContext?.hasPendingSessions
+                    ? "Programar próxima sesión del plan de tratamiento"
+                    : "Crear cita de seguimiento"
+                }
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                {isLoadingFollowUp ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : followUpContext?.hasPendingSessions ? (
+                  "Próxima sesión"
+                ) : (
+                  "Seguimiento"
+                )}
+              </Button>
+            )}
+            
             <Button
               variant="outline"
               size="sm"
@@ -897,6 +905,29 @@ export function CitaDrawer({ idCita, currentUser, onAfterChange, onClose }: Cita
             await loadData()
             onAfterChange?.()
             showSuccessToast("CITA_REPROGRAMADA")
+          }}
+        />
+      )}
+
+      {dto && (
+        <NuevaCitaSheet
+          open={followUpOpen}
+          onOpenChange={setFollowUpOpen}
+          mode="follow-up"
+          citaId={dto.idCita}
+          citaData={dto}
+          followUpContext={followUpContext || null}
+          currentUser={currentUser}
+          defaults={
+            followUpContext?.recommendedFollowUpDate
+              ? { inicio: new Date(followUpContext.recommendedFollowUpDate) }
+              : undefined
+          }
+          onSuccess={async () => {
+            setFollowUpOpen(false)
+            await loadData()
+            onAfterChange?.()
+            showSuccessToast("CITA_CREATED")
           }}
         />
       )}

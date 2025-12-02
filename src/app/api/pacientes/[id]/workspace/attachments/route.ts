@@ -6,6 +6,7 @@ import { requireSessionWithRoles } from '@/app/api/_lib/auth';
 import { patientIdSchema } from '@/lib/api/patients/validators';
 import { prisma } from '@/lib/prisma';
 import type { AttachmentDTO } from '@/types/patient';
+import type { AdjuntoTipo } from '@prisma/client';
 
 export async function GET(
   req: NextRequest,
@@ -37,7 +38,7 @@ export async function GET(
       where: {
         pacienteId: patientId,
         isActive: true,
-        ...(tipo ? { tipo: tipo as any } : {}),
+        ...(tipo ? { tipo: tipo as AdjuntoTipo } : {}),
       },
       include: {
         uploadedBy: { select: { nombreApellido: true } },

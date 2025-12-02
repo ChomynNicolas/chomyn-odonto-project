@@ -13,7 +13,8 @@ import { toast } from "sonner"
 import { Plus, Pill } from "lucide-react"
 import { AutocompleteSearch, type SearchResult } from "./AutocompleteSearch"
 import { MedicationEntryCard, type MedicationEntry } from "./MedicationEntryCard"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema, type AnamnesisMedicationLink } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/dialog"
 
 interface MedicationSelectorProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   pacienteId: number
   disabled?: boolean
 }
@@ -251,7 +252,27 @@ export function MedicationSelector({
 
   // Map form fields to MedicationEntry format for display
   const entries: MedicationEntry[] = fields.map((field, index) => {
-    const value = form.watch(`medications.${index}`)
+    const value = form.watch(`medications.${index}`) as AnamnesisMedicationLink | undefined
+    if (!value) {
+      // Fallback for undefined values
+      return {
+        id: undefined,
+        medicationId: undefined,
+        catalogId: undefined,
+        customLabel: undefined,
+        customDescription: undefined,
+        customDose: undefined,
+        customFreq: undefined,
+        customRoute: undefined,
+        notes: undefined,
+        isActive: true,
+        label: undefined,
+        description: undefined,
+        dose: undefined,
+        freq: undefined,
+        route: undefined,
+      }
+    }
     return {
       id: value.id,
       medicationId: value.medicationId,

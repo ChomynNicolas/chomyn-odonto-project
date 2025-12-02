@@ -6,13 +6,14 @@ import type { UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form"
 import { Switch } from "@/components/ui/switch"
-import type { AnamnesisCreateUpdateBody } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { AnamnesisCreateUpdateBodySchema } from "@/app/api/pacientes/[id]/anamnesis/_schemas"
+import { z } from "zod"
 import { Pill } from "lucide-react"
 import { MedicationSelector } from "../components/MedicationSelector"
 import { SectionCompletionIndicator } from "../components/SectionCompletionIndicator"
 
 interface MedicationsSectionProps {
-  form: UseFormReturn<AnamnesisCreateUpdateBody>
+  form: UseFormReturn<z.input<typeof AnamnesisCreateUpdateBodySchema>>
   canEdit: boolean
   pacienteId: number
 }
@@ -20,7 +21,7 @@ interface MedicationsSectionProps {
 export function MedicationsSection({ form, canEdit, pacienteId }: MedicationsSectionProps) {
   const tieneMedicacionActual = form.watch("tieneMedicacionActual")
   const medications = form.watch("medications")
-  const isComplete = !tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0)
+  const isComplete = Boolean(!tieneMedicacionActual || (tieneMedicacionActual && medications && medications.length > 0))
 
   return (
     <Card className="section-medications border-l-4 border-l-purple-500 shadow-sm">

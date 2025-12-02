@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { consentimientoRepo } from "./_repo"
-import { calcularVigenteHasta, esVigente, nombreCompleto, type ConsentimientoDTO } from "./_dto"
+import {  esVigente, nombreCompleto, type ConsentimientoDTO } from "./_dto"
 import type { ConsentimientoCreateBody, ConsentimientoListQuery } from "./_schemas"
 import type { Prisma } from "@prisma/client"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
@@ -51,6 +51,29 @@ export async function crearConsentimiento(params: {
     throw new ConsentimientoError("NOT_FOUND", "Paciente no encontrado", 404)
   }
 
+  // NEW: Require citaId for ALL consent types (appointment-specific consents)
+  if (!body.citaId) {
+    throw new ConsentimientoError(
+      "APPOINTMENT_REQUIRED",
+      "Los consentimientos deben estar asociados a una cita específica",
+      400,
+    )
+  }
+
+  // NEW: Check for existing consent of same type for this appointment
+  const existingConsent = await consentimientoRepo.buscarConsentimientoPorCita(
+    pacienteId,
+    body.citaId,
+    body.tipo,
+  )
+  if (existingConsent) {
+    throw new ConsentimientoError(
+      "CONSENT_ALREADY_EXISTS",
+      "Ya existe un consentimiento de este tipo para esta cita",
+      409,
+    )
+  }
+
   // Si es consentimiento de menor, verificar que el paciente sea menor
   if (body.tipo === "CONSENTIMIENTO_MENOR_ATENCION") {
     if (!paciente.persona.fechaNacimiento) {
@@ -72,15 +95,6 @@ export async function crearConsentimiento(params: {
 
   // Si es consentimiento de cirugía, validar responsable según edad del paciente
   if (body.tipo === "CIRUGIA") {
-    // Los consentimientos de cirugía deben estar asociados a una cita específica
-    if (!body.citaId) {
-      throw new ConsentimientoError(
-        "SURGERY_CONSENT_REQUIRES_APPOINTMENT",
-        "Los consentimientos de cirugía deben estar asociados a una cita específica",
-        400,
-      )
-    }
-
     if (!paciente.persona.fechaNacimiento) {
       throw new ConsentimientoError(
         "MISSING_DOB_FOR_SURGERY_CHECK",
@@ -138,40 +152,37 @@ export async function crearConsentimiento(params: {
     }
   }
 
-  // Calcular vigencia - para cirugías usar validez por cita, para otros usar tiempo
+  // NEW: All new consents are appointment-specific
+  // vigente_hasta is set to a far future date since validity is controlled by appointment status
   const firmadoEn = new Date(body.firmadoEn)
-  const vigenteHasta = body.tipo === "CIRUGIA" && body.citaId 
-    ? new Date(2099, 11, 31) // Fecha muy lejana para cirugías (validez por cita)
-    : calcularVigenteHasta(firmadoEn, body.vigenciaEnMeses || 12)
+  const vigenteHasta = new Date(2099, 11, 31) // Far future date - validity is appointment-based
 
   // Crear consentimiento en transacción
   // IMPORTANTE: Este endpoint NO debe modificar el estado de la cita asociada
-  // Solo asocia el consentimiento a la cita si se proporciona citaId
+  // Solo asocia el consentimiento a la cita
   const created = await prisma.$transaction(async (tx) => {
     // Verificar que la cita existe y obtener su estado actual (solo lectura)
-    if (body.citaId) {
-      const cita = await tx.cita.findUnique({
-        where: { idCita: body.citaId },
-        select: { idCita: true, estado: true, pacienteId: true },
-      })
-      if (!cita) {
-        throw new ConsentimientoError("CITA_NOT_FOUND", "La cita asociada no existe", 404)
-      }
-      // Validar que la cita pertenece al paciente
-      if (cita.pacienteId !== pacienteId) {
-        throw new ConsentimientoError(
-          "CITA_PATIENT_MISMATCH",
-          "La cita no pertenece al paciente especificado",
-          400,
-        )
-      }
-      // NO modificamos el estado de la cita aquí - solo asociamos el consentimiento
+    const cita = await tx.cita.findUnique({
+      where: { idCita: body.citaId },
+      select: { idCita: true, estado: true, pacienteId: true },
+    })
+    if (!cita) {
+      throw new ConsentimientoError("CITA_NOT_FOUND", "La cita asociada no existe", 404)
     }
+    // Validar que la cita pertenece al paciente
+    if (cita.pacienteId !== pacienteId) {
+      throw new ConsentimientoError(
+        "CITA_PATIENT_MISMATCH",
+        "La cita no pertenece al paciente especificado",
+        400,
+      )
+    }
+    // NO modificamos el estado de la cita aquí - solo asociamos el consentimiento
 
     const consentimiento = await consentimientoRepo.crear(tx, {
       pacienteId,
       responsablePersonaId: body.responsablePersonaId,
-      citaId: body.citaId ?? null,
+      citaId: body.citaId,
       tipo: body.tipo,
       firmadoEn,
       vigenteHasta,
@@ -184,6 +195,7 @@ export async function crearConsentimiento(params: {
       hash: body.cloudinary.hash ?? null,
       observaciones: body.observaciones ?? null,
       registradoPorUsuarioId: userId,
+      esEspecificoPorCita: true, // NEW: Always true for new consents
     })
 
     // Audit log
@@ -291,6 +303,7 @@ type ConsentimientoWithRelations = Prisma.ConsentimientoGetPayload<{
         idCita: true
         inicio: true
         tipo: true
+        estado: true
       }
     }
     registradoPor: {
@@ -313,6 +326,12 @@ function mapToDTO(data: ConsentimientoWithRelations): ConsentimientoDTO {
   const pacienteId = (data as unknown as { Paciente_idPaciente: number }).Paciente_idPaciente
   const publicId = (data as unknown as { public_id: string }).public_id
   const secureUrl = (data as unknown as { secure_url: string }).secure_url
+  const esEspecificoPorCitaValue = data.esEspecificoPorCita ?? false
+
+  // Calculate validity using the updated esVigente function
+  const vigenteHastaDate = vigenteHasta instanceof Date ? vigenteHasta : new Date(vigenteHasta)
+  const citaId = data.cita?.idCita ?? null
+  const citaEstado = data.cita?.estado ?? null
 
   return {
     idConsentimiento: data.idConsentimiento,
@@ -320,10 +339,11 @@ function mapToDTO(data: ConsentimientoWithRelations): ConsentimientoDTO {
     tipo: data.tipo,
     firmadoEn: firmadoEn instanceof Date ? firmadoEn.toISOString() : firmadoEn,
     vigenteHasta: vigenteHasta instanceof Date ? vigenteHasta.toISOString() : vigenteHasta,
-    vigente: esVigente(vigenteHasta instanceof Date ? vigenteHasta : new Date(vigenteHasta)),
+    vigente: esVigente(vigenteHastaDate, esEspecificoPorCitaValue, citaId, citaEstado),
     activo: data.activo,
     version: data.version,
     observaciones: data.observaciones,
+    esEspecificoPorCita: esEspecificoPorCitaValue,
     responsable: {
       idPersona: data.responsable.idPersona,
       nombreCompleto: nombreCompleto(data.responsable),
@@ -340,6 +360,7 @@ function mapToDTO(data: ConsentimientoWithRelations): ConsentimientoDTO {
           idCita: data.cita.idCita,
           inicio: data.cita.inicio instanceof Date ? data.cita.inicio.toISOString() : data.cita.inicio,
           tipo: data.cita.tipo,
+          estado: data.cita.estado,
         }
       : null,
     archivo: {

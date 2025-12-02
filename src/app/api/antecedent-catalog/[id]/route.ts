@@ -71,7 +71,7 @@ export async function PATCH(
       )
     }
 
-    const actorId = parseInt(auth.session.user.id)
+    const actorId = parseInt(auth.session.user.id ?? "")
     const antecedentCatalog = await updateAntecedentCatalog(
       parsedId.data.id,
       parsedBody.data,
@@ -115,10 +115,10 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "ID inválido" }, { status: 400 })
     }
 
-    const actorId = parseInt(auth.session.user.id)
-    await deleteAntecedentCatalog(parsed.data.id, actorId, req.headers, req.nextUrl.pathname)
+    const actorId = parseInt(auth.session.user.id ?? "");
+    await deleteAntecedentCatalog(parsed.data.id, actorId, req.headers, req.nextUrl.pathname);
 
-    return NextResponse.json({ ok: true }, { status: 200 })
+    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e)
 

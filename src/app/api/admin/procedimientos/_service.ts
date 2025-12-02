@@ -13,7 +13,6 @@ import type {
 } from "./_schemas"
 import { safeAuditWrite } from "@/lib/audit/log"
 import { AuditAction, AuditEntity } from "@/lib/audit/actions"
-import type { Headers } from "next/headers"
 
 /**
  * Lista procedimientos con filtros, paginación y búsqueda

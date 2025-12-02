@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { generateAuthenticatedUrl, generatePublicUrl } from "@/lib/utils/cloudinary-auth"
 import { detectFileType, getFilenameWithExtension, sanitizeFilename, type FileTypeInfo } from "@/lib/utils/file-type-detection"
+import { auditAttachmentView } from "@/lib/audit/attachments"
 
 /**
  * Parse attachment ID from format "adjunto-{id}" or "consentimiento-{id}" or just "{id}"
@@ -544,6 +545,30 @@ export async function GET(
         // For other documents, suggest download
         headers["Content-Disposition"] = `attachment; filename="${sanitizedFilename}"`
       }
+    }
+
+    // Audit log the view action (fire-and-forget, don't block response)
+    const userId = session.user?.id ? Number.parseInt(session.user.id, 10) : null
+    if (userId) {
+      auditAttachmentView({
+        actorId: userId,
+        entityId: parsed.numericId,
+        entityType: parsed.type,
+        metadata: {
+          publicId,
+          originalFilename,
+          format: fileFormat,
+          resourceType: finalResourceType,
+          accessMode,
+          hasTransformations,
+          transformations: hasTransformations ? JSON.stringify(transformationOptions) : undefined,
+          path: req.url,
+        },
+        headers: req.headers,
+        path: req.url,
+      }).catch((err) => {
+        console.error("[API] Failed to log view audit:", err)
+      })
     }
 
     // Return the file with proper headers

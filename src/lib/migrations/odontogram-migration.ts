@@ -48,11 +48,13 @@ export async function analyzeOdontogramMigration(): Promise<{
     `.then(result => Number(result[0]?.count || 0)),
     
     // Orphaned snapshots (patient doesn't exist)
-    prisma.odontogramSnapshot.count({
-      where: {
-        paciente: null
-      }
-    })
+    prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*) as count
+      FROM "OdontogramSnapshot" os
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "Paciente" p WHERE p."idPaciente" = os."Paciente_idPaciente"
+      )
+    `.then(result => Number(result[0]?.count || 0))
   ])
 
   return {
@@ -232,11 +234,14 @@ export async function validateMigration(): Promise<{
     }
 
     // Check for orphaned entries
-    const orphanedSnapshots = await prisma.odontogramSnapshot.count({
-      where: {
-        paciente: null
-      }
-    })
+    const orphanedResult = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*) as count
+      FROM "OdontogramSnapshot" os
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "Paciente" p WHERE p."idPaciente" = os."Paciente_idPaciente"
+      )
+    `
+    const orphanedSnapshots = Number(orphanedResult[0]?.count || 0)
 
     if (orphanedSnapshots > 0) {
       issues.push(`${orphanedSnapshots} orphaned odontogram snapshots found`)

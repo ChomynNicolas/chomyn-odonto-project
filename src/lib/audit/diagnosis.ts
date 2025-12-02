@@ -95,7 +95,7 @@ export async function auditDiagnosisCreate(args: {
     action: AuditAction.DIAGNOSIS_CREATE,
     entity: AuditEntity.PatientDiagnosis,
     entityId: args.diagnosisId,
-    metadata: auditMetadata,
+    metadata: auditMetadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })
@@ -110,6 +110,7 @@ export async function auditDiagnosisUpdate(args: {
   diagnosisId: number
   pacienteId: number
   consultaId?: number | null
+  label: string
   changes: DiagnosisFieldChanges
   currentStatus: DiagnosisStatus
   previousStatus?: DiagnosisStatus | null
@@ -121,6 +122,7 @@ export async function auditDiagnosisUpdate(args: {
   const auditMetadata: DiagnosisAuditMetadata = {
     pacienteId: args.pacienteId,
     consultaId: args.consultaId ?? null,
+    label: args.label,
     status: args.currentStatus,
     previousStatus: args.previousStatus ?? null,
     reason: args.reason ?? null,
@@ -129,7 +131,7 @@ export async function auditDiagnosisUpdate(args: {
   }
 
   // Determine specific action based on what changed
-  let action = AuditAction.DIAGNOSIS_UPDATE
+  let action: AuditAction = AuditAction.DIAGNOSIS_UPDATE
   
   if (args.changes.status) {
     // Status change is a special case - log both general update and status change
@@ -148,7 +150,7 @@ export async function auditDiagnosisUpdate(args: {
     action,
     entity: AuditEntity.PatientDiagnosis,
     entityId: args.diagnosisId,
-    metadata: auditMetadata,
+    metadata: auditMetadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })
@@ -183,7 +185,7 @@ export async function auditDiagnosisDelete(args: {
     action: AuditAction.DIAGNOSIS_DELETE,
     entity: AuditEntity.PatientDiagnosis,
     entityId: args.diagnosisId,
-    metadata: auditMetadata,
+    metadata: auditMetadata as unknown as Record<string, unknown>,
     headers: args.headers,
     path: args.path,
   })

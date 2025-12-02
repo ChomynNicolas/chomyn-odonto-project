@@ -46,9 +46,8 @@ export async function GET(
 
     // Check permissions
     const userRole = (session.user.role ?? "RECEP") as "ADMIN" | "ODONT" | "RECEP"
-    const userId = parseInt(session.user.id, 10)
 
-    if (!canViewAnamnesisAudit(userRole, pacienteId, userId, userId)) {
+    if (!canViewAnamnesisAudit(userRole)) {
       return NextResponse.json({ error: "No tiene permisos para comparar versiones" }, { status: 403 })
     }
 

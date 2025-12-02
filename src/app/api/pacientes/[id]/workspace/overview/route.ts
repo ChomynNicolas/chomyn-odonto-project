@@ -3,7 +3,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionWithRoles } from '@/app/api/_lib/auth';
-import { ok, errors } from '@/app/api/_http';
 import { patientIdSchema } from '@/lib/api/patients/validators';
 import { getPatientOverviewData } from '@/lib/api/patients/queries';
 import { 
@@ -11,8 +10,8 @@ import {
   mapContactInfo, 
   mapRiskFlags 
 } from '@/lib/api/patients/mappers';
-import type { RolNombre, PatientOverviewDTO } from '@/types/patient';
-import { formatAppointmentDate, formatShortDate } from '@/lib/utils/date-formatters';
+import type {  PatientOverviewDTO } from '@/types/patient';
+import {  formatShortDate } from '@/lib/utils/date-formatters';
 
 export async function GET(
   req: NextRequest,
@@ -110,13 +109,13 @@ export async function GET(
 
     // Consent status
     const activeConsents = data.consents.filter(c => {
-      if (!c.vigenteHasta) return true;
-      return new Date(c.vigenteHasta) > now;
+      if (!c.vigente_hasta) return true;
+      return new Date(c.vigente_hasta) > now;
     });
     const expiringSoon = activeConsents.filter(c => {
-      if (!c.vigenteHasta) return false;
+      if (!c.vigente_hasta) return false;
       const daysUntilExpiry = Math.ceil(
-        (new Date(c.vigenteHasta).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        (new Date(c.vigente_hasta).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
       );
       return daysUntilExpiry > 0 && daysUntilExpiry <= 30;
     });
