@@ -9,7 +9,7 @@ import interactionPlugin from "@fullcalendar/interaction"
 import esLocale from "@fullcalendar/core/locales/es"
 import type { DateSelectArg, EventApi, EventClickArg, EventContentArg } from "@fullcalendar/core"
 
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { CitaDrawer } from "./CitaDrawer"
 import { AgendaTopbar } from "./AgendaTopbar"
 import { useCitasCalendarSource } from "@/hooks/useCitasCalendarSource"
@@ -255,6 +255,9 @@ export default function CitasCalendar({
           }}
         >
           <SheetContent side="right" className={cn("w-full p-0", "sm:max-w-md", "md:max-w-lg")}>
+            <SheetTitle className="sr-only">
+              {selectedEventId ? `Detalles de cita #${selectedEventId}` : "Detalles de cita"}
+            </SheetTitle>
             {selectedEventId && (
               <CitaDrawer
                 idCita={selectedEventId}

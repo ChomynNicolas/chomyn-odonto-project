@@ -35,6 +35,7 @@ import {
   Save,
 } from "lucide-react"
 import type { ConsultaClinicaDTO, TreatmentStepDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
+import type { TreatmentPlanCatalogStepItem } from "@/app/api/treatment-plan-catalog/_schemas"
 import { TreatmentStepStatus, TreatmentPlanStatus, DienteSuperficie } from "@prisma/client"
 import { formatDate } from "@/lib/utils/patient-helpers"
 import { useRouter } from "next/navigation"
@@ -105,6 +106,12 @@ export function PlanesTratamientoModule({
   // Catalog state
   const [catalogOptions, setCatalogOptions] = useState<ProcedimientoCatalogoDTO[]>([])
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false)
+
+  // Treatment plan catalog state
+  const [inputMode, setInputMode] = useState<"catalog" | "manual">("manual")
+  const [treatmentPlanCatalogOptions, setTreatmentPlanCatalogOptions] = useState<Array<{ id: number; code: string; nombre: string }>>([])
+  const [isLoadingTreatmentPlanCatalog, setIsLoadingTreatmentPlanCatalog] = useState(false)
+  const [selectedCatalogPlanId, setSelectedCatalogPlanId] = useState<number | null>(null)
 
   // Loading state
   const [isSaving, setIsSaving] = useState(false)
@@ -256,12 +263,74 @@ export function PlanesTratamientoModule({
     }
   }, [])
 
-  // Load catalog when dialog opens
-  useEffect(() => {
-    if (isDialogOpen && catalogOptions.length === 0 && !isLoadingCatalog) {
-      loadCatalog()
+  const loadTreatmentPlanCatalog = useCallback(async () => {
+    try {
+      setIsLoadingTreatmentPlanCatalog(true)
+      const res = await fetch("/api/treatment-plan-catalog?isActive=true&limit=100")
+      if (!res.ok) throw new Error("Error al cargar catálogo de planes")
+      const data = await res.json()
+      if (data.ok) {
+        setTreatmentPlanCatalogOptions(data.data.map((item: { idTreatmentPlanCatalog: number; code: string; nombre: string }) => ({
+          id: item.idTreatmentPlanCatalog,
+          code: item.code,
+          nombre: item.nombre,
+        })))
+      }
+    } catch (error) {
+      console.error("Error loading treatment plan catalog:", error)
+      toast.error("Error al cargar catálogo de planes de tratamiento")
+    } finally {
+      setIsLoadingTreatmentPlanCatalog(false)
     }
-  }, [isDialogOpen, catalogOptions.length, isLoadingCatalog, loadCatalog])
+  }, [])
+
+  const loadPlanFromCatalog = useCallback(async (catalogId: number) => {
+    try {
+      setIsLoadingTreatmentPlanCatalog(true)
+      const res = await fetch(`/api/treatment-plan-catalog/${catalogId}`)
+      if (!res.ok) throw new Error("Error al cargar plan del catálogo")
+      const data = await res.json()
+      if (data.ok && data.data) {
+        const catalogPlan = data.data
+        setPlanTitulo(catalogPlan.nombre)
+        setPlanDescripcion(catalogPlan.descripcion || "")
+        setSteps(
+          catalogPlan.steps.map((step: TreatmentPlanCatalogStepItem) => ({
+            order: step.order,
+            procedureId: step.procedureId,
+            serviceType: step.serviceType || "",
+            toothNumber: step.toothNumber,
+            toothSurface: step.toothSurface,
+            estimatedDurationMin: step.estimatedDurationMin,
+            estimatedCostCents: step.estimatedCostCents,
+            priority: step.priority,
+            notes: step.notes || "",
+            requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+            totalSessions: step.totalSessions ?? null,
+            currentSession: step.currentSession ?? (step.requiresMultipleSessions ? 1 : null),
+          }))
+        )
+        toast.success("Plan cargado desde catálogo. Puede editarlo antes de guardar.")
+      }
+    } catch (error) {
+      console.error("Error loading plan from catalog:", error)
+      toast.error(error instanceof Error ? error.message : "Error al cargar plan del catálogo")
+    } finally {
+      setIsLoadingTreatmentPlanCatalog(false)
+    }
+  }, [])
+
+  // Load catalogs when dialog opens
+  useEffect(() => {
+    if (isDialogOpen) {
+      if (catalogOptions.length === 0 && !isLoadingCatalog) {
+        loadCatalog()
+      }
+      if (treatmentPlanCatalogOptions.length === 0 && !isLoadingTreatmentPlanCatalog) {
+        loadTreatmentPlanCatalog()
+      }
+    }
+  }, [isDialogOpen, catalogOptions.length, isLoadingCatalog, loadCatalog, treatmentPlanCatalogOptions.length, isLoadingTreatmentPlanCatalog, loadTreatmentPlanCatalog])
 
   // Initialize form when editing
   useEffect(() => {
@@ -295,6 +364,8 @@ export function PlanesTratamientoModule({
 
   const handleOpenCreateDialog = () => {
     setIsEditing(false)
+    setInputMode("manual")
+    setSelectedCatalogPlanId(null)
     setIsDialogOpen(true)
   }
 
@@ -307,6 +378,24 @@ export function PlanesTratamientoModule({
     setIsDialogOpen(false)
     setIsEditing(false)
     setEditingStepIndex(null)
+    setInputMode("manual")
+    setSelectedCatalogPlanId(null)
+  }
+
+  const handleCatalogPlanSelect = (catalogId: string) => {
+    if (!catalogId || catalogId === "__none__") {
+      setSelectedCatalogPlanId(null)
+      setInputMode("manual")
+      setPlanTitulo("")
+      setPlanDescripcion("")
+      setSteps([])
+      return
+    }
+
+    const id = Number.parseInt(catalogId, 10)
+    setSelectedCatalogPlanId(id)
+    setInputMode("catalog")
+    loadPlanFromCatalog(id)
   }
 
   const handleAddStep = () => {
@@ -433,6 +522,7 @@ export function PlanesTratamientoModule({
           totalSessions: step.requiresMultipleSessions ? step.totalSessions : null,
           currentSession: step.requiresMultipleSessions ? (step.currentSession ?? 1) : null,
         })),
+        catalogId: inputMode === "catalog" && selectedCatalogPlanId ? selectedCatalogPlanId : undefined,
       }
 
       const url = isEditing
@@ -494,13 +584,13 @@ export function PlanesTratamientoModule({
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Crear Plan de Tratamiento</DialogTitle>
-                      <DialogDescription>
-                        Cree un nuevo plan de tratamiento para el paciente. Solo puede haber un plan activo a la vez.
-                      </DialogDescription>
-                    </DialogHeader>
-                    {renderPlanForm()}
+                  <DialogHeader>
+                    <DialogTitle>Crear Plan de Tratamiento</DialogTitle>
+                    <DialogDescription>
+                      Cree un nuevo plan de tratamiento para el paciente. Puede cargar desde el catálogo o crear manualmente. Solo puede haber un plan activo a la vez.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {renderPlanForm()}
                   </DialogContent>
                 </Dialog>
               )}
@@ -745,6 +835,65 @@ export function PlanesTratamientoModule({
   function renderPlanForm() {
     return (
       <div className="space-y-6 py-4">
+        {/* Input Mode Selector - Only show when creating new plan */}
+        {!isEditing && (
+          <div className="space-y-4 rounded-lg border p-4">
+            <div className="space-y-2">
+              <Label>Modo de Entrada</Label>
+              <Select
+                value={inputMode}
+                onValueChange={(value) => {
+                  setInputMode(value as "catalog" | "manual")
+                  if (value === "manual") {
+                    setSelectedCatalogPlanId(null)
+                    setPlanTitulo("")
+                    setPlanDescripcion("")
+                    setSteps([])
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Crear Manualmente</SelectItem>
+                  <SelectItem value="catalog">Cargar desde Catálogo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {inputMode === "catalog" && (
+              <div className="space-y-2">
+                <Label htmlFor="catalogPlanSelect">
+                  Plan del Catálogo <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={selectedCatalogPlanId?.toString() || "__none__"}
+                  onValueChange={handleCatalogPlanSelect}
+                  disabled={isLoadingTreatmentPlanCatalog}
+                >
+                  <SelectTrigger id="catalogPlanSelect">
+                    <SelectValue placeholder={isLoadingTreatmentPlanCatalog ? "Cargando..." : "Seleccionar plan del catálogo..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Seleccionar plan...</SelectItem>
+                    {treatmentPlanCatalogOptions.map((item) => (
+                      <SelectItem key={item.id} value={item.id.toString()}>
+                        {item.code} - {item.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedCatalogPlanId && (
+                  <p className="text-xs text-muted-foreground">
+                    El plan se cargará automáticamente. Puede editarlo antes de guardar.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Plan Title and Description */}
         <div className="space-y-4">
           <div className="space-y-2">
@@ -758,6 +907,7 @@ export function PlanesTratamientoModule({
               placeholder="Ej: Plan de tratamiento inicial"
               maxLength={200}
               required
+              disabled={inputMode === "catalog" && !selectedCatalogPlanId}
             />
           </div>
           <div className="space-y-2">
@@ -1054,7 +1204,7 @@ export function PlanesTratamientoModule({
                       {/* Estimated Cost */}
                       <div className="space-y-2">
                         <Label htmlFor={`cost-${index}`}>
-                          Costo Estimado (centavos) <span className="text-muted-foreground text-xs">(opcional)</span>
+                          Costo Estimado (guaraníes) <span className="text-muted-foreground text-xs">(opcional)</span>
                         </Label>
                         <Input
                           id={`cost-${index}`}

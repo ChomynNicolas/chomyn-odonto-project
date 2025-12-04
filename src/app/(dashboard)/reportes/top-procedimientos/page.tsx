@@ -17,13 +17,13 @@ import {
 import { toast } from "sonner"
 import { Trophy, TrendingUp, DollarSign } from "lucide-react"
 
-/** Format currency (PYG) */
-function formatCurrency(cents: number): string {
+/** Format currency (PYG) - NOTA: El valor ya está en guaraníes, no dividir por 100 */
+function formatCurrency(guaranies: number): string {
   return new Intl.NumberFormat("es-PY", {
     style: "currency",
     currency: "PYG",
     maximumFractionDigits: 0,
-  }).format(cents / 100)
+  }).format(guaranies)
 }
 
 export default function TopProcedimientosReportPage() {

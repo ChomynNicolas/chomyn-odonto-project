@@ -25,11 +25,12 @@ function formatValue(value: number | string, format?: string, decimals = 0): str
       return `${value.toFixed(decimals)}%`
     case "currency":
       // Format as PYG (Paraguayan Guarani)
+      // NOTA: El valor ya está en guaraníes (PYG), no dividir por 100
       return new Intl.NumberFormat("es-PY", {
         style: "currency",
         currency: "PYG",
         maximumFractionDigits: 0,
-      }).format(value / 100) // Assuming cents
+      }).format(value)
     case "time":
       return `${Math.round(value)} min`
     default:

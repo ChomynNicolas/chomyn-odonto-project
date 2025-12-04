@@ -70,10 +70,13 @@ function formatMetadata(metadata: unknown): React.ReactNode {
           const formatValue = (value: unknown): string => {
             if (value === null || value === undefined) return "-"
             if (key === "defaultPriceCents" && typeof value === "number") {
-              return new Intl.NumberFormat("es-AR", {
+              // Note: defaultPriceCents field now stores guaraníes, not cents
+              return new Intl.NumberFormat("es-PY", {
                 style: "currency",
-                currency: "ARS",
-              }).format(value / 100)
+                currency: "PYG",
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+              }).format(value)
             }
             if (key === "defaultDurationMin" && typeof value === "number") {
               if (value < 60) return `${value} min`

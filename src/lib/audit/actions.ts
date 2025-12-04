@@ -127,6 +127,12 @@ export const AuditAction = {
   TREATMENT_STEP_DELETE: "TREATMENT_STEP_DELETE",
   TREATMENT_STEP_STATUS_CHANGE: "TREATMENT_STEP_STATUS_CHANGE",
   TREATMENT_STEP_SESSION_COMPLETE: "TREATMENT_STEP_SESSION_COMPLETE",
+  // TreatmentPlanCatalog Management
+  TREATMENT_PLAN_CATALOG_CREATE: "TREATMENT_PLAN_CATALOG_CREATE",
+  TREATMENT_PLAN_CATALOG_UPDATE: "TREATMENT_PLAN_CATALOG_UPDATE",
+  TREATMENT_PLAN_CATALOG_DEACTIVATE: "TREATMENT_PLAN_CATALOG_DEACTIVATE",
+  TREATMENT_PLAN_CATALOG_REACTIVATE: "TREATMENT_PLAN_CATALOG_REACTIVATE",
+  TREATMENT_PLAN_CATALOG_DELETE: "TREATMENT_PLAN_CATALOG_DELETE",
   // — futuras acciones comunes —
   // PATIENT_VIEW: "PATIENT_VIEW",
   // USER_LOGIN: "USER_LOGIN",
@@ -163,6 +169,7 @@ export const AuditEntity = {
   // Treatment Plan Entities
   TreatmentPlan: "TreatmentPlan",
   TreatmentStep: "TreatmentStep",
+  TreatmentPlanCatalog: "TreatmentPlanCatalog",
   // agrega las que necesites
 } as const
 export type AuditEntity = typeof AuditEntity[keyof typeof AuditEntity]

@@ -70,15 +70,13 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
     return () => window.removeEventListener("keydown", handleEscape)
   }, [open, onOpenChange])
 
-  if (!entry) return null
-
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
     toast.success(`${label} copiado al portapapeles`)
   }
 
-  const entityUrl = getEntityUrl(entry.entity, entry.entityId)
-  const entityLabel = getEntityLabel(entry.entity)
+  const entityUrl = entry ? getEntityUrl(entry.entity, entry.entityId) : null
+  const entityLabel = entry ? getEntityLabel(entry.entity) : ""
 
   const getActionLabel = (action: string) => {
     return ACTION_LABELS[action] || action
@@ -89,14 +87,14 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
     return ACTION_COLORS[actionType] || "text-gray-600 dark:text-gray-400"
   }
 
-  const hasChanges = entry.metadata && (
+  const hasChanges = entry?.metadata && (
     entry.metadata.summary ||
     entry.metadata.changes ||
     entry.metadata.diff ||
     entry.metadata.entriesCount !== undefined
   )
 
-  const hasContext = entry.metadata && (
+  const hasContext = entry?.metadata && (
     entry.metadata.path ||
     entry.metadata.userAgent ||
     entry.metadata.timestamp
@@ -119,24 +117,34 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
           padding: 0,
           gap: 0
         }}
-        aria-labelledby="audit-detail-title"
-        aria-describedby="audit-detail-description"
         onEscapeKeyDown={(e) => {
           e.preventDefault()
           onOpenChange(false)
         }}
       >
-        {/* Fixed Header */}
-        <DialogHeader className="px-6 py-4 border-b shrink-0 bg-card">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <DialogTitle id="audit-detail-title" className="text-lg font-semibold">
-                Detalle del Evento de Auditoría
-              </DialogTitle>
-              <DialogDescription id="audit-detail-description" className="mt-1">
-                Registro #{entry.id} • {formatAuditDateFull(entry.createdAt)}
-              </DialogDescription>
+        {!entry ? (
+          <>
+            <DialogHeader className="px-6 py-4 border-b shrink-0 bg-card">
+              <DialogTitle>Detalle del Evento de Auditoría</DialogTitle>
+              <DialogDescription>No hay entrada seleccionada</DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-center p-12">
+              <p className="text-muted-foreground">No hay entrada seleccionada</p>
             </div>
+          </>
+        ) : (
+          <>
+            {/* Fixed Header */}
+            <DialogHeader className="px-6 py-4 border-b shrink-0 bg-card">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <DialogTitle className="text-lg font-semibold">
+                    Detalle del Evento de Auditoría
+                  </DialogTitle>
+                  <DialogDescription className="mt-1">
+                    Registro #{entry.id} • {formatAuditDateFull(entry.createdAt)}
+                  </DialogDescription>
+                </div>
             <Button
               variant="ghost"
               size="sm"
@@ -146,8 +154,8 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
             >
               <Copy className="h-4 w-4" aria-hidden="true" />
             </Button>
-          </div>
-        </DialogHeader>
+              </div>
+            </DialogHeader>
 
         {/* Tabs Container */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0">
@@ -516,6 +524,8 @@ export function AuditLogDetail({ entry, open, onOpenChange }: AuditLogDetailProp
             </TabsContent>
           )}
         </Tabs>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )

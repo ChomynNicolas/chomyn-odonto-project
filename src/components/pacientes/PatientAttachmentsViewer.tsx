@@ -285,7 +285,7 @@ export function PatientAttachmentsViewer({
           onNext={currentIndex < filteredAttachments.length - 1 ? handleNext : undefined}
           currentIndex={currentIndex}
           totalCount={filteredAttachments.length}
-          canDownload={permissions.canViewClinicalData}
+          canDownload={permissions.canViewAttachments}
         />
       )}
     </div>

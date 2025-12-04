@@ -1,6 +1,10 @@
 // src/app/api/admin/procedimientos/_service.ts
 /**
  * Servicio para gestión de procedimientos catalog
+ * 
+ * NOTA IMPORTANTE: El campo defaultPriceCents en ProcedimientoCatalogo almacena guaraníes (PYG),
+ * no centavos. El nombre del campo se mantiene por compatibilidad con la base de datos,
+ * pero la semántica es que representa guaraníes enteros (sin decimales).
  */
 
 import { prisma } from "@/lib/prisma"

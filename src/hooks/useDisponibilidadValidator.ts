@@ -116,19 +116,40 @@ export function useDisponibilidadValidator({
         setRecomendaciones([])
       } else {
         setIsValid(false)
-        setError("El horario seleccionado no está disponible")
+        // Mensaje de error mejorado que considera conflictos de profesional y consultorio
+        const tieneConsultorio = !!consultorioId
+        const mensajeError = tieneConsultorio
+          ? "El horario seleccionado no está disponible. Puede estar ocupado por el profesional o por otro profesional en el mismo consultorio."
+          : "El horario seleccionado no está disponible"
+        setError(mensajeError)
         
         // Procesar recomendaciones: convertir a formato mejorado con soporte multi-día
         const recomendacionesMejoradas = result.alternativas.map((rec) => {
           const inicioDate = new Date(rec.inicio)
           const finDate = new Date(rec.fin)
-          const fechaYMD = inicioDate.toISOString().slice(0, 10)
+          
+          // Extraer fecha en zona horaria local (no UTC) para evitar problemas de zona horaria
+          const year = inicioDate.getFullYear()
+          const month = inicioDate.getMonth() + 1
+          const day = inicioDate.getDate()
+          const fechaYMD = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
           
           // Formatear fecha de manera legible
+          // Normalizar fechas a medianoche en zona horaria local para comparación correcta
           const hoy = new Date()
-          const fechaRec = new Date(fechaYMD)
-          const esHoy = fechaRec.toDateString() === hoy.toDateString()
-          const esManana = fechaRec.toDateString() === new Date(hoy.getTime() + 24 * 60 * 60 * 1000).toDateString()
+          hoy.setHours(0, 0, 0, 0)
+          
+          // Crear fecha de la recomendación en zona horaria local
+          const fechaRec = new Date(year, month - 1, day)
+          fechaRec.setHours(0, 0, 0, 0)
+          
+          // Calcular mañana
+          const manana = new Date(hoy)
+          manana.setDate(manana.getDate() + 1)
+          
+          // Comparar solo las partes de fecha (año, mes, día)
+          const esHoy = fechaRec.getTime() === hoy.getTime()
+          const esManana = fechaRec.getTime() === manana.getTime()
           
           let fechaDisplay: string
           if (esHoy) {
@@ -136,7 +157,8 @@ export function useDisponibilidadValidator({
           } else if (esManana) {
             fechaDisplay = "Mañana"
           } else {
-            fechaDisplay = inicioDate.toLocaleDateString("es", {
+            // Usar la fecha normalizada para formatear
+            fechaDisplay = fechaRec.toLocaleDateString("es", {
               weekday: "short",
               day: "2-digit",
               month: "short",

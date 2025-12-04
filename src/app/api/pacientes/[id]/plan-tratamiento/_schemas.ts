@@ -35,10 +35,22 @@ const UpdateStepSchema = StepSchema.extend({
 })
 
 export const CreatePlanSchema = z.object({
-  titulo: z.string().min(1).max(200),
+  titulo: z.string().min(1).max(200).optional(), // Optional if catalogId is provided
   descripcion: z.string().max(1000).nullable().optional(),
-  steps: z.array(CreateStepSchema).min(1, "Debe haber al menos un paso en el plan"),
-})
+  steps: z.array(CreateStepSchema).min(1, "Debe haber al menos un paso en el plan").optional(), // Optional if catalogId is provided
+  catalogId: z.number().int().positive().optional(), // ID of catalog plan to load from
+}).refine(
+  (data) => {
+    // Either catalogId or (titulo and steps) must be provided
+    if (data.catalogId) {
+      return true // catalogId is provided, titulo and steps will be loaded from catalog
+    }
+    return !!(data.titulo && data.steps && data.steps.length > 0) // Manual creation requires titulo and steps
+  },
+  {
+    message: "Debe proporcionar catalogId o titulo con steps",
+  }
+)
 
 export const UpdatePlanSchema = z.object({
   titulo: z.string().min(1).max(200).optional(),

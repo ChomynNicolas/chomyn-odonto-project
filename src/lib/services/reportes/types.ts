@@ -14,11 +14,19 @@ import type {
   ProcedimientosFilters,
   EstadosCitasFilters,
   TopProcedimientosFilters,
+  DiagnosticosActivosFilters,
+  DiagnosticosResueltosFilters,
+  DiagnosticosPorTipoFilters,
+  DiagnosticosPendientesSeguimientoFilters,
   CitasSummaryResponse,
   PacientesActivosResponse,
   ProcedimientosResponse,
   EstadosCitasResponse,
   TopProcedimientosResponse,
+  DiagnosticosActivosResponse,
+  DiagnosticosResueltosResponse,
+  DiagnosticosPorTipoResponse,
+  DiagnosticosPendientesSeguimientoResponse,
 } from "@/types/reportes"
 
 // ============================================================================
@@ -51,6 +59,13 @@ export type PacientesActivosService = ReportService<PacientesActivosFilters, Pac
 export type ProcedimientosService = ReportService<ProcedimientosFilters, ProcedimientosResponse>
 export type EstadosCitasService = ReportService<EstadosCitasFilters, EstadosCitasResponse>
 export type TopProcedimientosService = ReportService<TopProcedimientosFilters, TopProcedimientosResponse>
+export type DiagnosticosActivosService = ReportService<DiagnosticosActivosFilters, DiagnosticosActivosResponse>
+export type DiagnosticosResueltosService = ReportService<DiagnosticosResueltosFilters, DiagnosticosResueltosResponse>
+export type DiagnosticosPorTipoService = ReportService<DiagnosticosPorTipoFilters, DiagnosticosPorTipoResponse>
+export type DiagnosticosPendientesSeguimientoService = ReportService<
+  DiagnosticosPendientesSeguimientoFilters,
+  DiagnosticosPendientesSeguimientoResponse
+>
 
 // ============================================================================
 // Orchestrator Types
@@ -63,6 +78,10 @@ export interface ReportFiltersMap {
   "procedimientos": ProcedimientosFilters
   "estados-citas": EstadosCitasFilters
   "top-procedimientos": TopProcedimientosFilters
+  "diagnosticos-activos": DiagnosticosActivosFilters
+  "diagnosticos-resueltos": DiagnosticosResueltosFilters
+  "diagnosticos-por-tipo": DiagnosticosPorTipoFilters
+  "diagnosticos-pendientes-seguimiento": DiagnosticosPendientesSeguimientoFilters
 }
 
 /** Map of report type to its response type */
@@ -72,6 +91,10 @@ export interface ReportResponseMap {
   "procedimientos": ProcedimientosResponse
   "estados-citas": EstadosCitasResponse
   "top-procedimientos": TopProcedimientosResponse
+  "diagnosticos-activos": DiagnosticosActivosResponse
+  "diagnosticos-resueltos": DiagnosticosResueltosResponse
+  "diagnosticos-por-tipo": DiagnosticosPorTipoResponse
+  "diagnosticos-pendientes-seguimiento": DiagnosticosPendientesSeguimientoResponse
 }
 
 // ============================================================================

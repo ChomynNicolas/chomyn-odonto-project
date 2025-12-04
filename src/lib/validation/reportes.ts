@@ -164,6 +164,94 @@ export const topProcedimientosFiltersSchema = z.object({
   }
 })
 
+/** Active Diagnoses Report filters */
+export const diagnosticosActivosFiltersSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  pacienteIds: z.array(z.number().int().positive()).optional(),
+  diagnosisCatalogIds: z.array(z.number().int().positive()).optional(),
+  profesionalIds: z.array(z.number().int().positive()).optional(),
+  busqueda: z.string().max(100).optional(),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+}).superRefine((data, ctx) => {
+  if (new Date(data.startDate) > new Date(data.endDate)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "La fecha de inicio debe ser anterior o igual a la fecha de fin",
+      path: ["endDate"],
+    })
+  }
+})
+
+/** Resolved Diagnoses Report filters */
+export const diagnosticosResueltosFiltersSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  pacienteIds: z.array(z.number().int().positive()).optional(),
+  diagnosisCatalogIds: z.array(z.number().int().positive()).optional(),
+  profesionalIds: z.array(z.number().int().positive()).optional(),
+  busqueda: z.string().max(100).optional(),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+}).superRefine((data, ctx) => {
+  if (new Date(data.startDate) > new Date(data.endDate)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "La fecha de inicio debe ser anterior o igual a la fecha de fin",
+      path: ["endDate"],
+    })
+  }
+})
+
+/** Diagnoses by Type Report filters */
+export const diagnosticosPorTipoFiltersSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  diagnosisCatalogIds: z.array(z.number().int().positive()).optional(),
+  profesionalIds: z.array(z.number().int().positive()).optional(),
+  status: z.array(z.enum(["ACTIVE", "UNDER_FOLLOW_UP", "RESOLVED", "DISCARDED", "RULED_OUT"])).optional(),
+}).superRefine((data, ctx) => {
+  if (new Date(data.startDate) > new Date(data.endDate)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "La fecha de inicio debe ser anterior o igual a la fecha de fin",
+      path: ["endDate"],
+    })
+  }
+})
+
+/** Pending Follow-up Diagnoses Report filters */
+export const diagnosticosPendientesSeguimientoFiltersSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  pacienteIds: z.array(z.number().int().positive()).optional(),
+  diagnosisCatalogIds: z.array(z.number().int().positive()).optional(),
+  profesionalIds: z.array(z.number().int().positive()).optional(),
+  busqueda: z.string().max(100).optional(),
+  diasMinimos: z.number().int().min(0).optional(),
+  diasMaximos: z.number().int().min(0).optional(),
+  page: z.number().int().min(1).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+}).superRefine((data, ctx) => {
+  if (new Date(data.startDate) > new Date(data.endDate)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "La fecha de inicio debe ser anterior o igual a la fecha de fin",
+      path: ["endDate"],
+    })
+  }
+  if (data.diasMinimos !== undefined && data.diasMaximos !== undefined) {
+    if (data.diasMinimos > data.diasMaximos) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Los días mínimos deben ser menores o iguales a los días máximos",
+        path: ["diasMaximos"],
+      })
+    }
+  }
+})
+
 // ============================================================================
 // Request Body Schema (API Route)
 // ============================================================================
@@ -182,6 +270,10 @@ export type PacientesActivosFiltersInput = z.infer<typeof pacientesActivosFilter
 export type ProcedimientosFiltersInput = z.infer<typeof procedimientosFiltersSchema>
 export type EstadosCitasFiltersInput = z.infer<typeof estadosCitasFiltersSchema>
 export type TopProcedimientosFiltersInput = z.infer<typeof topProcedimientosFiltersSchema>
+export type DiagnosticosActivosFiltersInput = z.infer<typeof diagnosticosActivosFiltersSchema>
+export type DiagnosticosResueltosFiltersInput = z.infer<typeof diagnosticosResueltosFiltersSchema>
+export type DiagnosticosPorTipoFiltersInput = z.infer<typeof diagnosticosPorTipoFiltersSchema>
+export type DiagnosticosPendientesSeguimientoFiltersInput = z.infer<typeof diagnosticosPendientesSeguimientoFiltersSchema>
 
 // ============================================================================
 // Schema Map by Report Type
@@ -194,6 +286,10 @@ export const reportFilterSchemas = {
   "procedimientos": procedimientosFiltersSchema,
   "estados-citas": estadosCitasFiltersSchema,
   "top-procedimientos": topProcedimientosFiltersSchema,
+  "diagnosticos-activos": diagnosticosActivosFiltersSchema,
+  "diagnosticos-resueltos": diagnosticosResueltosFiltersSchema,
+  "diagnosticos-por-tipo": diagnosticosPorTipoFiltersSchema,
+  "diagnosticos-pendientes-seguimiento": diagnosticosPendientesSeguimientoFiltersSchema,
 } as const
 
 type ReportFilterSchemas = typeof reportFilterSchemas
@@ -297,6 +393,14 @@ export function getDefaultFilters(reportType: ReportTypeKey): Record<string, unk
       return { ...dateRange, agruparPor: "semana" }
     case "top-procedimientos":
       return { ...dateRange, limite: 10, ordenarPor: "cantidad" }
+    case "diagnosticos-activos":
+      return { ...dateRange, page: 1, pageSize: 20 }
+    case "diagnosticos-resueltos":
+      return { ...dateRange, page: 1, pageSize: 20 }
+    case "diagnosticos-por-tipo":
+      return { ...dateRange }
+    case "diagnosticos-pendientes-seguimiento":
+      return { ...dateRange, page: 1, pageSize: 20 }
     default:
       return dateRange
   }

@@ -92,11 +92,12 @@ export default function ProcedimientosReportPage() {
     }
     if (column.key === "totalCents") {
       if (!row.totalCents) return "-"
+      // NOTA: totalCents ya está en guaraníes (PYG), no dividir por 100
       return new Intl.NumberFormat("es-PY", {
         style: "currency",
         currency: "PYG",
         maximumFractionDigits: 0,
-      }).format(row.totalCents / 100)
+      }).format(row.totalCents)
     }
     return null
   }, [])

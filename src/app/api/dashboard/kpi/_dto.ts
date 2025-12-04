@@ -72,8 +72,8 @@ export type ConflictoAgenda = {
 }
 
 export type ColaDTO = {
-  checkIn: Array<{ idCita: number; hora: string; paciente: string; consultorio: string | null }>
-  enAtencion: Array<{ idCita: number; hora: string; paciente: string; profesional: string }>
+  checkIn: Array<{ idCita: number; pacienteId: number; hora: string; paciente: string; consultorio: string | null }>
+  enAtencion: Array<{ idCita: number; pacienteId: number; hora: string; paciente: string; profesional: string; profesionalId: number | null }>
 }
 
 export type DashboardKpiResponse =
@@ -172,7 +172,7 @@ export interface UtilizacionDTO {
 // ============== 3. Producción clínica ==============
 export interface ProduccionClinicaDTO {
   procedimientosRealizados: number
-  ingresosClinicosTotal: number // en centavos
+  ingresosClinicosTotal: number // en guaraníes (nota: el campo defaultPriceCents almacena guaraníes)
   topProcedimientosPorVolumen: Array<{
     procedimientoId: number
     code: string

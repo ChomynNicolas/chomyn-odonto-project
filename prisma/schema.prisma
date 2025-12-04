@@ -2,9 +2,17 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Database configuration
+// DATABASE_URL is loaded from environment-specific .env files:
+// - .env.development (Docker local database)
+// - .env.production (Neon cloud database)
+// - .env.test (Docker test database)
+// The correct file is loaded automatically based on NODE_ENV via dotenv-cli
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Optional: Enable connection pooling for production
+  // directUrl = env("DIRECT_URL") // For migrations in production
 }
 
 model Rol {
@@ -58,9 +66,9 @@ model Usuario {
   ClinicalHistoryEntry                ClinicalHistoryEntry[]
   PatientDiagnosis                    PatientDiagnosis[]
   PatientAllergy                      PatientAllergy[]
-  PatientMedication                   PatientMedication[]                    @relation("PatientMedicationCreatedBy")
-  PatientMedicationUpdatedBy          PatientMedication[]                    @relation("PatientMedicationUpdatedBy")
-  PatientMedicationDiscontinuedBy     PatientMedication[]                    @relation("PatientMedicationDiscontinuedBy")
+  PatientMedication                   PatientMedication[]        @relation("PatientMedicationCreatedBy")
+  PatientMedicationUpdatedBy          PatientMedication[]        @relation("PatientMedicationUpdatedBy")
+  PatientMedicationDiscontinuedBy     PatientMedication[]        @relation("PatientMedicationDiscontinuedBy")
   PatientVitals                       PatientVitals[]
   OdontogramSnapshot                  OdontogramSnapshot[]
   PeriodontogramSnapshot              PeriodontogramSnapshot[]
@@ -81,7 +89,7 @@ model Usuario {
   AnamnesisAuditLogActor              AnamnesisAuditLog[]        @relation("AnamnesisAuditLogActor")
   AnamnesisDeletedBy                  PatientAnamnesis[]         @relation("AnamnesisDeletedBy")
   AnamnesisLastVerifiedBy             PatientAnamnesis[]         @relation("AnamnesisLastVerifiedBy")
-  AnamnesisReviewedBy                 AnamnesisAuditLog[]         @relation("AnamnesisReviewedBy")
+  AnamnesisReviewedBy                 AnamnesisAuditLog[]        @relation("AnamnesisReviewedBy")
   AnamnesisPendingReviewCreatedBy     AnamnesisPendingReview[]   @relation("AnamnesisPendingReviewCreatedBy")
   AnamnesisPendingReviewReviewedBy    AnamnesisPendingReview[]   @relation("AnamnesisPendingReviewReviewedBy")
 
@@ -271,22 +279,22 @@ model Paciente {
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
-  persona                Persona                   @relation(fields: [personaId], references: [idPersona])
-  responsables           PacienteResponsable[]
-  citas                  Cita[] // <— importante: relación inversa (solo lectura)
-  TreatmentPlan          TreatmentPlan[]
-  ClinicalHistoryEntry   ClinicalHistoryEntry[]
-  PatientDiagnosis       PatientDiagnosis[]
-  PatientAllergy         PatientAllergy[]
-  PatientMedication      PatientMedication[]
-  PatientVitals          PatientVitals[]
-  OdontogramSnapshot     OdontogramSnapshot[]
-  PeriodontogramSnapshot PeriodontogramSnapshot[]
-  Adjunto                Adjunto[]
-  consentimientos        Consentimiento[]
-  anamnesisActual        PatientAnamnesis?
-  anamnesisHistorial     PatientAnamnesisVersion[]
-  anamnesisAuditLogs     AnamnesisAuditLog[]
+  persona                 Persona                   @relation(fields: [personaId], references: [idPersona])
+  responsables            PacienteResponsable[]
+  citas                   Cita[] // <— importante: relación inversa (solo lectura)
+  TreatmentPlan           TreatmentPlan[]
+  ClinicalHistoryEntry    ClinicalHistoryEntry[]
+  PatientDiagnosis        PatientDiagnosis[]
+  PatientAllergy          PatientAllergy[]
+  PatientMedication       PatientMedication[]
+  PatientVitals           PatientVitals[]
+  OdontogramSnapshot      OdontogramSnapshot[]
+  PeriodontogramSnapshot  PeriodontogramSnapshot[]
+  Adjunto                 Adjunto[]
+  consentimientos         Consentimiento[]
+  anamnesisActual         PatientAnamnesis?
+  anamnesisHistorial      PatientAnamnesisVersion[]
+  anamnesisAuditLogs      AnamnesisAuditLog[]
   anamnesisPendingReviews AnamnesisPendingReview[]
 
   @@map("Paciente")
@@ -517,8 +525,9 @@ model ProcedimientoCatalogo {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  pasos          TreatmentStep[]
-  procedimientos ConsultaProcedimiento[]
+  pasos                    TreatmentStep[]
+  procedimientos           ConsultaProcedimiento[]
+  TreatmentPlanCatalogStep TreatmentPlanCatalogStep[]
 
   @@map("ProcedimientoCatalogo")
 }
@@ -671,6 +680,10 @@ model TreatmentPlan {
   descripcion String?             @map("descripcion")
   status      TreatmentPlanStatus @default(ACTIVE) @map("status")
 
+  // Optional reference to catalog plan (for tracking)
+  catalogPlanId Int?                  @map("TreatmentPlanCatalog_idTreatmentPlanCatalog")
+  catalogPlan   TreatmentPlanCatalog? @relation(fields: [catalogPlanId], references: [idTreatmentPlanCatalog], onDelete: SetNull)
+
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
   creadoPor       Usuario @relation(fields: [createdByUserId], references: [idUsuario])
 
@@ -680,6 +693,7 @@ model TreatmentPlan {
   steps TreatmentStep[]
 
   @@index([pacienteId, status])
+  @@index([catalogPlanId])
   @@map("TreatmentPlan")
 }
 
@@ -705,10 +719,10 @@ model TreatmentStep {
   notes                String?             @map("notes")
 
   // Multi-session support
-  requiresMultipleSessions Boolean @default(false) @map("requires_multiple_sessions")
-  totalSessions           Int?                     @map("total_sessions")
-  currentSession          Int?    @default(1)      @map("current_session")
-  completedAt             DateTime?                 @map("completed_at")
+  requiresMultipleSessions Boolean   @default(false) @map("requires_multiple_sessions")
+  totalSessions            Int?      @map("total_sessions")
+  currentSession           Int?      @default(1) @map("current_session")
+  completedAt              DateTime? @map("completed_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -719,6 +733,55 @@ model TreatmentStep {
   @@unique([treatmentPlanId, order])
   @@index([status])
   @@map("TreatmentStep")
+}
+
+// ============== Catálogo de Planes de Tratamiento ==============
+
+model TreatmentPlanCatalog {
+  idTreatmentPlanCatalog Int      @id @default(autoincrement()) @map("idTreatmentPlanCatalog")
+  code                   String   @unique @map("code")
+  nombre                 String   @map("nombre")
+  descripcion            String?  @map("descripcion")
+  isActive               Boolean  @default(true) @map("is_active")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  steps          TreatmentPlanCatalogStep[]
+  treatmentPlans TreatmentPlan[]
+
+  @@map("TreatmentPlanCatalog")
+}
+
+model TreatmentPlanCatalogStep {
+  idTreatmentPlanCatalogStep Int                  @id @default(autoincrement()) @map("idTreatmentPlanCatalogStep")
+  catalogPlanId              Int                  @map("TreatmentPlanCatalog_idTreatmentPlanCatalog")
+  catalogPlan                TreatmentPlanCatalog @relation(fields: [catalogPlanId], references: [idTreatmentPlanCatalog], onDelete: Cascade)
+
+  order Int @map("order")
+
+  // Definición clínica (elige catálogo o texto libre)
+  procedureId           Int?                   @map("Procedimiento_idProcedimiento")
+  procedimientoCatalogo ProcedimientoCatalogo? @relation(fields: [procedureId], references: [idProcedimiento], onDelete: SetNull)
+  serviceType           String?                @map("service_type")
+
+  toothNumber  Int?              @map("tooth_number")
+  toothSurface DienteSuperficie? @map("tooth_surface")
+
+  estimatedDurationMin Int?    @map("estimated_duration_min")
+  estimatedCostCents   Int?    @map("estimated_cost_cents")
+  priority             Int?    @map("priority") // 1..5
+  notes                String? @map("notes")
+
+  // Multi-session support
+  requiresMultipleSessions Boolean @default(false) @map("requires_multiple_sessions")
+  totalSessions            Int?    @map("total_sessions")
+  currentSession           Int?    @default(1) @map("current_session")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([catalogPlanId, order])
+  @@map("TreatmentPlanCatalogStep")
 }
 
 // ============== 1) Historia clínica general =================
@@ -923,8 +986,8 @@ model PatientMedication {
   discontinuedAt       DateTime? @map("discontinued_at")
   discontinuedByUserId Int?      @map("Usuario_idUsuario_discontinuedBy")
   discontinuedBy       Usuario?  @relation("PatientMedicationDiscontinuedBy", fields: [discontinuedByUserId], references: [idUsuario])
-  consultaId            Int?      @map("Consulta_Cita_idCita")
-  consulta              Consulta? @relation(fields: [consultaId], references: [citaId])
+  consultaId           Int?      @map("Consulta_Cita_idCita")
+  consulta             Consulta? @relation(fields: [consultaId], references: [citaId])
 
   createdByUserId Int     @map("Usuario_idUsuario_createdBy")
   createdBy       Usuario @relation("PatientMedicationCreatedBy", fields: [createdByUserId], references: [idUsuario])
@@ -1182,23 +1245,23 @@ model Consentimiento {
   provider   String  @default("CLOUDINARY") @map("provider")
 
   // Otros
-  observaciones       String?  @map("observaciones")
-  version             Int      @default(1) @map("version")
-  activo              Boolean  @default(true) @map("activo")
-  esEspecificoPorCita Boolean  @default(false) @map("es_especifico_por_cita")
+  observaciones       String? @map("observaciones")
+  version             Int     @default(1) @map("version")
+  activo              Boolean @default(true) @map("activo")
+  esEspecificoPorCita Boolean @default(false) @map("es_especifico_por_cita")
 
   // Timestamps
   created_at DateTime  @default(now()) @map("created_at")
   updated_at DateTime  @updatedAt @map("updated_at")
   personas   Persona[] @relation("ConsentimientoResponsable")
 
+  @@unique([Cita_idCita, tipo, activo], map: "unique_consent_per_cita_tipo")
   // Índices para consultas comunes
   @@index([Paciente_idPaciente, tipo, activo], map: "Consentimiento_Paciente_idPaciente_tipo_activo_idx")
   @@index([Paciente_idPaciente, Persona_idPersona_responsable, tipo, activo], map: "Consentimiento_Paciente_idPaciente_Persona_idPersona_respo_idx")
   @@index([vigente_hasta], map: "Consentimiento_vigente_hasta_idx")
   @@index([Cita_idCita], map: "Consentimiento_Cita_idCita_idx")
   @@index([esEspecificoPorCita, Cita_idCita], map: "Consentimiento_esEspecificoPorCita_Cita_idx")
-  @@unique([Cita_idCita, tipo, activo], map: "unique_consent_per_cita_tipo")
   @@map("Consentimiento")
 }
 
@@ -1424,15 +1487,15 @@ model PatientAnamnesis {
   auditLogs AnamnesisAuditLog[]
 
   // Status management
-  status AnamnesisStatus @default(VALID) @map("status")
-  lastVerifiedAt DateTime? @map("last_verified_at")
-  lastVerifiedByUserId Int? @map("Usuario_idUsuario_lastVerifiedBy")
-  lastVerifiedBy Usuario? @relation("AnamnesisLastVerifiedBy", fields: [lastVerifiedByUserId], references: [idUsuario])
+  status               AnamnesisStatus @default(VALID) @map("status")
+  lastVerifiedAt       DateTime?       @map("last_verified_at")
+  lastVerifiedByUserId Int?            @map("Usuario_idUsuario_lastVerifiedBy")
+  lastVerifiedBy       Usuario?        @relation("AnamnesisLastVerifiedBy", fields: [lastVerifiedByUserId], references: [idUsuario])
 
   // Pending review flags
-  hasPendingReviews Boolean @default(false) @map("has_pending_reviews")
-  pendingReviewReason String? @map("pending_review_reason")
-  pendingReviewSince DateTime? @map("pending_review_since")
+  hasPendingReviews   Boolean   @default(false) @map("has_pending_reviews")
+  pendingReviewReason String?   @map("pending_review_reason")
+  pendingReviewSince  DateTime? @map("pending_review_since")
 
   // Pending reviews
   pendingReviews AnamnesisPendingReview[]
@@ -1538,13 +1601,13 @@ model AnamnesisAuditLog {
   consultaId Int?                     @map("Consulta_Cita_idCita") // Si el cambio ocurrió en una consulta
 
   // Context for outside-consultation edits
-  isOutsideConsultation Boolean @default(false) @map("is_outside_consultation")
-  informationSource InformationSource? @map("information_source")
-  verifiedWithPatient Boolean? @map("verified_with_patient")
-  requiresReview Boolean @default(false) @map("requires_review")
-  reviewedAt DateTime? @map("reviewed_at")
-  reviewedByUserId Int? @map("Usuario_idUsuario_reviewedBy")
-  reviewedBy Usuario? @relation("AnamnesisReviewedBy", fields: [reviewedByUserId], references: [idUsuario])
+  isOutsideConsultation Boolean            @default(false) @map("is_outside_consultation")
+  informationSource     InformationSource? @map("information_source")
+  verifiedWithPatient   Boolean?           @map("verified_with_patient")
+  requiresReview        Boolean            @default(false) @map("requires_review")
+  reviewedAt            DateTime?          @map("reviewed_at")
+  reviewedByUserId      Int?               @map("Usuario_idUsuario_reviewedBy")
+  reviewedBy            Usuario?           @relation("AnamnesisReviewedBy", fields: [reviewedByUserId], references: [idUsuario])
 
   // Versionado
   previousVersionNumber Int? @map("previous_version_number")
@@ -1596,7 +1659,7 @@ model AnamnesisFieldDiff {
   changeType FieldChangeType @map("change_type")
 
   requiresReview Boolean @default(false) @map("requires_review")
-  reviewReason String? @map("review_reason")
+  reviewReason   String? @map("review_reason")
 
   auditLog AnamnesisAuditLog @relation(fields: [auditLogId], references: [idAnamnesisAuditLog], onDelete: Cascade)
 
@@ -1609,29 +1672,29 @@ model AnamnesisFieldDiff {
 
 // Pending review tracking for anamnesis changes outside consultation
 model AnamnesisPendingReview {
-  idAnamnesisPendingReview Int @id @default(autoincrement()) @map("idAnamnesisPendingReview")
-  anamnesisId Int @map("PatientAnamnesis_id")
-  pacienteId Int @map("Paciente_idPaciente")
-  auditLogId Int @map("AnamnesisAuditLog_id")
-  fieldPath String @map("field_path")
-  fieldLabel String @map("field_label")
-  oldValue Json? @map("old_value")
-  newValue Json? @map("new_value")
-  reason String @map("reason")
-  severity AnamnesisChangeSeverity @map("severity")
-  createdByUserId Int @map("Usuario_idUsuario_createdBy")
-  createdAt DateTime @default(now()) @map("created_at")
+  idAnamnesisPendingReview Int                     @id @default(autoincrement()) @map("idAnamnesisPendingReview")
+  anamnesisId              Int                     @map("PatientAnamnesis_id")
+  pacienteId               Int                     @map("Paciente_idPaciente")
+  auditLogId               Int                     @map("AnamnesisAuditLog_id")
+  fieldPath                String                  @map("field_path")
+  fieldLabel               String                  @map("field_label")
+  oldValue                 Json?                   @map("old_value")
+  newValue                 Json?                   @map("new_value")
+  reason                   String                  @map("reason")
+  severity                 AnamnesisChangeSeverity @map("severity")
+  createdByUserId          Int                     @map("Usuario_idUsuario_createdBy")
+  createdAt                DateTime                @default(now()) @map("created_at")
 
-  reviewedAt DateTime? @map("reviewed_at")
-  reviewedByUserId Int? @map("Usuario_idUsuario_reviewedBy")
-  reviewNotes String? @map("review_notes")
-  isApproved Boolean? @map("is_approved")
+  reviewedAt       DateTime? @map("reviewed_at")
+  reviewedByUserId Int?      @map("Usuario_idUsuario_reviewedBy")
+  reviewNotes      String?   @map("review_notes")
+  isApproved       Boolean?  @map("is_approved")
 
-  anamnesis PatientAnamnesis @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
-  paciente Paciente @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
-  auditLog AnamnesisAuditLog @relation(fields: [auditLogId], references: [idAnamnesisAuditLog], onDelete: Cascade)
-  createdBy Usuario @relation("AnamnesisPendingReviewCreatedBy", fields: [createdByUserId], references: [idUsuario])
-  reviewedBy Usuario? @relation("AnamnesisPendingReviewReviewedBy", fields: [reviewedByUserId], references: [idUsuario])
+  anamnesis  PatientAnamnesis  @relation(fields: [anamnesisId], references: [idPatientAnamnesis], onDelete: Cascade)
+  paciente   Paciente          @relation(fields: [pacienteId], references: [idPaciente], onDelete: Cascade)
+  auditLog   AnamnesisAuditLog @relation(fields: [auditLogId], references: [idAnamnesisAuditLog], onDelete: Cascade)
+  createdBy  Usuario           @relation("AnamnesisPendingReviewCreatedBy", fields: [createdByUserId], references: [idUsuario])
+  reviewedBy Usuario?          @relation("AnamnesisPendingReviewReviewedBy", fields: [reviewedByUserId], references: [idUsuario])
 
   @@index([anamnesisId, reviewedAt])
   @@index([pacienteId, reviewedAt])

@@ -257,7 +257,12 @@ export async function buildDashboardKpi(
       select: {
         idCita: true,
         inicio: true,
-        paciente: { select: { persona: { select: { nombres: true, apellidos: true } } } },
+        paciente: { 
+          select: { 
+            idPaciente: true,
+            persona: { select: { nombres: true, apellidos: true } } 
+          } 
+        },
         consultorio: { select: { nombre: true } },
       },
       orderBy: { checkedInAt: "asc" },
@@ -267,8 +272,18 @@ export async function buildDashboardKpi(
       select: {
         idCita: true,
         inicio: true,
-        paciente: { select: { persona: { select: { nombres: true, apellidos: true } } } },
-        profesional: { select: { persona: { select: { nombres: true, apellidos: true } } } },
+        paciente: { 
+          select: { 
+            idPaciente: true,
+            persona: { select: { nombres: true, apellidos: true } } 
+          } 
+        },
+        profesional: { 
+          select: { 
+            idProfesional: true,
+            persona: { select: { nombres: true, apellidos: true } } 
+          } 
+        },
       },
       orderBy: { startedAt: "asc" },
     }),
@@ -277,15 +292,18 @@ export async function buildDashboardKpi(
   const colas = {
     checkIn: colaCheckIn.map((c) => ({
       idCita: c.idCita,
+      pacienteId: c.paciente.idPaciente,
       hora: c.inicio.toISOString(),
       paciente: `${c.paciente.persona.nombres} ${c.paciente.persona.apellidos}`,
       consultorio: c.consultorio?.nombre ?? null,
     })),
     enAtencion: colaInProgress.map((c) => ({
       idCita: c.idCita,
+      pacienteId: c.paciente.idPaciente,
       hora: c.inicio.toISOString(),
       paciente: `${c.paciente.persona.nombres} ${c.paciente.persona.apellidos}`,
       profesional: c.profesional?.persona ? `${c.profesional.persona.nombres} ${c.profesional.persona.apellidos}` : "",
+      profesionalId: c.profesional?.idProfesional ?? null,
     })),
   }
 

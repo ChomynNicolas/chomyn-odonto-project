@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # Development Database
   postgres:
     image: postgres:16
     container_name: chomyn-postgres
@@ -10,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_seguro}
       POSTGRES_DB: ${POSTGRES_DB:-chomyn_odonto}
     ports:
-      # Sólo expone a localhost (seguro en dev)
+      # Only expose to localhost (safe in dev)
       - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
@@ -19,6 +20,31 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - chomyn-network
+
+  # Test Database (optional, can use same postgres service with different DB)
+  postgres-test:
+    image: postgres:16
+    container_name: chomyn-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chomyn_test
+      POSTGRES_PASSWORD: test_password_seguro
+      POSTGRES_DB: chomyn_odonto_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pg_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chomyn_test -d chomyn_odonto_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - chomyn-network
+    profiles:
+      - test
 
   # (Opcional) pgAdmin para navegar la DB vía UI
   pgadmin:
@@ -40,4 +66,9 @@ services:
 
 volumes:
   pg_data:
+  pg_test_data:
   pgadmin_data:
+
+networks:
+  chomyn-network:
+    driver: bridge

@@ -1,3 +1,10 @@
+/**
+ * Seed de datos clínicos (planes de tratamiento, consultas, procedimientos)
+ * 
+ * NOTA IMPORTANTE: Los precios (defaultPriceCents, estimatedCostCents, unitPriceCents, totalCents)
+ * están en guaraníes (PYG), no en centavos. El nombre del campo se mantiene por compatibilidad.
+ */
+
 import {
   type PrismaClient,
   ConsultaEstado,
@@ -10,6 +17,11 @@ import {
 } from "@prisma/client"
 import { faker } from "@faker-js/faker"
 
+/**
+ * Crea un plan de tratamiento con pasos
+ * 
+ * NOTA: estimatedCostCents almacena guaraníes (PYG) cuando proviene del catálogo.
+ */
 export async function createPlanConSteps(
   prisma: PrismaClient,
   params: {
@@ -21,7 +33,7 @@ export async function createPlanConSteps(
       toothNumber?: number | null
       toothSurface?: DienteSuperficie | null
       estimatedDurationMin?: number | null
-      estimatedCostCents?: number | null
+      estimatedCostCents?: number | null // en guaraníes (PYG) si proviene del catálogo
       priority?: number | null
     }>
   },
@@ -37,10 +49,24 @@ export async function createPlanConSteps(
   let order = 1
   for (const st of params.steps) {
     let procedureId: number | undefined = undefined
+    let estimatedCost: number | null = st.estimatedCostCents ?? null
+    let estimatedDuration: number | null = st.estimatedDurationMin ?? null
+    
     if (st.code) {
       const proc = await prisma.procedimientoCatalogo.findUnique({ where: { code: st.code } })
-      procedureId = proc?.idProcedimiento
+      if (proc) {
+        procedureId = proc.idProcedimiento
+        // Si no se proporcionó precio explícitamente, usar el del catálogo
+        if (estimatedCost == null) {
+          estimatedCost = proc.defaultPriceCents ?? null
+        }
+        // Si no se proporcionó duración explícitamente, usar la del catálogo
+        if (estimatedDuration == null) {
+          estimatedDuration = proc.defaultDurationMin ?? null
+        }
+      }
     }
+    
     await prisma.treatmentStep.create({
       data: {
         treatmentPlanId: plan.idTreatmentPlan,
@@ -49,8 +75,8 @@ export async function createPlanConSteps(
         serviceType: procedureId ? null : (st.serviceType ?? "Procedimiento"),
         toothNumber: st.toothNumber ?? null,
         toothSurface: st.toothSurface ?? null,
-        estimatedDurationMin: st.estimatedDurationMin ?? null,
-        estimatedCostCents: st.estimatedCostCents ?? null,
+        estimatedDurationMin: estimatedDuration,
+        estimatedCostCents: estimatedCost,
         priority: st.priority ?? 3,
         status: TreatmentStepStatus.PENDING,
       },
@@ -88,6 +114,13 @@ export async function ensureConsultaParaCita(
   })
 }
 
+/**
+ * Agrega una línea de procedimiento a una consulta
+ * 
+ * NOTA: Si unitPriceCents no se proporciona y el procedimiento viene del catálogo,
+ * se usa defaultPriceCents del catálogo que está en guaraníes (PYG).
+ * Los valores unitPriceCents y totalCents están en guaraníes.
+ */
 export async function addLineaProcedimiento(
   prisma: PrismaClient,
   params: {
@@ -97,8 +130,8 @@ export async function addLineaProcedimiento(
     toothNumber?: number | null
     toothSurface?: DienteSuperficie | null
     quantity?: number
-    unitPriceCents?: number | null
-    totalCents?: number | null
+    unitPriceCents?: number | null // en guaraníes (PYG)
+    totalCents?: number | null     // en guaraníes (PYG)
     treatmentStepId?: number | null
     diagnosisId?: number | null
     resultNotes?: string | null
@@ -111,10 +144,12 @@ export async function addLineaProcedimiento(
   }
   const q = params.quantity && params.quantity > 0 ? params.quantity : 1
 
+  // Si no se proporciona unitPriceCents y hay un procedimiento del catálogo,
+  // usar defaultPriceCents que está en guaraníes
   let unit = params.unitPriceCents ?? null
   if (unit == null && procedureId) {
     const proc = await prisma.procedimientoCatalogo.findUnique({ where: { idProcedimiento: procedureId } })
-    unit = proc?.defaultPriceCents ?? null
+    unit = proc?.defaultPriceCents ?? null // en guaraníes
   }
   const total = params.totalCents ?? (unit != null ? unit * q : null)
 
@@ -249,8 +284,8 @@ export async function addComprehensiveAdjuntos(
 ) {
   const adjuntos = []
 
-  // Add X-ray with probability (60% chance)
-  if (faker.datatype.boolean({ probability: 0.6 })) {
+  // Add X-ray with probability (20% chance - reducido)
+  if (faker.datatype.boolean({ probability: 0.2 })) {
     try {
       const xray = await addAdjuntoConsulta(prisma, {
         consultaCitaId: params.consultaCitaId,
@@ -275,8 +310,8 @@ export async function addComprehensiveAdjuntos(
     }
   }
 
-  // Add intraoral photo with probability (50% chance)
-  if (faker.datatype.boolean({ probability: 0.5 })) {
+  // Add intraoral photo with probability (15% chance - reducido)
+  if (faker.datatype.boolean({ probability: 0.15 })) {
     try {
       const photo = await addAdjuntoConsulta(prisma, {
         consultaCitaId: params.consultaCitaId,
@@ -299,8 +334,8 @@ export async function addComprehensiveAdjuntos(
     }
   }
 
-  // Add document/PDF with lower probability (20% chance)
-  if (faker.datatype.boolean({ probability: 0.2 })) {
+  // Add document/PDF with lower probability (5% chance - reducido)
+  if (faker.datatype.boolean({ probability: 0.05 })) {
     try {
       const doc = await addAdjuntoConsulta(prisma, {
         consultaCitaId: params.consultaCitaId,
@@ -347,27 +382,124 @@ export async function addClinicalBasics(
     },
   })
 
-  // Diagnóstico activo desde catálogo (con probabilidad)
-  if (faker.datatype.boolean({ probability: 0.7 })) {
-    const diagnoses = await prisma.diagnosisCatalog.findMany({ where: { isActive: true }, take: 3 })
-    if (diagnoses.length > 0) {
-      const dx = faker.helpers.arrayElement(diagnoses)
+  // Crear múltiples diagnósticos desde catálogo (reducido para datos moderados)
+  // Crear solo 1 diagnóstico por paciente (reducido de 1-2)
+  const numDiagnoses = 1
+  const diagnoses = await prisma.diagnosisCatalog.findMany({ where: { isActive: true } })
+  
+  if (diagnoses.length > 0) {
+    // Seleccionar diagnósticos aleatorios sin repetir
+    const selectedDiagnoses = faker.helpers.arrayElements(diagnoses, Math.min(numDiagnoses, diagnoses.length))
+    
+    for (const dx of selectedDiagnoses) {
+      // Crear diagnósticos con fechas variadas para probar filtros de fecha
+      // Algunos recientes (últimos 30 días), algunos intermedios (30-90 días), algunos antiguos (>90 días)
+      const dateType = faker.helpers.arrayElement(["recent", "intermediate", "old", "very_old"])
+      let notedAt = new Date()
+      
+      switch (dateType) {
+        case "recent":
+          // Últimos 30 días
+          notedAt = faker.date.recent({ days: 30 })
+          break
+        case "intermediate":
+          // 30-90 días atrás
+          const daysAgo = faker.number.int({ min: 30, max: 90 })
+          notedAt = new Date()
+          notedAt.setDate(notedAt.getDate() - daysAgo)
+          break
+        case "old":
+          // 90-180 días atrás
+          const daysAgoOld = faker.number.int({ min: 90, max: 180 })
+          notedAt = new Date()
+          notedAt.setDate(notedAt.getDate() - daysAgoOld)
+          break
+        case "very_old":
+          // 180-730 días atrás (hasta 2 años)
+          const daysAgoVeryOld = faker.number.int({ min: 180, max: 730 })
+          notedAt = new Date()
+          notedAt.setDate(notedAt.getDate() - daysAgoVeryOld)
+          break
+      }
+      
+      // Determinar estado: algunos ACTIVE, algunos UNDER_FOLLOW_UP, algunos RESOLVED
+      // 40% ACTIVE, 30% UNDER_FOLLOW_UP, 30% RESOLVED (para tener datos de resolución)
+      const statusRoll = faker.number.float({ min: 0, max: 1 })
+      let status: DiagnosisStatus
+      let resolvedAt: Date | null = null
+      
+      if (statusRoll < 0.4) {
+        status = DiagnosisStatus.ACTIVE
+      } else if (statusRoll < 0.7) {
+        status = DiagnosisStatus.UNDER_FOLLOW_UP
+      } else {
+        status = DiagnosisStatus.RESOLVED
+        // Calcular fecha de resolución: entre 7 y 180 días después de notedAt
+        const resolutionDays = faker.number.int({ min: 7, max: 180 })
+        resolvedAt = new Date(notedAt)
+        resolvedAt.setDate(resolvedAt.getDate() + resolutionDays)
+        // Asegurar que resolvedAt no sea futuro
+        if (resolvedAt > new Date()) {
+          resolvedAt = new Date() // Si es futuro, usar fecha actual
+        }
+      }
+      
       await prisma.patientDiagnosis.create({
         data: {
           pacienteId: params.pacienteId,
           diagnosisId: dx.idDiagnosisCatalog,
+          code: dx.code,
           label: dx.name,
-          status: DiagnosisStatus.ACTIVE,
-          notes: faker.helpers.arrayElement([
-            "Diagnóstico establecido en consulta",
-            "Hallazgo clínico",
-            "Diagnóstico confirmado",
-          ]),
+          status,
+          notedAt,
+          resolvedAt,
+          notes: status === DiagnosisStatus.RESOLVED
+            ? "Diagnóstico resuelto exitosamente"
+            : faker.helpers.arrayElement([
+                "Diagnóstico establecido en consulta",
+                "Hallazgo clínico",
+                "Diagnóstico confirmado",
+                "Diagnóstico basado en examen clínico y radiográfico",
+                "Diagnóstico de seguimiento",
+                "Hallazgo en control periódico",
+              ]),
           createdByUserId: params.createdByUserId,
           consultaId: params.consultaId ?? null,
         },
       })
     }
+  }
+  
+  // También crear algunos diagnósticos sin catálogo (texto libre) para variedad
+  if (faker.datatype.boolean({ probability: 0.15 })) {
+    const freeTextDiagnoses = [
+      "Bruxismo",
+      "Sensibilidad dental",
+      "Recesión gingival",
+      "Halitosis",
+      "Xerostomía",
+      "Trauma dental",
+      "Fractura coronaria",
+    ]
+    
+    const freeText = faker.helpers.arrayElement(freeTextDiagnoses)
+    const daysAgo = faker.number.int({ min: 0, max: 180 })
+    const notedAt = new Date()
+    notedAt.setDate(notedAt.getDate() - daysAgo)
+    
+    await prisma.patientDiagnosis.create({
+      data: {
+        pacienteId: params.pacienteId,
+        diagnosisId: null,
+        code: null,
+        label: freeText,
+        status: DiagnosisStatus.ACTIVE,
+        notedAt,
+        notes: "Diagnóstico clínico sin código CIE-10",
+        createdByUserId: params.createdByUserId,
+        consultaId: params.consultaId ?? null,
+      },
+    })
   }
 
   // Alergia activa (con probabilidad)

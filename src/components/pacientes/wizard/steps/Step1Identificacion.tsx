@@ -283,7 +283,7 @@ export function Step1Identificacion({ form }: Step1IdentificacionProps) {
                   pais={pais}
                   placeholder={
                     pais === "PY"
-                      ? "Escribe tu ciudad y elige una sugerencia (si existe)"
+                      ? "Escribe el nombre de tu ciudad"
                       : "Escribe el nombre de tu ciudad"
                   }
                 />

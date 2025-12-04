@@ -1,0 +1,301 @@
+// src/app/(dashboard)/reportes/diagnosticos-por-tipo/page.tsx
+"use client"
+
+/**
+ * Diagnoses by Type Report Page
+ * Epidemiological analysis of diagnoses grouped by type (catalog).
+ */
+
+import { useState, useCallback, useEffect } from "react"
+import { ReportShell, ReportKpiCards, ReportTable, ReportFiltersForm, ReportExportButtons } from "@/components/reportes"
+import { diagnosticosPorTipoFiltersSchema } from "@/lib/validation/reportes"
+import {
+  REPORT_CONFIGS,
+  type DiagnosticosPorTipoFilters,
+  type DiagnosticosPorTipoResponse,
+  type DiagnosticoPorTipoRow,
+} from "@/types/reportes"
+import { toast } from "sonner"
+
+/** Table columns for diagnoses by type */
+const COLUMNS = [
+  { key: "ranking", label: "#", align: "center" as const },
+  { key: "diagnosisCatalog.code", label: "Código" },
+  { key: "diagnosisCatalog.name", label: "Diagnóstico" },
+  { key: "code", label: "Código (Libre)" },
+  { key: "label", label: "Etiqueta (Libre)" },
+  { key: "totalCasos", label: "Total Casos", align: "center" as const, format: "number" as const },
+  { key: "porcentaje", label: "Porcentaje", align: "center" as const, format: "number" as const },
+  { key: "primerRegistro", label: "Primer Registro", format: "date" as const },
+  { key: "ultimoRegistro", label: "Último Registro", format: "date" as const },
+]
+
+export default function DiagnosticosPorTipoReportPage() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [data, setData] = useState<DiagnosticosPorTipoResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [currentFilters, setCurrentFilters] = useState<DiagnosticosPorTipoFilters | null>(null)
+
+  const [diagnosisCatalogOptions, setDiagnosisCatalogOptions] = useState<Array<{ id: number; label: string }>>([])
+  const [profesionalesOptions, setProfesionalesOptions] = useState<Array<{ id: number; label: string }>>([])
+  const [loadingOptions, setLoadingOptions] = useState(false)
+
+  const config = REPORT_CONFIGS["diagnosticos-por-tipo"]
+
+  // Load filter options
+  useEffect(() => {
+    const loadOptions = async () => {
+      setLoadingOptions(true)
+      try {
+        // Load diagnosis catalog - fetch all pages if needed
+        const catalogItems: Array<{ idDiagnosisCatalog: number; name: string; code: string }> = []
+        let catalogPage = 1
+        let hasMoreCatalog = true
+
+        while (hasMoreCatalog) {
+          const catalogRes = await fetch(
+            `/api/diagnosis-catalog?isActive=true&limit=100&page=${catalogPage}&sortBy=code&sortOrder=asc`
+          )
+          if (catalogRes.ok) {
+            const catalogData = await catalogRes.json()
+            if (catalogData.ok && Array.isArray(catalogData.data)) {
+              catalogItems.push(...catalogData.data)
+              hasMoreCatalog = catalogData.meta.hasNext
+              catalogPage++
+            } else {
+              hasMoreCatalog = false
+            }
+          } else {
+            hasMoreCatalog = false
+          }
+        }
+
+        setDiagnosisCatalogOptions(
+          catalogItems.map((item) => ({
+            id: item.idDiagnosisCatalog,
+            label: `${item.code} - ${item.name}`,
+          }))
+        )
+
+        // Load professionals - fetch all pages if needed
+        const profItems: Array<{ idProfesional: number; persona: { nombres: string; apellidos: string } }> = []
+        let profPage = 1
+        let hasMoreProf = true
+
+        while (hasMoreProf) {
+          const profRes = await fetch(
+            `/api/profesionales?estaActivo=true&limit=100&page=${profPage}&sortBy=nombre&sortOrder=asc`
+          )
+          if (profRes.ok) {
+            const profData = await profRes.json()
+            if (profData.ok && Array.isArray(profData.data)) {
+              profItems.push(...profData.data)
+              hasMoreProf = profData.meta.hasNext
+              profPage++
+            } else {
+              hasMoreProf = false
+            }
+          } else {
+            hasMoreProf = false
+          }
+        }
+
+        setProfesionalesOptions(
+          profItems.map((item) => ({
+            id: item.idProfesional,
+            label: `${item.persona.nombres} ${item.persona.apellidos}`,
+          }))
+        )
+      } catch (err) {
+        console.error("Error loading filter options:", err)
+        toast.error("Error al cargar opciones de filtros", {
+          description: err instanceof Error ? err.message : "Error desconocido",
+        })
+      } finally {
+        setLoadingOptions(false)
+      }
+    }
+
+    loadOptions()
+  }, [])
+
+  const fetchReport = useCallback(async (filters: DiagnosticosPorTipoFilters) => {
+    setIsLoading(true)
+    setError(null)
+    setCurrentFilters(filters)
+
+    try {
+      const response = await fetch("/api/reportes/diagnosticos-por-tipo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filters }),
+      })
+
+      const result = await response.json()
+
+      if (!result.ok) {
+        throw new Error(result.error || "Error al generar el reporte")
+      }
+
+      setData(result.data)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error desconocido"
+      setError(message)
+      toast.error("Error al generar reporte", { description: message })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const renderCell = useCallback((column: { key: string; label: string; format?: string }, row: DiagnosticoPorTipoRow) => {
+    if (column.key === "ranking") {
+      return row.ranking
+    }
+    if (column.key === "diagnosisCatalog.code") {
+      return row.diagnosisCatalog?.code || "-"
+    }
+    if (column.key === "diagnosisCatalog.name") {
+      return row.diagnosisCatalog?.name || "-"
+    }
+    if (column.key === "code") {
+      return row.code || "-"
+    }
+    if (column.key === "label") {
+      return row.label || "-"
+    }
+    if (column.key === "totalCasos") {
+      return row.totalCasos.toLocaleString()
+    }
+    if (column.key === "porcentaje") {
+      return `${row.porcentaje.toFixed(1)}%`
+    }
+    if (column.key === "primerRegistro") {
+      return new Date(row.primerRegistro).toLocaleDateString("es-PY")
+    }
+    if (column.key === "ultimoRegistro") {
+      return new Date(row.ultimoRegistro).toLocaleDateString("es-PY")
+    }
+    return null
+  }, [])
+
+  return (
+    <ReportShell
+      config={config}
+      isLoading={isLoading}
+      error={error}
+      filters={
+        <ReportFiltersForm
+          schema={diagnosticosPorTipoFiltersSchema}
+          onSubmit={fetchReport}
+          isLoading={isLoading}
+          hasDateRange={true}
+        >
+          {(form) => (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Diagnosis Catalog filter */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Catálogo de Diagnósticos
+                </label>
+                <select
+                  multiple
+                  {...form.register("diagnosisCatalogIds", { valueAsNumber: true })}
+                  className="h-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  disabled={loadingOptions}
+                >
+                  {diagnosisCatalogOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Professional filter */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Profesional
+                </label>
+                <select
+                  multiple
+                  {...form.register("profesionalIds", { valueAsNumber: true })}
+                  className="h-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  disabled={loadingOptions}
+                >
+                  {profesionalesOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status filter */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Estado
+                </label>
+                <select
+                  multiple
+                  {...form.register("status")}
+                  className="h-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                >
+                  <option value="ACTIVE">Activo</option>
+                  <option value="UNDER_FOLLOW_UP">En Seguimiento</option>
+                  <option value="RESOLVED">Resuelto</option>
+                  <option value="DISCARDED">Descartado</option>
+                  <option value="RULED_OUT">Descartado (Legacy)</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </ReportFiltersForm>
+      }
+      kpis={data && <ReportKpiCards kpis={data.kpis} isLoading={isLoading} />}
+    >
+      {data && (
+        <div className="mb-4 flex items-center justify-end print:hidden">
+          <ReportExportButtons
+            reportType="diagnosticos-por-tipo"
+            title={config.name}
+            description={config.description}
+            metadata={data.metadata}
+            kpis={data.kpis}
+            tableColumns={COLUMNS.map((col) => ({ label: col.label, key: col.key }))}
+            tableData={data.data as unknown as Array<Record<string, unknown>>}
+            filters={currentFilters as unknown as Record<string, unknown>}
+            filterLabels={{
+              startDate: "Fecha desde",
+              endDate: "Fecha hasta",
+              diagnosisCatalogIds: "Catálogo de diagnósticos",
+              profesionalIds: "Profesional",
+              status: "Estado",
+            }}
+            scope="fullDataset"
+            totalRecords={data.data.length}
+            disabled={isLoading}
+          />
+        </div>
+      )}
+      {data ? (
+        <ReportTable
+          columns={COLUMNS}
+          data={data.data}
+          pagination={undefined}
+          onPageChange={undefined}
+          isLoading={isLoading}
+          emptyMessage="No se encontraron diagnósticos con los filtros seleccionados"
+          getRowKey={(row) => row.diagnosisCatalog?.id || row.code || row.label || `row-${row.ranking}`}
+          renderCell={renderCell}
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-12 dark:border-gray-700 dark:bg-gray-900">
+          <p className="text-gray-500 dark:text-gray-400">
+            Selecciona los filtros y haz clic en &quot;Generar&quot; para ver el reporte.
+          </p>
+        </div>
+      )}
+    </ReportShell>
+  )
+}
+

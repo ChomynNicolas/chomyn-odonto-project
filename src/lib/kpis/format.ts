@@ -21,13 +21,18 @@ export function formatMinutes(minutes: number): string {
   return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
 }
 
+/**
+ * Formatea un valor monetario en guaraníes (PYG)
+ * NOTA: El parámetro 'cents' contiene guaraníes enteros, no centavos.
+ * El nombre del parámetro se mantiene por compatibilidad histórica.
+ */
 export function formatCurrency(cents: number): string {
-  const amount = cents / 100
+  // NOTA: El valor ya está en guaraníes, no dividir por 100
   return new Intl.NumberFormat("es-PY", {
     style: "currency",
     currency: "PYG",
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(cents)
 }
 
 export function formatNumber(value: number, decimals = 0): string {

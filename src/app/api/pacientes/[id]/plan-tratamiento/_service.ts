@@ -14,6 +14,7 @@ import {
 import type { PlanTratamientoDTO } from "@/app/api/agenda/citas/[id]/consulta/_dto"
 import { validateNoActivePlanExists, validateStatusTransition } from "./_validations"
 import { checkAndCompletePlan } from "./_plan-status.service"
+import { getTreatmentPlanCatalogById } from "@/app/api/treatment-plan-catalog/_service"
 
 function displayUser(user: {
   idUsuario: number
@@ -97,16 +98,57 @@ export async function createTreatmentPlan(
   // Validate no active plan exists
   await validateNoActivePlanExists(pacienteId)
 
+  let titulo: string
+  let descripcion: string | null
+  let steps: CreatePlanInput["steps"]
+  let catalogPlanId: number | null = null
+
+  // Load from catalog if catalogId is provided
+  if (body.catalogId) {
+    const catalog = await getTreatmentPlanCatalogById(body.catalogId)
+    
+    if (!catalog.isActive) {
+      throw new BadRequestError("El plan del catálogo seleccionado está inactivo")
+    }
+
+    catalogPlanId = catalog.idTreatmentPlanCatalog
+    titulo = catalog.nombre
+    descripcion = catalog.descripcion
+    steps = catalog.steps.map((step) => ({
+      order: step.order,
+      procedureId: step.procedureId,
+      serviceType: step.serviceType,
+      toothNumber: step.toothNumber,
+      toothSurface: step.toothSurface,
+      estimatedDurationMin: step.estimatedDurationMin,
+      estimatedCostCents: step.estimatedCostCents,
+      priority: step.priority,
+      notes: step.notes,
+      requiresMultipleSessions: step.requiresMultipleSessions,
+      totalSessions: step.totalSessions,
+      currentSession: step.currentSession ?? (step.requiresMultipleSessions ? 1 : null),
+    }))
+  } else {
+    // Manual creation
+    if (!body.titulo || !body.steps || body.steps.length === 0) {
+      throw new BadRequestError("Debe proporcionar titulo y steps para creación manual")
+    }
+    titulo = body.titulo
+    descripcion = body.descripcion ?? null
+    steps = body.steps
+  }
+
   // Validate steps
-  await validatePlanSteps(body.steps)
+  await validatePlanSteps(steps!)
 
   // Create plan
   const plan = await repoCreatePlan({
     pacienteId,
-    titulo: body.titulo,
-    descripcion: body.descripcion ?? null,
+    titulo,
+    descripcion,
     createdByUserId: userId,
-    steps: body.steps,
+    steps: steps!,
+    catalogPlanId,
   })
 
   if (!plan) {

@@ -24,6 +24,10 @@ import { pacientesActivosService } from "./pacientes-activos.service"
 import { procedimientosService } from "./procedimientos.service"
 import { estadosCitasService } from "./estados-citas.service"
 import { topProcedimientosService } from "./top-procedimientos.service"
+import { diagnosticosActivosService } from "./diagnosticos-activos.service"
+import { diagnosticosResueltosService } from "./diagnosticos-resueltos.service"
+import { diagnosticosPorTipoService } from "./diagnosticos-por-tipo.service"
+import { diagnosticosPendientesSeguimientoService } from "./diagnosticos-pendientes-seguimiento.service"
 
 // ============================================================================
 // Service Registry
@@ -39,6 +43,10 @@ const serviceRegistry = {
   "procedimientos": procedimientosService,
   "estados-citas": estadosCitasService,
   "top-procedimientos": topProcedimientosService,
+  "diagnosticos-activos": diagnosticosActivosService,
+  "diagnosticos-resueltos": diagnosticosResueltosService,
+  "diagnosticos-por-tipo": diagnosticosPorTipoService,
+  "diagnosticos-pendientes-seguimiento": diagnosticosPendientesSeguimientoService,
 } as const
 
 // ============================================================================
@@ -255,6 +263,46 @@ export async function executeTopProcedimientosReport(
   user: ReportUserContext
 ) {
   return executeReport("top-procedimientos", filters, user)
+}
+
+/**
+ * Type-safe wrapper for executing Diagnosticos Activos report.
+ */
+export async function executeDiagnosticosActivosReport(
+  filters: ReportFiltersMap["diagnosticos-activos"],
+  user: ReportUserContext
+) {
+  return executeReport("diagnosticos-activos", filters, user)
+}
+
+/**
+ * Type-safe wrapper for executing Diagnosticos Resueltos report.
+ */
+export async function executeDiagnosticosResueltosReport(
+  filters: ReportFiltersMap["diagnosticos-resueltos"],
+  user: ReportUserContext
+) {
+  return executeReport("diagnosticos-resueltos", filters, user)
+}
+
+/**
+ * Type-safe wrapper for executing Diagnosticos por Tipo report.
+ */
+export async function executeDiagnosticosPorTipoReport(
+  filters: ReportFiltersMap["diagnosticos-por-tipo"],
+  user: ReportUserContext
+) {
+  return executeReport("diagnosticos-por-tipo", filters, user)
+}
+
+/**
+ * Type-safe wrapper for executing Diagnosticos Pendientes de Seguimiento report.
+ */
+export async function executeDiagnosticosPendientesSeguimientoReport(
+  filters: ReportFiltersMap["diagnosticos-pendientes-seguimiento"],
+  user: ReportUserContext
+) {
+  return executeReport("diagnosticos-pendientes-seguimiento", filters, user)
 }
 
 // Re-export types for convenience

@@ -1,5 +1,10 @@
 "use client"
 
+/**
+ * NOTA: El campo defaultPriceCents en ProcedimientoCatalogo almacena guaraníes (PYG),
+ * no centavos. El nombre del campo se mantiene por compatibilidad, pero representa guaraníes enteros.
+ */
+
 import { useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -47,13 +52,16 @@ interface ProcedimientosTableProps {
   initialData: ProcedimientoListResponse
 }
 
-// Helper function to format price from cents to currency
-function formatPrice(cents: number | null): string {
-  if (cents === null) return "-"
-  return new Intl.NumberFormat("es-AR", {
+// Helper function to format price from guaraníes to currency
+// Note: defaultPriceCents field now stores guaraníes, not cents
+function formatPrice(guaranies: number | null): string {
+  if (guaranies === null) return "-"
+  return new Intl.NumberFormat("es-PY", {
     style: "currency",
-    currency: "ARS",
-  }).format(cents / 100)
+    currency: "PYG",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(guaranies)
 }
 
 // Helper function to format duration from minutes to readable format
@@ -198,7 +206,6 @@ export default function ProcedimientosTable({ initialData }: ProcedimientosTable
               <TableHead>Precio</TableHead>
               <TableHead>Duración</TableHead>
               <TableHead>Aplica Diente</TableHead>
-              <TableHead>Aplica Superficie</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -224,19 +231,6 @@ export default function ProcedimientosTable({ initialData }: ProcedimientosTable
                     <TableCell>{formatDuration(procedimiento.defaultDurationMin)}</TableCell>
                     <TableCell>
                       {procedimiento.aplicaDiente ? (
-                        <Badge variant="default" className="gap-1">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Sí
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="gap-1">
-                          <XCircle className="h-3 w-3" />
-                          No
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {procedimiento.aplicaSuperficie ? (
                         <Badge variant="default" className="gap-1">
                           <CheckCircle2 className="h-3 w-3" />
                           Sí

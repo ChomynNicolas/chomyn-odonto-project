@@ -1,4 +1,5 @@
 import { PrismaClient, RolNombre, AdjuntoTipo, RelacionPaciente, EstadoCita, ConsultaEstado, DienteSuperficie, AnamnesisTipo } from "@prisma/client"
+import { faker } from "@faker-js/faker"
 import { ALLOW_PROD_SEED, RESEED, COUNTS, PROB } from "./config"
 import { log } from "./logger"
 import { hashPassword, calculateAge } from "./utils"
@@ -19,6 +20,7 @@ import {
   ensureAntecedentCatalog,
   ensureAnamnesisConfig,
   ensureProfesionalDisponibilidad,
+  ensureTreatmentPlanCatalog,
 } from "./ensure"
 import {
   ESPECIALIDADES,
@@ -29,6 +31,7 @@ import {
   MEDICATION_CATALOG,
   ANTECEDENT_CATALOG,
   ANAMNESIS_CONFIG_SAMPLES,
+  TREATMENT_PLAN_CATALOG,
 } from "./data"
 import { fakePersona, fakeDocumento, fakeContactosPersona, fakeProfesionalDisponibilidad } from "./factories"
 import { generarAgendaParaProfesional, generarReprogramaciones, generarBloqueosAgenda } from "./agenda"
@@ -58,7 +61,9 @@ import {
 import {
   seedEncounterDiagnoses,
   seedDiagnosisStatusHistory,
+  resolveDiagnosesWithVariedTimes,
 } from "./diagnosis"
+import { poblarTratamientosYConsultas } from "./procedimientos"
 
 const prisma = new PrismaClient()
 
@@ -96,6 +101,8 @@ async function safeTruncate() {
     '"Consulta"',
     '"TreatmentStep"',
     '"TreatmentPlan"',
+    '"TreatmentPlanCatalogStep"',
+    '"TreatmentPlanCatalog"',
     '"CitaEstadoHistorial"',
     '"Cita"',
     '"BloqueoAgenda"',
@@ -257,6 +264,7 @@ async function main() {
   await ensureAllergyCatalog(prisma, ALLERGY_CATALOG)
   await ensureMedicationCatalog(prisma, MEDICATION_CATALOG)
   await ensureAntecedentCatalog(prisma, ANTECEDENT_CATALOG)
+  await ensureTreatmentPlanCatalog(prisma, TREATMENT_PLAN_CATALOG)
   log.ok("✅ Catálogos clínicos creados")
 
   // 6.1) Anamnesis Catalog and Config
@@ -307,6 +315,7 @@ async function main() {
   log.ok(`✅ ${totalCitasCreadas} citas creadas (${totalCitasFallidas} rechazadas por solapamiento)`)
 
   // 8) Datos clínicos expandidos
+  // Aumentado a 25% de pacientes para datos más realistas
   const cantidadConClinica = Math.floor(pacientesData.length * COUNTS.pacientesConClinica)
   const pacientesClinica = pacientesData.slice(0, cantidadConClinica)
 
@@ -317,11 +326,17 @@ async function main() {
 
   for (const pac of pacientesClinica) {
     try {
-      // Plan con 3 steps
+      // Plan con 2-3 steps para datos más realistas
+      const steps = [{ code: "CONS-INI" }, { code: "LIMP" }]
+      if (Math.random() < 0.4) {
+        // 40% de planes tienen un tercer step
+        const stepExtra = faker.helpers.arrayElement(["OBT", "ENDO", "EXT", "CURET", "RX-PANO"])
+        steps.push({ code: stepExtra })
+      }
       await createPlanConSteps(prisma, {
         pacienteId: pac.idPaciente,
         createdByUserId: recep.idUsuario,
-        steps: [{ code: "CONS-INI" }, { code: "LIMP" }, { code: "OBT", toothNumber: 16, toothSurface: DienteSuperficie.O }],
+        steps,
       })
 
       // Buscar cita completada del paciente
@@ -335,7 +350,18 @@ async function main() {
 
       if (!cita) continue
 
-      // Crear consulta
+      // Verificar si ya existe consulta para esta cita
+      const consultaExistente = await prisma.consulta.findUnique({
+        where: { citaId: cita.idCita },
+        select: { citaId: true },
+      })
+
+      if (consultaExistente) {
+        // Si ya existe consulta, saltar este paciente
+        continue
+      }
+
+      // Crear consulta solo si no existe
       const consulta = await ensureConsultaParaCita(prisma, {
         citaId: cita.idCita,
         performedByProfessionalId: cita.profesionalId,
@@ -347,25 +373,34 @@ async function main() {
         clinicalNotes: "Consulta integral sin complicaciones",
       })
 
-      // Procedimientos
-      await addLineaProcedimiento(prisma, {
-        consultaCitaId: consulta.citaId,
-        code: "CONS-INI",
-        quantity: 1,
-        resultNotes: "Evaluación completa realizada",
-      })
-
-      const p2 = await addLineaProcedimiento(prisma, {
-        consultaCitaId: consulta.citaId,
-        code: "OBT",
-        toothNumber: 16,
-        toothSurface: DienteSuperficie.O,
-        quantity: 1,
-        resultNotes: "Resina compuesta aplicada exitosamente",
-      })
+      // Procedimientos - usar precios del catálogo automáticamente
+      // 1-2 procedimientos por consulta para datos más realistas
+      const procedimientosCodes = ["CONS-INI"]
+      if (Math.random() < 0.5) {
+        // 50% de consultas tienen un segundo procedimiento
+        const procExtra = faker.helpers.arrayElement(["LIMP", "OBT", "RX-PERI", "RX-PANO", "CTRL"])
+        procedimientosCodes.push(procExtra)
+      }
+      
+      const procedimientosIds = []
+      for (const code of procedimientosCodes) {
+        const proc = await addLineaProcedimiento(prisma, {
+          consultaCitaId: consulta.citaId,
+          code,
+          quantity: 1,
+          // unitPriceCents no se pasa, se toma del catálogo automáticamente
+          resultNotes: faker.helpers.arrayElement([
+            "Procedimiento completado exitosamente.",
+            "Sin complicaciones durante el procedimiento.",
+            "Paciente toleró bien el tratamiento.",
+            "Se indica control en 7 días.",
+          ]),
+        })
+        procedimientosIds.push(proc.idConsultaProcedimiento)
+      }
 
       // Adjuntos comprehensivos
-      const procedimientoIds = [p2.idConsultaProcedimiento]
+      const procedimientoIds = procedimientosIds
       try {
         const adjuntos = await addComprehensiveAdjuntos(prisma, {
           consultaCitaId: consulta.citaId,
@@ -404,35 +439,39 @@ async function main() {
         log.warn(`⚠️  Error agregando odontograma/periodontograma: ${error.message}`)
       }
 
-      // Encounter Diagnoses
-      try {
-        await seedEncounterDiagnoses(prisma, {
-          consultaId: consulta.citaId,
-          pacienteId: pac.idPaciente,
-        })
-      } catch (error: any) {
-        // Ignore - may not have diagnoses yet
+      // Encounter Diagnoses - aumentado para más datos
+      if (Math.random() < 0.35) { // 35% de las consultas tendrán encounter diagnoses
+        try {
+          await seedEncounterDiagnoses(prisma, {
+            consultaId: consulta.citaId,
+            pacienteId: pac.idPaciente,
+          })
+        } catch (error: any) {
+          // Ignore - may not have diagnoses yet
+        }
       }
 
-      // Diagnosis Status History (para algunos diagnósticos)
-      try {
-        const diagnoses = await prisma.patientDiagnosis.findMany({
-          where: { pacienteId: pac.idPaciente },
-          take: 2,
-        })
-        for (const diagnosis of diagnoses) {
-          try {
-            await seedDiagnosisStatusHistory(prisma, {
-              diagnosisId: diagnosis.idPatientDiagnosis,
-              consultaId: consulta.citaId,
-              changedByUserId: recep.idUsuario,
-            })
-          } catch (error: any) {
-            // Ignore errors
+      // Diagnosis Status History - aumentado para más datos
+      if (Math.random() < 0.25) { // 25% de las consultas tendrán historial de diagnósticos
+        try {
+          const diagnoses = await prisma.patientDiagnosis.findMany({
+            where: { pacienteId: pac.idPaciente },
+            take: 1, // Solo 1 diagnóstico para historial
+          })
+          for (const diagnosis of diagnoses) {
+            try {
+              await seedDiagnosisStatusHistory(prisma, {
+                diagnosisId: diagnosis.idPatientDiagnosis,
+                consultaId: consulta.citaId,
+                changedByUserId: recep.idUsuario,
+              })
+            } catch (error: any) {
+              // Ignore errors
+            }
           }
+        } catch (error: any) {
+          // Ignore
         }
-      } catch (error: any) {
-        // Ignore
       }
     } catch (error: any) {
       log.warn(`⚠️  Error procesando paciente ${pac.idPaciente}: ${error.message}`)
@@ -441,6 +480,39 @@ async function main() {
 
   log.ok(`✅ Datos clínicos generados para ${pacientesClinica.length} pacientes`)
   log.ok(`   📎 Adjuntos creados: ${totalAdjuntosCreados} (${totalAdjuntosFallidos} fallidos)`)
+
+  // 8.1) Generar procedimientos adicionales para todas las citas completadas
+  log.info("💉 Generando procedimientos adicionales para citas completadas...")
+  try {
+    const resultadoProcedimientos = await poblarTratamientosYConsultas(prisma, {
+      pacientesIds: pacientesData.map(p => p.idPaciente),
+      createdByUserId: recep.idUsuario,
+    })
+    log.ok(`✅ Procedimientos adicionales generados:`)
+    log.ok(`   📋 Consultas nuevas: ${resultadoProcedimientos.consultasCreadas}`)
+    log.ok(`   💉 Procedimientos creados: ${resultadoProcedimientos.procedimientosCreados}`)
+    log.ok(`   📊 Citas procesadas: ${resultadoProcedimientos.citasProcesadas}`)
+    if (resultadoProcedimientos.errores > 0) {
+      log.warn(`   ⚠️  Errores: ${resultadoProcedimientos.errores}`)
+    }
+  } catch (error: any) {
+    log.warn(`⚠️  Error generando procedimientos adicionales: ${error.message}`)
+    if (error.stack) {
+      log.warn(`   Stack: ${error.stack.split('\n')[0]}`)
+    }
+  }
+
+  // 8.2) Resolver diagnósticos adicionales con tiempos variados para el reporte
+  log.info("🔬 Resolviendo diagnósticos adicionales con tiempos variados...")
+  try {
+    const resolvedCount = await resolveDiagnosesWithVariedTimes(prisma, {
+      changedByUserId: recep.idUsuario,
+      maxDiagnoses: 25, // Aumentado para más datos
+    })
+    log.ok(`✅ Diagnósticos resueltos adicionales procesados`)
+  } catch (error: any) {
+    log.warn(`⚠️  Error resolviendo diagnósticos adicionales: ${error.message}`)
+  }
 
   // 9) Anamnesis
   log.info("📋 Generando anamnesis para pacientes...")
@@ -553,8 +625,8 @@ async function main() {
   let auditLogsCreados = 0
   let auditLogsFallidos = 0
   
-  // Get some patients and create audit logs for various actions
-  const pacientesParaAudit = pacientesData.slice(0, Math.min(30, pacientesData.length))
+  // Get more patients and create audit logs for various actions
+  const pacientesParaAudit = pacientesData.slice(0, Math.min(60, pacientesData.length))
   
   for (const pac of pacientesParaAudit) {
     try {

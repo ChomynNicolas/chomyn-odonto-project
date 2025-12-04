@@ -87,23 +87,39 @@ function buildWhereClause(
 
 /**
  * Calculate KPIs for the procedures report.
+ * NOTA: Calcula ingresos usando jerarquía: totalCents > quantity * unitPriceCents > quantity * defaultPriceCents
  */
 async function calculateKpis(
   where: Prisma.ConsultaProcedimientoWhereInput
 ): Promise<ReportKpi[]> {
-  // Aggregate statistics
-  const aggregates = await prisma.consultaProcedimiento.aggregate({
+  // Obtener procedimientos para calcular ingresos correctamente
+  const procedimientos = await prisma.consultaProcedimiento.findMany({
     where,
-    _count: { idConsultaProcedimiento: true },
-    _sum: { 
-      quantity: true,
-      totalCents: true,
+    include: {
+      catalogo: true,
     },
   })
 
-  const totalProcedimientos = aggregates._count.idConsultaProcedimiento
-  const totalCantidad = aggregates._sum.quantity ?? 0
-  const totalIngresos = aggregates._sum.totalCents ?? 0
+  const totalProcedimientos = procedimientos.length
+  const totalCantidad = procedimientos.reduce((sum, p) => sum + p.quantity, 0)
+  
+  // Calcular ingresos usando jerarquía: totalCents > quantity * unitPriceCents > quantity * defaultPriceCents
+  let totalIngresos = 0
+  for (const proc of procedimientos) {
+    let precio = proc.totalCents
+
+    if (precio === null && proc.unitPriceCents !== null) {
+      precio = proc.quantity * proc.unitPriceCents
+    }
+
+    if (precio === null && proc.catalogo && proc.catalogo.defaultPriceCents !== null) {
+      precio = proc.quantity * proc.catalogo.defaultPriceCents
+    }
+
+    if (precio !== null) {
+      totalIngresos += precio
+    }
+  }
 
   // Unique procedures
   const uniqueProcedures = await prisma.consultaProcedimiento.groupBy({

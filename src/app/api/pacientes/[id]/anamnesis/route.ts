@@ -401,8 +401,9 @@ export async function POST(
     const actorRole = (user?.rol?.nombreRol as "ADMIN" | "ODONT" | "RECEP") || "RECEP"
 
     // Upsert anamnesis with normalized relationships
-    const anamnesis = await prisma.$transaction(async (tx) => {
-      const result = await tx.patientAnamnesis.upsert({
+    // Use longer timeout (30s) since this transaction does a lot of work
+    const result = await prisma.$transaction(async (tx) => {
+      const upsertResult = await tx.patientAnamnesis.upsert({
         where: { pacienteId },
         create: {
           pacienteId,
@@ -457,14 +458,14 @@ export async function POST(
       // Note: Prisma client uses camelCase for model names
       if (existing) {
         await tx.anamnesisAntecedent.deleteMany({
-          where: { anamnesisId: result.idPatientAnamnesis },
+          where: { anamnesisId: upsertResult.idPatientAnamnesis },
         })
       }
 
       if (data.antecedents && data.antecedents.length > 0) {
         await tx.anamnesisAntecedent.createMany({
           data: data.antecedents.map((ant) => ({
-            anamnesisId: result.idPatientAnamnesis,
+            anamnesisId: upsertResult.idPatientAnamnesis,
             antecedentId: ant.antecedentId || undefined,
             customName: ant.customName || undefined,
             customCategory: ant.customCategory || undefined,
@@ -479,7 +480,7 @@ export async function POST(
       // Handle medications: enhanced with catalog, custom entries, and audit
       const existingMedications = existing
         ? await tx.anamnesisMedication.findMany({
-            where: { anamnesisId: result.idPatientAnamnesis },
+            where: { anamnesisId: upsertResult.idPatientAnamnesis },
             include: { medication: true },
           })
         : []
@@ -587,7 +588,7 @@ export async function POST(
             // Create new link
             const newLink = await tx.anamnesisMedication.create({
               data: {
-                anamnesisId: result.idPatientAnamnesis,
+                anamnesisId: upsertResult.idPatientAnamnesis,
                 medicationId,
                 isActive: medInput.isActive ?? true,
                 notes: medInput.notes || null,
@@ -656,7 +657,7 @@ export async function POST(
       // Handle allergies: enhanced with catalog, custom entries, and audit
       const existingAllergies = existing
         ? await tx.anamnesisAllergy.findMany({
-            where: { anamnesisId: result.idPatientAnamnesis },
+            where: { anamnesisId: upsertResult.idPatientAnamnesis },
             include: { allergy: true },
           })
         : []
@@ -757,7 +758,7 @@ export async function POST(
             // Create new link
             const newLink = await tx.anamnesisAllergy.create({
               data: {
-                anamnesisId: result.idPatientAnamnesis,
+                anamnesisId: upsertResult.idPatientAnamnesis,
                 allergyId,
                 isActive: allInput.isActive ?? true,
                 notes: allInput.notes || null,
@@ -821,43 +822,49 @@ export async function POST(
         )
       }
 
-      // Fetch complete anamnesis with relationships for response
-      return await tx.patientAnamnesis.findUnique({
-        where: { idPatientAnamnesis: result.idPatientAnamnesis },
-        include: {
-          creadoPor: { select: { idUsuario: true, nombreApellido: true } },
-          actualizadoPor: { select: { idUsuario: true, nombreApellido: true } },
-          antecedents: {
-            include: {
-              antecedentCatalog: true,
-            },
-          },
-          medications: {
-            include: {
-              medication: {
-                include: {
-                  medicationCatalog: true,
-                },
-              },
-              addedBy: { select: { idUsuario: true, nombreApellido: true } },
-              removedBy: { select: { idUsuario: true, nombreApellido: true } },
-            },
-            orderBy: { idAnamnesisMedication: "asc" },
-          },
-          allergies: {
-            include: {
-              allergy: {
-                include: {
-                  allergyCatalog: true,
-                },
-              },
-              addedBy: { select: { idUsuario: true, nombreApellido: true } },
-              removedBy: { select: { idUsuario: true, nombreApellido: true } },
-            },
-            orderBy: { idAnamnesisAllergy: "asc" },
+      // Return the anamnesis ID - we'll fetch the complete data outside the transaction
+      return upsertResult.idPatientAnamnesis
+    }, {
+      maxWait: 10_000, // Wait up to 10s for a transaction slot
+      timeout: 30_000, // Transaction can take up to 30s
+    })
+
+    // Fetch complete anamnesis with relationships for response (outside transaction)
+    const anamnesis = await prisma.patientAnamnesis.findUnique({
+      where: { idPatientAnamnesis: result },
+      include: {
+        creadoPor: { select: { idUsuario: true, nombreApellido: true } },
+        actualizadoPor: { select: { idUsuario: true, nombreApellido: true } },
+        antecedents: {
+          include: {
+            antecedentCatalog: true,
           },
         },
-      })
+        medications: {
+          include: {
+            medication: {
+              include: {
+                medicationCatalog: true,
+              },
+            },
+            addedBy: { select: { idUsuario: true, nombreApellido: true } },
+            removedBy: { select: { idUsuario: true, nombreApellido: true } },
+          },
+          orderBy: { idAnamnesisMedication: "asc" },
+        },
+        allergies: {
+          include: {
+            allergy: {
+              include: {
+                allergyCatalog: true,
+              },
+            },
+            addedBy: { select: { idUsuario: true, nombreApellido: true } },
+            removedBy: { select: { idUsuario: true, nombreApellido: true } },
+          },
+          orderBy: { idAnamnesisAllergy: "asc" },
+        },
+      },
     })
 
     if (!anamnesis) {

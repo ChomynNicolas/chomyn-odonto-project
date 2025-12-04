@@ -21,15 +21,13 @@ interface PatientQuickActionsProps {
   permissions?: RBACPermissions | null;
 }
 
-export function PatientQuickActions({ patientId, currentRole }: PatientQuickActionsProps) {
+export function PatientQuickActions({ patientId, permissions }: PatientQuickActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Only show for clinical roles
-  if (currentRole === 'RECEP') {
+  // Only show if user can view attachments
+  if (!permissions?.canViewAttachments) {
     return null;
   }
-
-
 
   return (
     <div className="fixed bottom-6 right-6 z-50">

@@ -20,11 +20,11 @@ export const DAYS_WINDOW_FWD = windowsFuture[SIZE]
 export const COUNTS = {
   profesionales: SIZE === "lg" ? 8 : SIZE === "md" ? 3 : 1,
   pacientes: SIZE === "lg" ? 800 : SIZE === "md" ? 120 : 25,
-  consultorios: SIZE === "lg" ? 6 : SIZE === "md" ? 3 : 2,
-  citasPasadas: SIZE === "lg" ? 2000 : SIZE === "md" ? 300 : 40,
-  citasFuturas: SIZE === "lg" ? 1000 : SIZE === "md" ? 150 : 20,
-  bloqueos: SIZE === "lg" ? 20 : SIZE === "md" ? 6 : 2,
-  pacientesConClinica: SIZE === "lg" ? 0.3 : SIZE === "md" ? 0.2 : 0.3,
+  consultorios: SIZE === "lg" ? 6 : SIZE === "md" ? 1 : 1, // 1 consultorio para md (clínica pequeña)
+  citasPasadas: SIZE === "lg" ? 2000 : SIZE === "md" ? 300 : 40, // Aumentado para más datos
+  citasFuturas: SIZE === "lg" ? 1000 : SIZE === "md" ? 150 : 20, // Aumentado para más datos
+  bloqueos: SIZE === "lg" ? 20 : SIZE === "md" ? 8 : 2,
+  pacientesConClinica: SIZE === "lg" ? 0.15 : SIZE === "md" ? 0.25 : 0.3, // Aumentado para más datos clínicos
 }
 
 export const PROB = {

@@ -47,6 +47,7 @@ export async function repoCreatePlan(data: {
   titulo: string
   descripcion?: string | null
   createdByUserId: number
+  catalogPlanId?: number | null
   steps: Array<{
     order: number
     procedureId?: number | null
@@ -72,6 +73,7 @@ export async function repoCreatePlan(data: {
         descripcion: data.descripcion ?? null,
         status: "ACTIVE",
         createdByUserId: data.createdByUserId,
+        catalogPlanId: data.catalogPlanId ?? null,
       },
     })
 

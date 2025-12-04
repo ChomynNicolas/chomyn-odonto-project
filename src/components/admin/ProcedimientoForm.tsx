@@ -321,7 +321,7 @@ export default function ProcedimientoForm({
                   name="defaultPriceCents"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Precio por defecto (centavos)</FormLabel>
+                      <FormLabel>Precio por defecto (guaraníes)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -335,7 +335,7 @@ export default function ProcedimientoForm({
                         />
                       </FormControl>
                       <FormDescription>
-                        Precio por defecto en centavos (ej: 50000 = $500.00)
+                        Precio por defecto en guaraníes (ej: 350000 = ₲350.000)
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -385,33 +385,7 @@ export default function ProcedimientoForm({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="aplicaSuperficie"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Aplica a superficie</FormLabel>
-                      <FormDescription>
-                        Indica si este procedimiento se aplica a una superficie específica del diente.
-                        Requiere que &quot;Aplica a diente&quot; esté activado.
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={(checked) => {
-                          field.onChange(checked)
-                          if (checked && !form.getValues("aplicaDiente")) {
-                            form.setValue("aplicaDiente", true)
-                          }
-                        }}
-                        disabled={!form.getValues("aplicaDiente")}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              
 
               <FormField
                 control={form.control}

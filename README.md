@@ -8,10 +8,84 @@ Sistema web clínico (Next.js App Router + TypeScript + Tailwind, Prisma + Postg
 - PostgreSQL
 
 ## Configuración
-1. Copiar `.env.example` a `.env.local` y completar variables.
-2. `pnpm install`
-3. `pnpm prisma generate`
-4. `pnpm dev`
+
+### Configuración de Base de Datos por Ambiente
+
+El proyecto está configurado para usar diferentes bases de datos según el ambiente:
+
+- **Development**: Base de datos Docker local (rápida para desarrollo)
+- **Production**: Base de datos Neon (en la nube)
+- **Test**: Base de datos Docker local (para pruebas)
+
+### Pasos de Configuración
+
+1. **Crear archivos de entorno**:
+   ```bash
+   # Copiar el template
+   cp .env.example .env.development
+   cp .env.example .env.production
+   cp .env.example .env.test
+   ```
+
+2. **Configurar variables de entorno**:
+   - `.env.development`: Configurar para Docker local
+   - `.env.production`: Configurar con tu conexión Neon
+   - `.env.test`: Configurar para pruebas (puede usar Docker)
+
+3. **Instalar dependencias**:
+   ```bash
+   npm install
+   # o
+   pnpm install
+   ```
+
+4. **Configurar base de datos de desarrollo**:
+   ```bash
+   # Iniciar Docker
+   npm run docker:up
+   
+   # Aplicar migraciones
+   npm run db:migrate:dev
+   
+   # (Opcional) Poblar con datos de prueba
+   npm run db:seed:dev
+   ```
+
+5. **Iniciar desarrollo**:
+   ```bash
+   npm run dev
+   ```
+
+### Scripts Disponibles
+
+#### Desarrollo
+- `npm run dev` - Inicia servidor de desarrollo (usa Docker DB)
+- `npm run db:migrate:dev` - Aplica migraciones a DB de desarrollo
+- `npm run db:seed:dev` - Pobla DB de desarrollo con datos
+- `npm run db:studio:dev` - Abre Prisma Studio para DB de desarrollo
+
+#### Producción
+- `npm run build` - Build para producción (usa Neon DB)
+- `npm run start` - Inicia servidor de producción
+- `npm run db:migrate:prod` - Aplica migraciones a DB de producción
+- `npm run db:seed:prod` - Pobla DB de producción (usar con cuidado)
+
+#### Testing
+- `npm run test` - Ejecuta tests (usa Docker DB de test)
+- `npm run db:migrate:test` - Aplica migraciones a DB de test
+
+#### Docker
+- `npm run docker:up` - Inicia contenedores Docker
+- `npm run docker:down` - Detiene contenedores Docker
+- `npm run docker:logs` - Muestra logs de PostgreSQL
+- `npm run docker:reset` - Reinicia contenedores y volúmenes
+
+### Variables de Entorno Importantes
+
+- `DATABASE_URL`: URL de conexión a PostgreSQL
+- `NEXTAUTH_URL`: URL base de la aplicación
+- `AUTH_SECRET`: Secreto para NextAuth
+- `CLOUDINARY_*`: Credenciales de Cloudinary
 
 ## Scripts
 - `dev`: desarrollo

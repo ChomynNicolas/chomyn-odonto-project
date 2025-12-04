@@ -554,7 +554,7 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate, user
                     {canViewPrices && (
                       <div className="space-y-2">
                         <Label htmlFor="unitPriceCents">
-                          Precio Unitario (centavos) <span className="text-muted-foreground text-xs">(opcional)</span>
+                          Precio Unitario (guaraníes) <span className="text-muted-foreground text-xs">(opcional)</span>
                         </Label>
                         <Input
                           id="unitPriceCents"
@@ -562,13 +562,18 @@ export function ProcedimientosModule({ citaId, consulta, canEdit, onUpdate, user
                           min="0"
                           value={unitPriceCents}
                           onChange={(e) => setUnitPriceCents(e.target.value)}
-                          placeholder="Precio en centavos"
+                          placeholder="Precio en guaraníes"
                           disabled={!!treatmentStepId}
                           className={selectedCatalogItem?.defaultPriceCents ? "bg-muted" : ""}
                         />
                         {selectedCatalogItem?.defaultPriceCents && (
                           <p className="text-xs text-muted-foreground">
-                            Precio por defecto del catálogo: {selectedCatalogItem.defaultPriceCents.toLocaleString()} centavos
+                            Precio por defecto del catálogo: {new Intl.NumberFormat("es-PY", {
+                              style: "currency",
+                              currency: "PYG",
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            }).format(selectedCatalogItem.defaultPriceCents)}
                           </p>
                         )}
                       </div>

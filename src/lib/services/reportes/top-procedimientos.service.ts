@@ -68,23 +68,39 @@ function buildWhereClause(
 
 /**
  * Calculate KPIs for the top procedures report.
+ * NOTA: Calcula ingresos usando jerarquía: totalCents > quantity * unitPriceCents > quantity * defaultPriceCents
  */
 async function calculateKpis(
   where: Prisma.ConsultaProcedimientoWhereInput
 ): Promise<ReportKpi[]> {
-  // Aggregate statistics
-  const aggregates = await prisma.consultaProcedimiento.aggregate({
+  // Obtener procedimientos para calcular ingresos correctamente
+  const procedimientos = await prisma.consultaProcedimiento.findMany({
     where,
-    _count: { idConsultaProcedimiento: true },
-    _sum: {
-      quantity: true,
-      totalCents: true,
+    include: {
+      catalogo: true,
     },
   })
 
-  const totalRegistros = aggregates._count.idConsultaProcedimiento
-  const totalCantidad = aggregates._sum.quantity ?? 0
-  const totalIngresos = aggregates._sum.totalCents ?? 0
+  const totalRegistros = procedimientos.length
+  const totalCantidad = procedimientos.reduce((sum, p) => sum + p.quantity, 0)
+  
+  // Calcular ingresos usando jerarquía: totalCents > quantity * unitPriceCents > quantity * defaultPriceCents
+  let totalIngresos = 0
+  for (const proc of procedimientos) {
+    let precio = proc.totalCents
+
+    if (precio === null && proc.unitPriceCents !== null) {
+      precio = proc.quantity * proc.unitPriceCents
+    }
+
+    if (precio === null && proc.catalogo && proc.catalogo.defaultPriceCents !== null) {
+      precio = proc.quantity * proc.catalogo.defaultPriceCents
+    }
+
+    if (precio !== null) {
+      totalIngresos += precio
+    }
+  }
 
   // Unique procedures
   const uniqueProcedures = await prisma.consultaProcedimiento.groupBy({
@@ -138,6 +154,7 @@ async function calculateKpis(
 
 /**
  * Fetch top procedures ranking.
+ * NOTA: Calcula ingresos usando jerarquía: totalCents > quantity * unitPriceCents > quantity * defaultPriceCents
  */
 async function fetchTopProcedures(
   where: Prisma.ConsultaProcedimientoWhereInput,
@@ -146,20 +163,17 @@ async function fetchTopProcedures(
   const limite = filters.limite ?? 10
   const ordenarPor = filters.ordenarPor ?? "cantidad"
 
-  // Group by procedure
-  const grouped = await prisma.consultaProcedimiento.groupBy({
-    by: ["procedureId", "serviceType"],
+  // Obtener procedimientos individuales para calcular ingresos correctamente
+  const procedimientos = await prisma.consultaProcedimiento.findMany({
     where,
-    _count: { idConsultaProcedimiento: true },
-    _sum: {
-      quantity: true,
-      totalCents: true,
+    include: {
+      catalogo: true,
     },
   })
 
   // Get procedure names
-  const procedureIds = grouped
-    .map((g) => g.procedureId)
+  const procedureIds = procedimientos
+    .map((p) => p.procedureId)
     .filter((id): id is number => id !== null)
 
   const procedures = await prisma.procedimientoCatalogo.findMany({
@@ -168,6 +182,7 @@ async function fetchTopProcedures(
       idProcedimiento: true,
       code: true,
       nombre: true,
+      defaultPriceCents: true,
     },
   })
 
@@ -175,26 +190,69 @@ async function fetchTopProcedures(
     procedures.map((p) => [p.idProcedimiento, p])
   )
 
-  // Calculate totals for percentages
-  const totalCantidad = grouped.reduce((sum, g) => sum + (g._sum.quantity ?? 0), 0)
-  const totalIngresos = grouped.reduce((sum, g) => sum + (g._sum.totalCents ?? 0), 0)
+  // Agrupar y calcular ingresos correctamente
+  const ingresosPorProcedimiento = new Map<
+    number,
+    { cantidad: number; ingresos: number; nombre: string; code: string }
+  >()
+
+  for (const proc of procedimientos) {
+    if (!proc.procedureId) continue
+
+    // Calcular precio usando jerarquía: totalCents > quantity * unitPriceCents > quantity * defaultPriceCents
+    let precio = proc.totalCents
+
+    if (precio === null && proc.unitPriceCents !== null) {
+      precio = proc.quantity * proc.unitPriceCents
+    }
+
+    if (precio === null && proc.catalogo && proc.catalogo.defaultPriceCents !== null) {
+      precio = proc.quantity * proc.catalogo.defaultPriceCents
+    }
+
+    const procedimiento = procedureMap.get(proc.procedureId)
+    const nombre = procedimiento?.nombre ?? proc.serviceType ?? "Sin nombre"
+    const code = procedimiento?.code ?? ""
+
+    if (!ingresosPorProcedimiento.has(proc.procedureId)) {
+      ingresosPorProcedimiento.set(proc.procedureId, {
+        cantidad: 0,
+        ingresos: 0,
+        nombre,
+        code,
+      })
+    }
+
+    const datos = ingresosPorProcedimiento.get(proc.procedureId)!
+    datos.cantidad += proc.quantity
+    if (precio !== null) {
+      datos.ingresos += precio
+    }
+  }
+
+  // Calcular totales para porcentajes
+  const totalCantidad = Array.from(ingresosPorProcedimiento.values()).reduce(
+    (sum, d) => sum + d.cantidad,
+    0
+  )
+  const totalIngresos = Array.from(ingresosPorProcedimiento.values()).reduce(
+    (sum, d) => sum + d.ingresos,
+    0
+  )
 
   // Build ranking data
-  const rankingData = grouped.map((g) => {
-    const procedimiento = g.procedureId ? procedureMap.get(g.procedureId) : null
-    const cantidad = g._sum.quantity ?? 0
-    const ingresos = g._sum.totalCents ?? 0
-
+  const rankingData = Array.from(ingresosPorProcedimiento.entries()).map(([id, datos]) => {
+    const procedimiento = procedureMap.get(id)
     return {
       procedimiento: {
         idProcedimiento: procedimiento?.idProcedimiento,
-        codigo: procedimiento?.code,
-        nombre: procedimiento?.nombre ?? g.serviceType ?? "Sin nombre",
+        codigo: datos.code,
+        nombre: datos.nombre,
       },
-      cantidad,
-      ingresosTotalCents: ingresos,
-      porcentajeCantidad: totalCantidad > 0 ? (cantidad / totalCantidad) * 100 : 0,
-      porcentajeIngresos: totalIngresos > 0 ? (ingresos / totalIngresos) * 100 : 0,
+      cantidad: datos.cantidad,
+      ingresosTotalCents: datos.ingresos,
+      porcentajeCantidad: totalCantidad > 0 ? (datos.cantidad / totalCantidad) * 100 : 0,
+      porcentajeIngresos: totalIngresos > 0 ? (datos.ingresos / totalIngresos) * 100 : 0,
     }
   })
 

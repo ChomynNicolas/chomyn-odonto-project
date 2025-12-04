@@ -282,11 +282,12 @@ function formatKpiValue(kpi: ReportKpi): string {
     case "percent":
       return `${value.toFixed(kpi.decimals ?? 1)}%`
     case "currency":
+      // NOTA: El valor ya está en guaraníes (PYG), no dividir por 100
       return new Intl.NumberFormat("es-PY", {
         style: "currency",
         currency: "PYG",
         maximumFractionDigits: 0,
-      }).format(value / 100)
+      }).format(value)
     case "time":
       return `${Math.round(value)} min`
     default:

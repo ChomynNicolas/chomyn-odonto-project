@@ -3,17 +3,13 @@ import React, { useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
 import { useSidebar } from "@/context/SidebarContext";
 import { GridIcon, HorizontaLDots } from "@/icons/index";
 
 import {
   CalendarDays,
-  LogIn,
   UserRoundPlus,
   Users,
-  LogOut,
-  User,
   Settings,
   FileText,
   Shield,
@@ -95,7 +91,6 @@ function itemsByGroupForRole(role: UserRole) {
 const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
-  const { data: session, status } = useSession();
 
   const isActive = useCallback(
     (path: string) => {
@@ -118,26 +113,7 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   );
 
   const groups = itemsByGroupForRole(role);
-
-  // Handler para cerrar sesión
-  const handleSignOut = async () => {
-    try {
-      await signOut({
-        callbackUrl: "/signin",
-        redirect: true,
-      });
-    } catch (error) {
-      console.error("Error al cerrar sesión:", error);
-    }
-  };
-
-  const isLoading = status === "loading";
-  const isAuthenticated = status === "authenticated";
-
-  // Obtener nombre del usuario
-  const userName = session?.user?.name || session?.user?.username || "Usuario";
-  const userRoleLabel =
-    role === "ADMIN" ? "Administrador" : role === "ODONT" ? "Odontólogo" : "Recepcionista";
+  const showExpanded = isExpanded || isMobileOpen || isHovered;
 
   return (
     <aside
@@ -151,11 +127,11 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
       {/* LOGO */}
       <div
         className={`pb-8 pt-4 flex ${
-          !isExpanded && !isHovered ? "lg:justify-center" : "justify-start pb-6"
+          !showExpanded ? "lg:justify-center" : "justify-start pb-6"
         }`}
       >
         <Link href="/">
-          {isExpanded || isHovered || isMobileOpen ? (
+          {showExpanded ? (
             <>
               <Image
                 className="dark:hidden"
@@ -188,10 +164,10 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 <section key={group}>
                   <h2
                     className={`mb-3 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                      !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
+                      !showExpanded ? "lg:justify-center" : "justify-start"
                     }`}
                   >
-                    {isExpanded || isHovered || isMobileOpen ? group : <HorizontaLDots />}
+                    {showExpanded ? group : <HorizontaLDots />}
                   </h2>
 
                   <ul className="flex flex-col gap-3">
@@ -210,7 +186,7 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                           >
                             {it.icon}
                           </span>
-                          {(isExpanded || isHovered || isMobileOpen) && (
+                          {showExpanded && (
                             <span className="menu-item-text">{it.name}</span>
                           )}
                         </Link>
@@ -224,79 +200,15 @@ const AppSidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         </nav>
       </div>
 
-      {/* SECCIÓN DE USUARIO - Footer fijo al final */}
-      <div className="border-t border-gray-200 dark:border-gray-800 pt-4 pb-6 mt-auto">
-        {isLoading ? (
-          // Skeleton de carga
-          <div
-            className={`flex items-center gap-3 ${
-              !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
-            }`}
-          >
-            <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
-            {(isExpanded || isHovered || isMobileOpen) && (
-              <div className="flex-1">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-1 animate-pulse" />
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16 animate-pulse" />
-              </div>
-            )}
+      {/* FOOTER - Información de versión */}
+      {showExpanded && (
+        <div className="border-t border-gray-200 dark:border-gray-800 pt-4 pb-6 mt-auto">
+          <div className="flex flex-col items-center gap-1 text-xs text-gray-400">
+            <p>Chomyn v1.0.1</p>
+            <p>© 2025</p>
           </div>
-        ) : isAuthenticated ? (
-          <>
-            {/* Info del usuario autenticado */}
-            <div
-              className={`flex items-center gap-3 mb-3 ${
-                !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
-              }`}
-            >
-              <div className="w-9 h-9 rounded-full bg-teal-500 dark:bg-teal-600 flex items-center justify-center text-white font-medium flex-shrink-0">
-                <User size={18} />
-              </div>
-              {(isExpanded || isHovered || isMobileOpen) && (
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {userName}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {userRoleLabel}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Botón cerrar sesión */}
-            <button
-              onClick={handleSignOut}
-              className={`menu-item menu-item-inactive w-full hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 transition-colors ${
-                !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
-              }`}
-              title="Cerrar sesión"
-            >
-              <span className="menu-item-icon-inactive">
-                <LogOut size={22} />
-              </span>
-              {(isExpanded || isHovered || isMobileOpen) && (
-                <span className="menu-item-text">Cerrar sesión</span>
-              )}
-            </button>
-          </>
-        ) : (
-          // Usuario no autenticado - Mostrar botón de login
-          <Link
-            href="/signin"
-            className={`menu-item menu-item-inactive ${
-              !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
-            }`}
-          >
-            <span className="menu-item-icon-inactive">
-              <LogIn size={22} />
-            </span>
-            {(isExpanded || isHovered || isMobileOpen) && (
-              <span className="menu-item-text">Iniciar sesión</span>
-            )}
-          </Link>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 };

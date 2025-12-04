@@ -108,7 +108,7 @@ export function NuevaCitaSheet({
       return {
         pacienteId: citaData.paciente.id,
         profesionalId: citaData.profesional.id,
-        consultorioId: citaData.consultorio?.id,
+        consultorioId: 1, // Consultorio fijado
         duracionMinutos: suggestedDuration,
         tipo: citaData.tipo,
         motivo: motivo,
@@ -124,7 +124,7 @@ export function NuevaCitaSheet({
       return {
         pacienteId: citaData.paciente.id,
         profesionalId: citaData.profesional.id,
-        consultorioId: citaData.consultorio?.id,
+        consultorioId: 1, // Consultorio fijado
         duracionMinutos: citaData.duracionMinutos,
         tipo: citaData.tipo,
         motivo: citaData.motivo ?? "Cita",
@@ -220,12 +220,22 @@ export function NuevaCitaSheet({
     hasAutoFilledRef.current = false
   }, [pacienteIdValue])
 
+  // Forzar consultorioId a 1 siempre (consultorio fijado)
+  const consultorioIdValue = watch("consultorioId")
+  React.useEffect(() => {
+    if (consultorioIdValue !== 1 && consultorioIdValue !== undefined) {
+      setValue("consultorioId", 1, { shouldValidate: false })
+    }
+  }, [consultorioIdValue, setValue])
+
   // Validación de disponibilidad usando hook (después de declarar watch)
   const fechaValue = watch("fecha")
   const horaInicioValue = watch("horaInicio")
   const profesionalIdValue = watch("profesionalId")
-  const consultorioIdValue = watch("consultorioId")
   const duracionMinutosValue = watch("duracionMinutos") || 30
+  
+  // Consultorio siempre fijado a 1
+  const consultorioIdFijado = 1
   
   // Asegurar que excludeCitaId se mantenga constante durante la reprogramación
   // Esto es crítico para que la validación funcione correctamente al cambiar la fecha
@@ -238,7 +248,7 @@ export function NuevaCitaSheet({
     horaInicio: horaInicioValue || null,
     duracionMinutos: duracionMinutosValue,
     profesionalId: profesionalIdValue,
-    consultorioId: consultorioIdValue,
+    consultorioId: consultorioIdFijado, // Consultorio siempre fijado a 1
     enabled: !!fechaValue && !!horaInicioValue && !!profesionalIdValue, // Requerir también profesionalId
     excludeCitaId: excludeCitaIdValue, // Excluir cita actual en reschedule (memoizado para estabilidad)
   })
@@ -301,7 +311,7 @@ export function NuevaCitaSheet({
       reset({
         pacienteId: citaData.paciente.id,
         profesionalId: citaData.profesional.id,
-        consultorioId: citaData.consultorio?.id,
+        consultorioId: 1, // Consultorio fijado
         duracionMinutos: citaData.duracionMinutos,
         tipo: citaData.tipo,
         motivo: citaData.motivo ?? "Cita",
@@ -330,7 +340,7 @@ export function NuevaCitaSheet({
       reset({
         pacienteId: citaData.paciente.id,
         profesionalId: citaData.profesional.id,
-        consultorioId: citaData.consultorio?.id,
+        consultorioId: 1, // Consultorio fijado
         duracionMinutos: suggestedDuration,
         tipo: citaData.tipo,
         motivo: motivo,
@@ -352,6 +362,7 @@ export function NuevaCitaSheet({
       profesionalId:
         current.profesionalId ??
         (currentUser?.role === "ODONT" ? currentUser.profesionalId ?? undefined : undefined),
+      consultorioId: 1, // Consultorio fijado
       duracionMinutos: current.duracionMinutos || 30,
       tipo: (current.tipo as NuevaCitaForm["tipo"]) || "CONSULTA",
     });
@@ -399,7 +410,7 @@ export function NuevaCitaSheet({
             inicio: inicioISO,
             duracionMinutos: data.duracionMinutos,
             profesionalId: data.profesionalId,
-            consultorioId: data.consultorioId,
+            consultorioId: 1, // Consultorio fijado
             motivo: data.motivo,
             notas: data.notas,
           })
@@ -453,7 +464,7 @@ export function NuevaCitaSheet({
           await apiCreateCita({
             pacienteId: data.pacienteId,
             profesionalId: data.profesionalId,
-            consultorioId: data.consultorioId,
+            consultorioId: 1, // Consultorio fijado
             inicio: inicioISO,
             duracionMinutos: data.duracionMinutos,
             tipo: data.tipo,
@@ -675,8 +686,30 @@ export function NuevaCitaSheet({
 
           {/* Consultorio */}
           <div className="space-y-2">
-            <Label htmlFor="consultorioId">Consultorio (opcional)</Label>
-            <Input id="consultorioId" type="number" placeholder="ID del consultorio" {...register("consultorioId")} />
+            <Label htmlFor="consultorioId">Consultorio</Label>
+            <Controller
+              name="consultorioId"
+              control={control}
+              defaultValue={1}
+              render={({ field }) => {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { value, ...fieldProps } = field
+                return (
+                  <Input 
+                    id="consultorioId" 
+                    type="number" 
+                    disabled 
+                    className="bg-muted cursor-not-allowed"
+                    {...fieldProps}
+                    value={1}
+                    onChange={() => {}} // Prevenir cambios
+                  />
+                )
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Consultorio fijado automáticamente
+            </p>
           </div>
 
           {/* Fecha y hora */}

@@ -10,6 +10,7 @@ import {
   Genero,
   ToothCondition
 } from "@prisma/client";
+import { faker } from "@faker-js/faker";
 import { normEmail, normPhonePY } from "./utils";
 
 
@@ -21,9 +22,15 @@ await prisma.rol.upsert({ where: { nombreRol: r }, update: {}, create: { nombreR
 
 
 export async function ensureUsuario(prisma: PrismaClient, u: { usuario: string; email?: string; nombreApellido: string; rol: RolNombre; passwordHash: string; }) {
-return prisma.usuario.upsert({
+try {
+return await prisma.usuario.upsert({
 where: { usuario: u.usuario.toLowerCase() },
-update: {},
+update: {
+// Actualizar email solo si se proporciona y es diferente
+...(u.email && { email: normEmail(u.email) }),
+nombreApellido: u.nombreApellido,
+estaActivo: true,
+},
 create: {
 usuario: u.usuario.toLowerCase(),
 email: u.email ? normEmail(u.email) : null,
@@ -33,6 +40,46 @@ rol: { connect: { nombreRol: u.rol } },
 estaActivo: true,
 },
 });
+} catch (error: any) {
+// Si hay un error de email duplicado (P2002), intentar encontrar el usuario existente
+if (error.code === "P2002" && error.meta?.target?.includes("email") && u.email) {
+const emailNorm = normEmail(u.email);
+// Buscar usuario existente por email
+const existingUser = await prisma.usuario.findUnique({
+where: { email: emailNorm },
+});
+if (existingUser) {
+// Si existe, actualizar el usuario existente
+return await prisma.usuario.update({
+where: { idUsuario: existingUser.idUsuario },
+data: {
+usuario: u.usuario.toLowerCase(),
+nombreApellido: u.nombreApellido,
+estaActivo: true,
+},
+});
+}
+}
+// Si hay un error de usuario duplicado, buscar por usuario
+if (error.code === "P2002" && error.meta?.target?.includes("usuario")) {
+const existingByUsuario = await prisma.usuario.findUnique({
+where: { usuario: u.usuario.toLowerCase() },
+});
+if (existingByUsuario) {
+// Actualizar el usuario existente
+return await prisma.usuario.update({
+where: { idUsuario: existingByUsuario.idUsuario },
+data: {
+...(u.email && { email: normEmail(u.email) }),
+nombreApellido: u.nombreApellido,
+estaActivo: true,
+},
+});
+}
+}
+// Si no es un error de duplicado o no se pudo resolver, relanzar
+throw error;
+}
 }
 
 export async function ensureEspecialidades(prisma: PrismaClient, nombres: string[]) {
@@ -105,8 +152,21 @@ documento: { create: { tipo: doc.tipo, numero: doc.numero, paisEmision: doc.pais
 export async function ensureContactos(prisma: PrismaClient, personaId: number, contactos: ReadonlyArray<{
 tipo: TipoContacto; valor: string; label?: string; whatsappCapaz?: boolean; smsCapaz?: boolean; esPrincipal?: boolean; esPreferidoRecordatorio?: boolean; esPreferidoCobranza?: boolean;
 }>) {
+// Filtrar contactos duplicados por tipo y valor normalizado antes de procesarlos
+const contactosUnicos = new Map<string, typeof contactos[0]>();
 for (const c of contactos) {
 const valorNorm = c.tipo === TipoContacto.PHONE ? normPhonePY(c.valor) : normEmail(c.valor);
+const key = `${c.tipo}:${valorNorm}`;
+// Si ya existe un contacto con el mismo tipo y valor normalizado, mantener el primero
+if (!contactosUnicos.has(key)) {
+contactosUnicos.set(key, c);
+}
+}
+
+// Procesar solo los contactos únicos
+for (const c of contactosUnicos.values()) {
+const valorNorm = c.tipo === TipoContacto.PHONE ? normPhonePY(c.valor) : normEmail(c.valor);
+try {
 await prisma.personaContacto.upsert({
 where: { personaId_tipo_valorNorm: { personaId, tipo: c.tipo, valorNorm } },
 update: {
@@ -132,6 +192,16 @@ esPreferidoCobranza: !!c.esPreferidoCobranza,
 activo: true,
 },
 });
+} catch (error: any) {
+// Si hay un error de restricción única (P2002), ignorarlo silenciosamente
+// Esto puede ocurrir si hay una condición de carrera o si el contacto ya existe
+if (error.code === "P2002") {
+// Contacto ya existe, continuar
+continue;
+}
+// Para otros errores, relanzar
+throw error;
+}
 }
 }
 
@@ -206,11 +276,17 @@ await prisma.citaEstadoHistorial.create({ data: { citaId: params.citaId, estadoP
 return res;
 }
 
+/**
+ * Asegura que los procedimientos del catálogo existan en la base de datos
+ * 
+ * NOTA: El campo defaultPriceCents almacena guaraníes (PYG), no centavos.
+ * El nombre del campo se mantiene por compatibilidad, pero representa guaraníes enteros.
+ */
 export async function ensureProcedimientoCatalogo(
   prisma: PrismaClient,
   items: Array<{
     code: string; nombre: string; descripcion?: string;
-    defaultDurationMin?: number | null; defaultPriceCents?: number | null;
+    defaultDurationMin?: number | null; defaultPriceCents?: number | null; // en guaraníes (PYG)
     aplicaDiente?: boolean; aplicaSuperficie?: boolean;
     esCirugia?: boolean;
   }>
@@ -243,11 +319,119 @@ export async function ensureProcedimientoCatalogo(
   }
 }
 
+/**
+ * Asegura que los planes de tratamiento del catálogo existan en la base de datos
+ * 
+ * NOTA: Los precios (estimatedCostCents) están en guaraníes (PYG), no en centavos.
+ */
+export async function ensureTreatmentPlanCatalog(
+  prisma: PrismaClient,
+  items: Array<{
+    code: string
+    nombre: string
+    descripcion?: string | null
+    isActive?: boolean
+    steps: Array<{
+      order: number
+      procedureCode?: string
+      serviceType?: string | null
+      toothNumber?: number | null
+      toothSurface?: DienteSuperficie | null
+      estimatedDurationMin?: number | null
+      estimatedCostCents?: number | null
+      priority?: number | null
+      notes?: string | null
+      requiresMultipleSessions?: boolean
+      totalSessions?: number | null
+    }>
+  }>
+) {
+  for (const plan of items) {
+    // Crear o actualizar el plan de catálogo
+    const catalogPlan = await prisma.treatmentPlanCatalog.upsert({
+      where: { code: plan.code },
+      update: {
+        nombre: plan.nombre,
+        descripcion: plan.descripcion ?? null,
+        isActive: plan.isActive ?? true,
+      },
+      create: {
+        code: plan.code,
+        nombre: plan.nombre,
+        descripcion: plan.descripcion ?? null,
+        isActive: plan.isActive ?? true,
+      },
+    })
+
+    // Eliminar pasos existentes y recrearlos (para mantener sincronización)
+    await prisma.treatmentPlanCatalogStep.deleteMany({
+      where: { catalogPlanId: catalogPlan.idTreatmentPlanCatalog },
+    })
+
+    // Crear los pasos del plan
+    for (const step of plan.steps) {
+      let procedureId: number | null = null
+
+      // Si hay un código de procedimiento, buscar el procedimiento en el catálogo
+      if (step.procedureCode) {
+        const procedure = await prisma.procedimientoCatalogo.findUnique({
+          where: { code: step.procedureCode },
+        })
+        if (procedure) {
+          procedureId = procedure.idProcedimiento
+        }
+      }
+
+      // Determinar valores por defecto desde el procedimiento si existe
+      let estimatedDuration = step.estimatedDurationMin ?? null
+      let estimatedCost = step.estimatedCostCents ?? null
+
+      if (procedureId) {
+        const procedure = await prisma.procedimientoCatalogo.findUnique({
+          where: { idProcedimiento: procedureId },
+        })
+        if (procedure) {
+          // Usar valores del catálogo si no se especificaron explícitamente
+          if (estimatedDuration == null) {
+            estimatedDuration = procedure.defaultDurationMin
+          }
+          if (estimatedCost == null) {
+            estimatedCost = procedure.defaultPriceCents
+          }
+        }
+      }
+
+      await prisma.treatmentPlanCatalogStep.create({
+        data: {
+          catalogPlanId: catalogPlan.idTreatmentPlanCatalog,
+          order: step.order,
+          procedureId: procedureId ?? null,
+          serviceType: step.serviceType ?? null,
+          toothNumber: step.toothNumber ?? null,
+          toothSurface: step.toothSurface ?? null,
+          estimatedDurationMin: estimatedDuration,
+          estimatedCostCents: estimatedCost,
+          priority: step.priority ?? null,
+          notes: step.notes ?? null,
+          requiresMultipleSessions: step.requiresMultipleSessions ?? false,
+          totalSessions: step.totalSessions ?? null,
+        },
+      })
+    }
+  }
+}
+
 
 
 // ===================================================
 // B) TreatmentPlan & TreatmentStep (planificación)
 // ===================================================
+/**
+ * Crea un plan de tratamiento con sus pasos
+ * 
+ * NOTA: estimatedCostCents almacena guaraníes (PYG) cuando proviene del catálogo.
+ * Si se proporciona desde el catálogo, el valor será en guaraníes.
+ */
 export async function createPlanSimpleConSteps(
   prisma: PrismaClient,
   params: {
@@ -259,7 +443,7 @@ export async function createPlanSimpleConSteps(
       toothNumber?: number | null;
       toothSurface?: DienteSuperficie | null;
       estimatedDurationMin?: number | null;
-      estimatedCostCents?: number | null;
+      estimatedCostCents?: number | null; // en guaraníes (PYG) si proviene del catálogo
       priority?: number | null;
     }>;
   }
@@ -275,10 +459,24 @@ export async function createPlanSimpleConSteps(
   let order = 1;
   for (const st of params.steps) {
     let procedureId: number | null = null;
+    let estimatedCost: number | null = st.estimatedCostCents ?? null;
+    let estimatedDuration: number | null = st.estimatedDurationMin ?? null;
+    
     if (st.code) {
       const proc = await prisma.procedimientoCatalogo.findUnique({ where: { code: st.code } });
-      procedureId = proc?.idProcedimiento ?? null;
+      if (proc) {
+        procedureId = proc.idProcedimiento;
+        // Si no se proporcionó precio explícitamente, usar el del catálogo
+        if (estimatedCost == null) {
+          estimatedCost = proc.defaultPriceCents ?? null;
+        }
+        // Si no se proporcionó duración explícitamente, usar la del catálogo
+        if (estimatedDuration == null) {
+          estimatedDuration = proc.defaultDurationMin ?? null;
+        }
+      }
     }
+    
     await prisma.treatmentStep.create({
       data: {
         treatmentPlanId: plan.idTreatmentPlan,
@@ -287,8 +485,8 @@ export async function createPlanSimpleConSteps(
         serviceType: st.serviceType ?? null,
         toothNumber: st.toothNumber ?? null,
         toothSurface: st.toothSurface ?? null,
-        estimatedDurationMin: st.estimatedDurationMin ?? null,
-        estimatedCostCents: st.estimatedCostCents ?? null,
+        estimatedDurationMin: estimatedDuration,
+        estimatedCostCents: estimatedCost,
         priority: st.priority ?? 3,
         status: TreatmentStepStatus.PENDING,
       },
@@ -330,6 +528,13 @@ export async function createConsultaParaCita(
   });
 }
 
+/**
+ * Agrega un procedimiento a una consulta
+ * 
+ * NOTA: Si unitPriceCents no se proporciona y el procedimiento viene del catálogo,
+ * se usa defaultPriceCents del catálogo que está en guaraníes (PYG).
+ * Los valores unitPriceCents y totalCents en ConsultaProcedimiento también están en guaraníes.
+ */
 export async function addProcedimientoALaConsulta(
   prisma: PrismaClient,
   params: {
@@ -339,8 +544,8 @@ export async function addProcedimientoALaConsulta(
     toothNumber?: number | null;
     toothSurface?: DienteSuperficie | null;
     quantity?: number;
-    unitPriceCents?: number | null;
-    totalCents?: number | null;
+    unitPriceCents?: number | null; // en guaraníes (PYG)
+    totalCents?: number | null;     // en guaraníes (PYG)
     treatmentStepId?: number | null;
     resultNotes?: string | null;
   }
@@ -352,10 +557,12 @@ export async function addProcedimientoALaConsulta(
   }
   const q = params.quantity && params.quantity > 0 ? params.quantity : 1;
 
+  // Si no se proporciona unitPriceCents y hay un procedimiento del catálogo,
+  // usar defaultPriceCents que está en guaraníes
   let unit = params.unitPriceCents ?? null;
   if (unit == null && procedureId) {
     const proc = await prisma.procedimientoCatalogo.findUnique({ where: { idProcedimiento: procedureId } });
-    unit = proc?.defaultPriceCents ?? null;
+    unit = proc?.defaultPriceCents ?? null; // en guaraníes
   }
   const total = params.totalCents ?? (unit != null ? unit * q : null);
 
@@ -445,19 +652,52 @@ export async function addClinicalBasics(
     },
   });
 
-  const dx = await prisma.diagnosisCatalog.findFirst();
-  if (dx) {
-    await prisma.patientDiagnosis.create({
-      data: {
-        pacienteId: params.pacienteId,
-        diagnosisId: dx.idDiagnosisCatalog,
-        label: dx.name,
-        status: DiagnosisStatus.ACTIVE,
-        notes: "Diagnóstico demo",
-        createdByUserId: params.createdByUserId,
-        consultaId: params.consultaId ?? null,
-      },
-    });
+  // Crear múltiples diagnósticos para tener datos suficientes
+  const diagnoses = await prisma.diagnosisCatalog.findMany({ where: { isActive: true }, take: 3 });
+  if (diagnoses.length > 0) {
+    const numDiagnoses = faker.number.int({ min: 1, max: Math.min(3, diagnoses.length) });
+    const selectedDiagnoses = faker.helpers.arrayElements(diagnoses, numDiagnoses);
+    
+    for (const dx of selectedDiagnoses) {
+      // Crear diagnósticos con fechas variadas
+      const dateType = faker.helpers.arrayElement(["recent", "intermediate", "old"]);
+      let notedAt = new Date();
+      
+      switch (dateType) {
+        case "recent":
+          notedAt = faker.date.recent({ days: 30 });
+          break;
+        case "intermediate":
+          const daysAgo = faker.number.int({ min: 30, max: 90 });
+          notedAt = new Date();
+          notedAt.setDate(notedAt.getDate() - daysAgo);
+          break;
+        case "old":
+          const daysAgoOld = faker.number.int({ min: 90, max: 365 });
+          notedAt = new Date();
+          notedAt.setDate(notedAt.getDate() - daysAgoOld);
+          break;
+      }
+      
+      await prisma.patientDiagnosis.create({
+        data: {
+          pacienteId: params.pacienteId,
+          diagnosisId: dx.idDiagnosisCatalog,
+          code: dx.code,
+          label: dx.name,
+          status: DiagnosisStatus.ACTIVE,
+          notedAt,
+          notes: faker.helpers.arrayElement([
+            "Diagnóstico demo",
+            "Diagnóstico establecido en consulta",
+            "Hallazgo clínico",
+            "Diagnóstico confirmado",
+          ]),
+          createdByUserId: params.createdByUserId,
+          consultaId: params.consultaId ?? null,
+        },
+      });
+    }
   }
 
   const alg = await prisma.allergyCatalog.findFirst();

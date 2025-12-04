@@ -17,6 +17,10 @@ export const REPORT_TYPES = [
   "procedimientos",
   "estados-citas",
   "top-procedimientos",
+  "diagnosticos-activos",
+  "diagnosticos-resueltos",
+  "diagnosticos-por-tipo",
+  "diagnosticos-pendientes-seguimiento",
 ] as const
 
 export type ReportType = (typeof REPORT_TYPES)[number]
@@ -128,6 +132,39 @@ export interface TopProcedimientosFilters extends DateRangeFilter {
   profesionalIds?: number[]
   limite?: number // Top N procedures
   ordenarPor?: "cantidad" | "ingresos"
+}
+
+/** Filters for Active Diagnoses Report */
+export interface DiagnosticosActivosFilters extends DateRangeFilter, Partial<PaginationParams> {
+  pacienteIds?: number[]
+  diagnosisCatalogIds?: number[]
+  profesionalIds?: number[]
+  busqueda?: string // Search by patient name or diagnosis code
+}
+
+/** Filters for Resolved Diagnoses Report */
+export interface DiagnosticosResueltosFilters extends DateRangeFilter, Partial<PaginationParams> {
+  pacienteIds?: number[]
+  diagnosisCatalogIds?: number[]
+  profesionalIds?: number[]
+  busqueda?: string // Search by patient name or diagnosis code
+}
+
+/** Filters for Diagnoses by Type Report */
+export interface DiagnosticosPorTipoFilters extends DateRangeFilter {
+  diagnosisCatalogIds?: number[]
+  profesionalIds?: number[]
+  status?: string[] // Filter by diagnosis status (ACTIVE, RESOLVED, etc.)
+}
+
+/** Filters for Pending Follow-up Diagnoses Report */
+export interface DiagnosticosPendientesSeguimientoFilters extends DateRangeFilter, Partial<PaginationParams> {
+  pacienteIds?: number[]
+  diagnosisCatalogIds?: number[]
+  profesionalIds?: number[]
+  busqueda?: string // Search by patient name or diagnosis code
+  diasMinimos?: number // Minimum days in follow-up
+  diasMaximos?: number // Maximum days in follow-up
 }
 
 // ============================================================================
@@ -271,6 +308,172 @@ export interface TopProcedimientosResponse {
   data: TopProcedimientoRow[]
 }
 
+/** Single diagnosis row in Active Diagnoses */
+export interface DiagnosticoActivoRow {
+  idPatientDiagnosis: number
+  paciente: {
+    idPaciente: number
+    nombreCompleto: string
+    documento?: string
+    edad?: number
+  }
+  diagnostico: {
+    id: number
+    code?: string
+    label: string
+    status: string
+    notedAt: string
+    resolvedAt?: string | null
+  }
+  diagnosisCatalog?: {
+    id: number
+    code: string
+    name: string
+  }
+  createdBy: {
+    idUsuario: number
+    nombreApellido: string
+  }
+  consulta?: {
+    idCita: number
+    fecha: string
+  }
+  antiguedadDias: number
+}
+
+/** Response for Active Diagnoses Report */
+export interface DiagnosticosActivosResponse {
+  metadata: ReportMetadata
+  kpis: ReportKpi[]
+  data: DiagnosticoActivoRow[]
+  pagination: PaginationMeta
+}
+
+/** Single diagnosis row in Resolved Diagnoses */
+export interface DiagnosticoResueltoRow {
+  idPatientDiagnosis: number
+  paciente: {
+    idPaciente: number
+    nombreCompleto: string
+    documento?: string
+    edad?: number
+  }
+  diagnostico: {
+    id: number
+    code?: string
+    label: string
+    status: string
+    notedAt: string
+    resolvedAt: string
+  }
+  diagnosisCatalog?: {
+    id: number
+    code: string
+    name: string
+  }
+  createdBy: {
+    idUsuario: number
+    nombreApellido: string
+  }
+  consulta?: {
+    idCita: number
+    fecha: string
+  }
+  fechaRegistro: string
+  fechaResolucion: string
+  tiempoResolucionDias: number
+}
+
+/** Response for Resolved Diagnoses Report */
+export interface DiagnosticosResueltosResponse {
+  metadata: ReportMetadata
+  kpis: ReportKpi[]
+  data: DiagnosticoResueltoRow[]
+  pagination: PaginationMeta
+}
+
+/** Single diagnosis type row in Diagnoses by Type Report */
+export interface DiagnosticoPorTipoRow {
+  ranking: number
+  diagnosisCatalog?: {
+    id: number
+    code: string
+    name: string
+  }
+  // For diagnoses without catalog
+  code?: string
+  label?: string
+  totalCasos: number
+  porcentaje: number
+  primerRegistro: string // ISO date
+  ultimoRegistro: string // ISO date
+  tendenciaMensual?: Array<{
+    mes: string // YYYY-MM format
+    cantidad: number
+  }>
+}
+
+/** Response for Diagnoses by Type Report */
+export interface DiagnosticosPorTipoResponse {
+  metadata: ReportMetadata
+  kpis: ReportKpi[]
+  data: DiagnosticoPorTipoRow[]
+}
+
+/** Single diagnosis row in Pending Follow-up Diagnoses */
+export interface DiagnosticoPendienteSeguimientoRow {
+  idPatientDiagnosis: number
+  paciente: {
+    idPaciente: number
+    nombreCompleto: string
+    documento?: string
+    edad?: number
+  }
+  diagnostico: {
+    id: number
+    code?: string
+    label: string
+    status: string
+    notedAt: string
+  }
+  diagnosisCatalog?: {
+    id: number
+    code: string
+    name: string
+  }
+  createdBy: {
+    idUsuario: number
+    nombreApellido: string
+  }
+  diasEnSeguimiento: number
+  ultimaEvaluacion?: {
+    fecha: string // ISO date
+    profesional?: string
+    consultaId?: number
+  }
+  proximaCitaSugerida?: {
+    idCita: number
+    fecha: string // ISO datetime
+    hora?: string
+    profesional?: string
+    tipo?: string
+  }
+  notasEvolucion: Array<{
+    fecha: string // ISO datetime
+    nota: string
+    fuente: "ENCOUNTER" | "STATUS_HISTORY"
+    profesional?: string
+  }>
+}
+
+/** Response for Pending Follow-up Diagnoses Report */
+export interface DiagnosticosPendientesSeguimientoResponse {
+  metadata: ReportMetadata
+  kpis: ReportKpi[]
+  data: DiagnosticoPendienteSeguimientoRow[]
+  pagination: PaginationMeta
+}
+
 // ============================================================================
 // Union Types for Generic Handling
 // ============================================================================
@@ -282,6 +485,10 @@ export type ReportFilters =
   | ProcedimientosFilters
   | EstadosCitasFilters
   | TopProcedimientosFilters
+  | DiagnosticosActivosFilters
+  | DiagnosticosResueltosFilters
+  | DiagnosticosPorTipoFilters
+  | DiagnosticosPendientesSeguimientoFilters
 
 /** Union of all response types */
 export type ReportResponse =
@@ -290,6 +497,10 @@ export type ReportResponse =
   | ProcedimientosResponse
   | EstadosCitasResponse
   | TopProcedimientosResponse
+  | DiagnosticosActivosResponse
+  | DiagnosticosResueltosResponse
+  | DiagnosticosPorTipoResponse
+  | DiagnosticosPendientesSeguimientoResponse
 
 // ============================================================================
 // Report Configuration Types
@@ -383,6 +594,42 @@ export const REPORT_CONFIGS: Record<ReportType, ReportConfig> = {
     allowedRoles: ["ADMIN", "ODONT"],
     category: "financiero",
     priority: 5,
+  },
+  "diagnosticos-activos": {
+    type: "diagnosticos-activos",
+    name: "Diagnósticos Activos por Paciente",
+    description: "Visualiza diagnósticos vigentes de todos los pacientes con información completa.",
+    icon: "ClipboardList",
+    allowedRoles: ["ADMIN", "ODONT"],
+    category: "clinico",
+    priority: 6,
+  },
+  "diagnosticos-resueltos": {
+    type: "diagnosticos-resueltos",
+    name: "Diagnósticos Resueltos en Período",
+    description: "Auditoría de diagnósticos resueltos (éxito terapéutico)",
+    icon: "CheckCircle2",
+    allowedRoles: ["ADMIN", "ODONT"],
+    category: "clinico",
+    priority: 7,
+  },
+  "diagnosticos-por-tipo": {
+    type: "diagnosticos-por-tipo",
+    name: "Diagnósticos por Tipo",
+    description: "Análisis epidemiológico de patologías más frecuentes agrupadas por tipo de diagnóstico.",
+    icon: "BarChart3",
+    allowedRoles: ["ADMIN", "ODONT"],
+    category: "clinico",
+    priority: 8,
+  },
+  "diagnosticos-pendientes-seguimiento": {
+    type: "diagnosticos-pendientes-seguimiento",
+    name: "Diagnósticos Pendientes de Seguimiento",
+    description: "Alertas para diagnósticos bajo monitoreo (UNDER_FOLLOW_UP)",
+    icon: "Clock",
+    allowedRoles: ["ADMIN", "ODONT"],
+    category: "clinico",
+    priority: 9,
   },
 }
 

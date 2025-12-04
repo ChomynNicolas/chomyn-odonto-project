@@ -8,6 +8,7 @@ import {
   Stethoscope,
   AlertCircle,
   FileText,
+  ListChecks,
 } from "lucide-react"
 import { HiOutlineIdentification } from "react-icons/hi"
 import { MdOutlineMedicalInformation } from "react-icons/md"
@@ -119,6 +120,13 @@ export const configNavigation: ConfigNavGroup[] = [
         path: "/configuracion/anamnesis-config",
         icon: <FileText size={22} />,
         description: "Configuración de flujos de anamnesis",
+      },
+      {
+        id: "plan-tratamiento-catalog",
+        label: "Planes de Tratamiento",
+        path: "/configuracion/plan-tratamiento-catalog",
+        icon: <ListChecks size={22} />,
+        description: "Catálogo de planes de tratamiento",
       },
     ],
   },

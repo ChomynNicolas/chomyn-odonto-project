@@ -42,8 +42,8 @@ export default async function PatientAttachmentsPage({ params }: PageProps) {
     redirect(`/pacientes/${patientId}`)
   }
 
-  // Check if user can view clinical data (required for attachments)
-  if (!accessDecision.permissions.canViewClinicalData) {
+  // Check if user can view attachments
+  if (!accessDecision.permissions.canViewAttachments) {
     redirect(`/pacientes/${patientId}`)
   }
 

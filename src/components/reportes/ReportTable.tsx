@@ -51,12 +51,13 @@ function formatCellValue(value: unknown, format?: string): string {
         ? new Intl.NumberFormat("es-PY").format(value)
         : String(value)
     case "currency":
+      // NOTA: El valor ya está en guaraníes (PYG), no dividir por 100
       return typeof value === "number"
         ? new Intl.NumberFormat("es-PY", {
             style: "currency",
             currency: "PYG",
             maximumFractionDigits: 0,
-          }).format(value / 100)
+          }).format(value)
         : String(value)
     case "date":
       return value instanceof Date || typeof value === "string"

@@ -1,7 +1,7 @@
 // src/components/consulta-clinica/modules/OdontogramaModule.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Activity, Save, RotateCcw, History, AlertCircle } from "lucide-react"
@@ -141,6 +141,13 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
   const [historySnapshots, setHistorySnapshots] = useState<OdontogramSnapshot[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
+  // Filtrar procedimientos que tienen diente asociado
+  const proceduresWithTeeth = useMemo(() => {
+    return (consulta.procedimientos || []).filter(
+      (proc) => proc.toothNumber !== null && proc.toothNumber !== undefined,
+    )
+  }, [consulta.procedimientos])
+
   // Cargar odontograma del paciente (no específico de la consulta)
   useEffect(() => {
     const loadPatientOdontogram = async () => {
@@ -237,6 +244,17 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
       ),
     )
     setHasChanges(true)
+  }
+
+  // Handler para aplicar sugerencias desde el sidebar de procedimientos
+  const handleApplySuggestion = (
+    toothNumber: string,
+    condition: ToothCondition,
+    surfaces?: string[],
+    notes?: string,
+  ) => {
+    handleToothUpdate(toothNumber, condition, surfaces, notes)
+    toast.success(`Sugerencia aplicada al diente ${toothNumber}`)
   }
 
   const handleSave = async () => {
@@ -407,11 +425,13 @@ export function OdontogramaModule({ citaId, consulta, canEdit, hasConsulta, onUp
         <OdontogramEditor
           teeth={teeth}
           notes={notes}
+          procedures={proceduresWithTeeth}
           onToothUpdate={handleToothUpdate}
           onNotesChange={(newNotes) => {
             setNotes(newNotes)
             setHasChanges(true)
           }}
+          onApplySuggestion={handleApplySuggestion}
         />
       ) : (
         // Vista de solo lectura - muestra el último odontograma del paciente
